@@ -7,7 +7,55 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
-from supabase import create_client
+
+# Initialize database if it doesn't exist
+if not os.path.exists('turbo_air_db_online.sqlite'):
+    try:
+        import create_database
+        create_database.main()
+    except Exception as e:
+        st.error(f"Error creating database: {e}")
+
+# Initialize session state variables
+def init_session_state():
+    """Initialize all session state variables"""
+    defaults = {
+        'user': None,
+        'user_role': 'distributor',
+        'active_page': 'home',
+        'selected_category': None,
+        'selected_subcategory': None,
+        'selected_client': None,
+        'view_mode': 'grid',
+        'cart_count': 0,
+        'show_product_detail': None,
+        'auth_manager': None,
+        'db_manager': None,
+        'sync_manager': None
+    }
+    
+    for key, default_value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = default_value
+
+# Call this before anything else
+init_session_state()
+
+# Page configuration
+st.set_page_config(
+    page_title="Turbo Air Equipment Viewer",
+    page_icon="❄️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Import after session state is initialized
+try:
+    from supabase import create_client
+    HAS_SUPABASE = True
+except ImportError:
+    HAS_SUPABASE = False
+    st.warning("Supabase not available - running in offline mode")
 
 # Import custom modules
 from auth import AuthManager, show_auth_form
@@ -22,57 +70,39 @@ from ui_components import (
 from export_utils import export_quote_to_excel, export_quote_to_pdf
 from email_service import show_email_quote_dialog, get_email_service
 
-# Page configuration
-st.set_page_config(
-    page_title="Turbo Air Equipment Viewer",
-    page_icon="❄️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
-
-# Initialize session state
-if 'active_page' not in st.session_state:
-    st.session_state.active_page = 'home'
-if 'selected_category' not in st.session_state:
-    st.session_state.selected_category = None
-if 'selected_subcategory' not in st.session_state:
-    st.session_state.selected_subcategory = None
-if 'selected_client' not in st.session_state:
-    st.session_state.selected_client = None
-if 'view_mode' not in st.session_state:
-    st.session_state.view_mode = 'grid'
-if 'cart_count' not in st.session_state:
-    st.session_state.cart_count = 0
-if 'show_product_detail' not in st.session_state:
-    st.session_state.show_product_detail = None
-
 # Initialize services
 @st.cache_resource
 def init_services():
     """Initialize all services"""
     # Supabase client
-    supabase_url = st.secrets.get("supabase", {}).get("url")
-    supabase_key = st.secrets.get("supabase", {}).get("anon_key")
+    supabase_url = st.secrets.get("supabase", {}).get("url", "")
+    supabase_key = st.secrets.get("supabase", {}).get("anon_key", "")
     
     supabase_client = None
-    if supabase_url and supabase_key:
+    if HAS_SUPABASE and supabase_url and supabase_key:
         try:
             supabase_client = create_client(supabase_url, supabase_key)
-        except:
-            pass
+        except Exception as e:
+            st.error(f"Failed to connect to Supabase: {e}")
+            supabase_client = None
     
     # Initialize managers
-    auth_manager = AuthManager(supabase_url, supabase_key)
+    auth_manager = AuthManager(supabase_url if supabase_client else None, 
+                              supabase_key if supabase_client else None)
     db_manager = DatabaseManager(supabase_client)
     sync_manager = SyncManager(db_manager, supabase_client)
     
     return auth_manager, db_manager, sync_manager
 
 # Initialize services
-auth_manager, db_manager, sync_manager = init_services()
-st.session_state.auth_manager = auth_manager
-st.session_state.db_manager = db_manager
-st.session_state.sync_manager = sync_manager
+try:
+    auth_manager, db_manager, sync_manager = init_services()
+    st.session_state.auth_manager = auth_manager
+    st.session_state.db_manager = db_manager
+    st.session_state.sync_manager = sync_manager
+except Exception as e:
+    st.error(f"Failed to initialize services: {e}")
+    st.stop()
 
 # Apply custom CSS
 apply_custom_css()
@@ -114,7 +144,7 @@ else:
         with st.container():
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.markdown(f"### Hello, {user['email']}!")
+                st.markdown(f"### Hello, {user.get('email', 'User')}!")
                 st.caption(f"Role: {auth_manager.get_user_role().title()}")
             with col2:
                 if st.button("Sign Out", use_container_width=True):
@@ -150,10 +180,10 @@ else:
                 with st.expander("Client Details", expanded=True):
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.text(f"Contact: {selected_client_data['contact_name']}")
-                        st.text(f"Email: {selected_client_data['contact_email']}")
+                        st.text(f"Contact: {selected_client_data.get('contact_name', 'N/A')}")
+                        st.text(f"Email: {selected_client_data.get('contact_email', 'N/A')}")
                     with col2:
-                        st.text(f"Phone: {selected_client_data['contact_number']}")
+                        st.text(f"Phone: {selected_client_data.get('contact_number', 'N/A')}")
                         
                         # Show quotes for this client
                         quotes_df = db_manager.get_client_quotes(st.session_state.selected_client)
@@ -467,7 +497,7 @@ else:
         
         # User info
         st.markdown("### Account Information")
-        st.text(f"Email: {user['email']}")
+        st.text(f"Email: {user.get('email', 'N/A')}")
         st.text(f"Role: {auth_manager.get_user_role().title()}")
         
         # Settings
@@ -498,7 +528,7 @@ else:
         if st.button("✉️ Test Email Configuration"):
             email_service = get_email_service()
             if email_service:
-                test_email = st.text_input("Test email address", value=user['email'])
+                test_email = st.text_input("Test email address", value=user.get('email', ''))
                 if test_email and st.button("Send Test Email"):
                     if email_service.send_test_email(test_email):
                         st.success("Test email sent successfully!")

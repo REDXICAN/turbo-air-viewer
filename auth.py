@@ -15,6 +15,12 @@ class AuthManager:
         self.is_online = False
         self.supabase = None
         
+        # Initialize session state BEFORE trying to use it
+        if 'user' not in st.session_state:
+            st.session_state.user = None
+        if 'user_role' not in st.session_state:
+            st.session_state.user_role = 'distributor'
+        
         # Try to connect to Supabase
         if supabase_url and supabase_key:
             try:
@@ -22,12 +28,6 @@ class AuthManager:
                 self.is_online = True
             except:
                 self.is_online = False
-        
-        # Initialize session state
-        if 'user' not in st.session_state:
-            st.session_state.user = None
-        if 'user_role' not in st.session_state:
-            st.session_state.user_role = 'distributor'
     
     def sign_in_with_email(self, email, password):
         """Sign in with email and password"""
@@ -117,15 +117,18 @@ class AuthManager:
         
         st.session_state.user = None
         st.session_state.user_role = 'distributor'
-        st.session_state.clear()
+        # Clear other session state if needed
+        for key in ['selected_client', 'cart_count', 'active_page']:
+            if key in st.session_state:
+                del st.session_state[key]
     
     def get_current_user(self):
         """Get current user session"""
         if self.is_online and self.supabase:
             try:
                 user = self.supabase.auth.get_user()
-                if user:
-                    return user
+                if user and user.user:
+                    return user.user
             except:
                 pass
         
@@ -150,6 +153,9 @@ class AuthManager:
     
     def is_authenticated(self):
         """Check if user is authenticated"""
+        # Make sure session state exists
+        if 'user' not in st.session_state:
+            st.session_state.user = None
         return st.session_state.user is not None
     
     def _set_user_session(self, user):
@@ -171,35 +177,38 @@ class AuthManager:
     
     def _offline_sign_in(self, email, password):
         """Handle offline sign in using local database"""
-        conn = sqlite3.connect('turbo_air_db_online.sqlite')
-        cursor = conn.cursor()
-        
-        # Simple offline authentication (in production, use proper password hashing)
-        cursor.execute("""
-            SELECT id, email, role FROM user_profiles 
-            WHERE email = ? 
-        """, (email,))
-        
-        user = cursor.fetchone()
-        conn.close()
-        
-        if user:
-            st.session_state.user = {
-                'id': user[0],
-                'email': user[1],
-                'created_at': datetime.now().isoformat()
-            }
-            st.session_state.user_role = user[2]
-            return True, "Signed in offline mode"
-        
-        return False, "User not found in offline database"
+        try:
+            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            cursor = conn.cursor()
+            
+            # Simple offline authentication (in production, use proper password hashing)
+            cursor.execute("""
+                SELECT id, email, role FROM user_profiles 
+                WHERE email = ? 
+            """, (email,))
+            
+            user = cursor.fetchone()
+            conn.close()
+            
+            if user:
+                st.session_state.user = {
+                    'id': user[0],
+                    'email': user[1],
+                    'created_at': datetime.now().isoformat()
+                }
+                st.session_state.user_role = user[2]
+                return True, "Signed in offline mode"
+            
+            return False, "User not found in offline database"
+        except Exception as e:
+            return False, f"Database error: {str(e)}"
     
     def _offline_sign_up(self, email, password, role, company):
         """Handle offline sign up using local database"""
-        conn = sqlite3.connect('turbo_air_db_online.sqlite')
-        cursor = conn.cursor()
-        
         try:
+            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            cursor = conn.cursor()
+            
             # Create user profile (in production, hash the password)
             import uuid
             user_id = str(uuid.uuid4())
@@ -222,30 +231,38 @@ class AuthManager:
             
             return True, "Account created in offline mode. Will sync when online."
         except sqlite3.IntegrityError:
-            conn.close()
             return False, "Email already exists"
         except Exception as e:
-            conn.close()
             return False, str(e)
     
     def _add_to_sync_queue(self, table_name, operation, data):
         """Add operation to sync queue for later synchronization"""
-        conn = sqlite3.connect('turbo_air_db_online.sqlite')
-        cursor = conn.cursor()
-        
-        cursor.execute("""
-            INSERT INTO sync_queue (table_name, operation, data)
-            VALUES (?, ?, ?)
-        """, (table_name, operation, json.dumps(data)))
-        
-        conn.commit()
-        conn.close()
+        try:
+            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO sync_queue (table_name, operation, data)
+                VALUES (?, ?, ?)
+            """, (table_name, operation, json.dumps(data)))
+            
+            conn.commit()
+            conn.close()
+        except:
+            pass
 
 def show_auth_form():
     """Display authentication form"""
+    # Initialize session state if needed
+    if 'user' not in st.session_state:
+        st.session_state.user = None
+    if 'user_role' not in st.session_state:
+        st.session_state.user_role = 'distributor'
+    
     auth_manager = st.session_state.get('auth_manager')
     
     if not auth_manager:
+        st.error("Authentication system not initialized")
         return
     
     # Check if user is already authenticated
