@@ -3,6 +3,14 @@ pandas
 openpyxl
 Pillow
 reportlab
+supabase
+msal
+streamlit-authenticator
 plotly
 altair
 numpy
+python-dotenv
+gotrue
+postgrest-py
+realtime
+storage3
