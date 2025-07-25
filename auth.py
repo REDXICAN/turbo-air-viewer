@@ -6,9 +6,11 @@ Handles Supabase authentication with email, Google, and Microsoft providers
 import streamlit as st
 from supabase import create_client, Client
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import hashlib
+import secrets
+import uuid
 
 class AuthManager:
     def __init__(self, supabase_url=None, supabase_key=None):
@@ -21,6 +23,8 @@ class AuthManager:
             st.session_state.user = None
         if 'user_role' not in st.session_state:
             st.session_state.user_role = 'distributor'
+        if 'auth_token' not in st.session_state:
+            st.session_state.auth_token = None
         
         # Try to connect to Supabase
         if supabase_url and supabase_key:
@@ -32,8 +36,100 @@ class AuthManager:
             except Exception as e:
                 print(f"Failed to connect to Supabase: {e}")
                 self.is_online = False
+        
+        # Check for existing auth token on initialization
+        self._check_auth_token()
     
-    def sign_in_with_email(self, email, password):
+    def _generate_auth_token(self):
+        """Generate a secure authentication token"""
+        return secrets.token_urlsafe(32)
+    
+    def _save_auth_token(self, user_id, token, remember_days=30):
+        """Save auth token to database"""
+        try:
+            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            cursor = conn.cursor()
+            
+            # Create auth_tokens table if not exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auth_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    token TEXT UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Calculate expiration
+            expires_at = datetime.now() + timedelta(days=remember_days)
+            
+            # Save token
+            cursor.execute("""
+                INSERT INTO auth_tokens (user_id, token, expires_at)
+                VALUES (?, ?, ?)
+            """, (user_id, token, expires_at))
+            
+            conn.commit()
+            conn.close()
+            
+            # Store in session state
+            st.session_state.auth_token = token
+            
+            # Store in query params for persistence
+            st.query_params["auth_token"] = token
+            
+            return True
+        except Exception as e:
+            print(f"Error saving auth token: {e}")
+            return False
+    
+    def _check_auth_token(self):
+        """Check if user has a valid auth token"""
+        # First check query params
+        token = st.query_params.get("auth_token")
+        
+        if not token and 'auth_token' in st.session_state:
+            token = st.session_state.auth_token
+        
+        if token:
+            try:
+                conn = sqlite3.connect('turbo_air_db_online.sqlite')
+                cursor = conn.cursor()
+                
+                # Check if token exists and is valid
+                cursor.execute("""
+                    SELECT at.user_id, up.email, up.role 
+                    FROM auth_tokens at
+                    JOIN user_profiles up ON at.user_id = up.id
+                    WHERE at.token = ? AND at.expires_at > ?
+                """, (token, datetime.now()))
+                
+                result = cursor.fetchone()
+                
+                if result:
+                    # Auto-login the user
+                    user_id, email, role = result
+                    self._set_user_session({
+                        'id': user_id,
+                        'email': email,
+                        'created_at': datetime.now().isoformat()
+                    })
+                    st.session_state.user_role = role
+                    st.session_state.auth_token = token
+                    return True
+                else:
+                    # Token expired or invalid, remove it
+                    if "auth_token" in st.query_params:
+                        del st.query_params["auth_token"]
+                
+                conn.close()
+            except Exception as e:
+                print(f"Error checking auth token: {e}")
+        
+        return False
+    
+    def sign_in_with_email(self, email, password, remember_me=False):
         """Sign in with email and password"""
         if self.is_online and self.supabase:
             try:
@@ -52,19 +148,25 @@ class AuthManager:
                             'email': email,
                             'created_at': datetime.now().isoformat()
                         })
+                        
+                        # Handle remember me
+                        if remember_me:
+                            token = self._generate_auth_token()
+                            self._save_auth_token(user['id'], token)
+                        
                         return True, "Successfully signed in!"
                     
                     # For other users, you'd check against stored hash
                     return False, "Invalid credentials"
                 else:
                     # User not found in Supabase
-                    return self._offline_sign_in(email, password)
+                    return self._offline_sign_in(email, password, remember_me)
             except Exception as e:
                 # If Supabase fails, fall back to offline
-                return self._offline_sign_in(email, password)
+                return self._offline_sign_in(email, password, remember_me)
         else:
             # Offline mode - check local database
-            return self._offline_sign_in(email, password)
+            return self._offline_sign_in(email, password, remember_me)
     
     def sign_up_with_email(self, email, password, role='distributor', company=''):
         """Sign up with email and password"""
@@ -93,48 +195,29 @@ class AuthManager:
             # Offline mode - create local user
             return self._offline_sign_up(email, password, role, company)
     
-    def sign_in_with_google(self):
-        """Sign in with Google OAuth"""
-        if self.is_online and self.supabase:
-            try:
-                # This will redirect to Google OAuth
-                url = self.supabase.auth.sign_in_with_oauth({
-                    "provider": "google",
-                    "options": {
-                        "redirect_to": st.secrets.get("app", {}).get("redirect_url", "http://localhost:8501")
-                    }
-                })
-                return True, url.url
-            except Exception as e:
-                return False, str(e)
-        return False, "Google sign-in requires internet connection"
-    
-    def sign_in_with_microsoft(self):
-        """Sign in with Microsoft OAuth"""
-        if self.is_online and self.supabase:
-            try:
-                # This will redirect to Microsoft OAuth
-                url = self.supabase.auth.sign_in_with_oauth({
-                    "provider": "azure",
-                    "options": {
-                        "redirect_to": st.secrets.get("app", {}).get("redirect_url", "http://localhost:8501")
-                    }
-                })
-                return True, url.url
-            except Exception as e:
-                return False, str(e)
-        return False, "Microsoft sign-in requires internet connection"
-    
     def sign_out(self):
         """Sign out current user"""
-        if self.is_online and self.supabase:
+        # Remove auth token
+        if 'auth_token' in st.session_state:
+            token = st.session_state.auth_token
             try:
-                self.supabase.auth.sign_out()
+                conn = sqlite3.connect('turbo_air_db_online.sqlite')
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM auth_tokens WHERE token = ?", (token,))
+                conn.commit()
+                conn.close()
             except:
                 pass
         
+        # Clear query params
+        if "auth_token" in st.query_params:
+            del st.query_params["auth_token"]
+        
+        # Clear session state
         st.session_state.user = None
         st.session_state.user_role = 'distributor'
+        st.session_state.auth_token = None
+        
         # Clear other session state if needed
         for key in ['selected_client', 'cart_count', 'active_page']:
             if key in st.session_state:
@@ -193,7 +276,7 @@ class AuthManager:
             else:
                 st.session_state.user_role = 'distributor'
     
-    def _offline_sign_in(self, email, password):
+    def _offline_sign_in(self, email, password, remember_me=False):
         """Handle offline sign in using local database"""
         try:
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
@@ -216,6 +299,12 @@ class AuthManager:
                         'created_at': datetime.now().isoformat()
                     })
                     st.session_state.user_role = user[2]
+                    
+                    # Handle remember me
+                    if remember_me:
+                        token = self._generate_auth_token()
+                        self._save_auth_token(user[0], token)
+                    
                     conn.close()
                     return True, "Signed in offline mode"
                 else:
@@ -233,6 +322,12 @@ class AuthManager:
                         'created_at': datetime.now().isoformat()
                     })
                     st.session_state.user_role = 'admin'
+                    
+                    # Handle remember me
+                    if remember_me:
+                        token = self._generate_auth_token()
+                        self._save_auth_token(admin_id, token)
+                    
                     conn.close()
                     return True, "Signed in offline mode"
             
@@ -318,15 +413,19 @@ def show_auth_form():
         st.subheader("Sign In")
         
         # Email/Password sign in
-        email = st.text_input("Email", key="signin_email")
-        password = st.text_input("Password", type="password", key="signin_password")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("Sign In with Email", key="email_signin", use_container_width=True):
+        with st.form("signin_form"):
+            email = st.text_input("Email", key="signin_email")
+            password = st.text_input("Password", type="password", key="signin_password")
+            remember_me = st.checkbox("Remember me for 30 days", key="remember_me")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                submit = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+            
+            if submit:
                 if email and password:
-                    success, message = auth_manager.sign_in_with_email(email, password)
+                    success, message = auth_manager.sign_in_with_email(email, password, remember_me)
                     if success:
                         st.success(message)
                         st.rerun()
@@ -335,16 +434,22 @@ def show_auth_form():
                 else:
                     st.error("Please enter email and password")
         
-        with col2:
-            if st.button("Sign In with Google", key="google_signin", use_container_width=True):
+        # OAuth options
+        st.divider()
+        st.markdown("Or sign in with:")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("Sign in with Google", key="google_signin", use_container_width=True):
                 success, result = auth_manager.sign_in_with_google()
                 if success:
                     st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
                 else:
                     st.error(result)
         
-        with col3:
-            if st.button("Sign In with Microsoft", key="microsoft_signin", use_container_width=True):
+        with col2:
+            if st.button("Sign in with Microsoft", key="microsoft_signin", use_container_width=True):
                 success, result = auth_manager.sign_in_with_microsoft()
                 if success:
                     st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
@@ -355,24 +460,27 @@ def show_auth_form():
         st.subheader("Create Account")
         
         # Sign up form
-        new_email = st.text_input("Email", key="signup_email")
-        new_password = st.text_input("Password", type="password", key="signup_password")
-        confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
-        
-        role = st.selectbox("Role", ["distributor", "sales"], key="signup_role")
-        company = st.text_input("Company", key="signup_company")
-        
-        if st.button("Create Account", key="create_account", use_container_width=True):
-            if new_email and new_password:
-                if new_password == confirm_password:
-                    success, message = auth_manager.sign_up_with_email(
-                        new_email, new_password, role, company
-                    )
-                    if success:
-                        st.success(message)
+        with st.form("signup_form"):
+            new_email = st.text_input("Email", key="signup_email")
+            new_password = st.text_input("Password", type="password", key="signup_password")
+            confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
+            
+            role = st.selectbox("Role", ["distributor", "sales"], key="signup_role")
+            company = st.text_input("Company", key="signup_company")
+            
+            submit = st.form_submit_button("Create Account", use_container_width=True, type="primary")
+            
+            if submit:
+                if new_email and new_password:
+                    if new_password == confirm_password:
+                        success, message = auth_manager.sign_up_with_email(
+                            new_email, new_password, role, company
+                        )
+                        if success:
+                            st.success(message)
+                        else:
+                            st.error(message)
                     else:
-                        st.error(message)
+                        st.error("Passwords do not match")
                 else:
-                    st.error("Passwords do not match")
-            else:
-                st.error("Please fill in all required fields")
+                    st.error("Please fill in all required fields")
