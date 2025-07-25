@@ -80,21 +80,29 @@ from email_service import show_email_quote_dialog, get_email_service
 @st.cache_resource
 def init_services():
     """Initialize all services"""
-    # Supabase client
-    supabase_url = st.secrets.get("supabase", {}).get("url", "")
-    supabase_key = st.secrets.get("supabase", {}).get("anon_key", "")
-    
     supabase_client = None
-    if HAS_SUPABASE and supabase_url and supabase_key:
-        try:
-            supabase_client = create_client(supabase_url, supabase_key)
-        except Exception as e:
-            st.error(f"Failed to connect to Supabase: {e}")
-            supabase_client = None
+    supabase_url = None
+    supabase_key = None
     
-    # Initialize managers
-    auth_manager = AuthManager(supabase_url if supabase_client else None, 
-                              supabase_key if supabase_client else None)
+    try:
+        # Get Supabase credentials from secrets
+        supabase_url = st.secrets["supabase"]["url"]
+        supabase_key = st.secrets["supabase"]["anon_key"]
+        
+        if HAS_SUPABASE and supabase_url and supabase_key:
+            try:
+                supabase_client = create_client(supabase_url, supabase_key)
+                # Test connection with a simple query
+                supabase_client.table('products').select('id').limit(1).execute()
+                print("Successfully connected to Supabase")
+            except Exception as e:
+                print(f"Supabase connection failed: {e}")
+                supabase_client = None
+    except Exception as e:
+        print(f"Could not load Supabase credentials: {e}")
+    
+    # Initialize managers with whatever we have (online or offline)
+    auth_manager = AuthManager(supabase_url, supabase_key)
     db_manager = DatabaseManager(supabase_client)
     sync_manager = SyncManager(db_manager, supabase_client)
     
@@ -547,6 +555,13 @@ else:
         st.markdown("### Account Information")
         st.text(f"Email: {user.get('email', 'N/A')}")
         st.text(f"Role: {auth_manager.get_user_role().title()}")
+        
+        # Connection status
+        st.markdown("### Connection Status")
+        if auth_manager.is_online:
+            st.success("🟢 Connected to Supabase")
+        else:
+            st.warning("🔴 Running in offline mode")
         
         # Settings
         st.markdown("### Settings")

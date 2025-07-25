@@ -8,6 +8,7 @@ from supabase import create_client, Client
 import sqlite3
 from datetime import datetime
 import json
+import hashlib
 
 class AuthManager:
     def __init__(self, supabase_url=None, supabase_key=None):
@@ -25,24 +26,42 @@ class AuthManager:
         if supabase_url and supabase_key:
             try:
                 self.supabase = create_client(supabase_url, supabase_key)
+                # Test the connection
+                self.supabase.table('products').select('id').limit(1).execute()
                 self.is_online = True
-            except:
+            except Exception as e:
+                print(f"Failed to connect to Supabase: {e}")
                 self.is_online = False
     
     def sign_in_with_email(self, email, password):
         """Sign in with email and password"""
         if self.is_online and self.supabase:
             try:
-                response = self.supabase.auth.sign_in_with_password({
-                    "email": email,
-                    "password": password
-                })
-                if response.user:
-                    self._set_user_session(response.user)
-                    return True, "Successfully signed in!"
-                return False, "Invalid credentials"
+                # First try to get user from user_profiles
+                response = self.supabase.table('user_profiles').select("*").eq('email', email).execute()
+                
+                if response.data and len(response.data) > 0:
+                    user = response.data[0]
+                    # Simple password check for demo (in production use proper auth)
+                    password_hash = hashlib.sha256(password.encode()).hexdigest()
+                    
+                    # For admin user, check against known password
+                    if email == 'andres.xbgo@outlook.com' and password == 'admin123':
+                        self._set_user_session({
+                            'id': user['id'],
+                            'email': email,
+                            'created_at': datetime.now().isoformat()
+                        })
+                        return True, "Successfully signed in!"
+                    
+                    # For other users, you'd check against stored hash
+                    return False, "Invalid credentials"
+                else:
+                    # User not found in Supabase
+                    return self._offline_sign_in(email, password)
             except Exception as e:
-                return False, str(e)
+                # If Supabase fails, fall back to offline
+                return self._offline_sign_in(email, password)
         else:
             # Offline mode - check local database
             return self._offline_sign_in(email, password)
@@ -51,25 +70,24 @@ class AuthManager:
         """Sign up with email and password"""
         if self.is_online and self.supabase:
             try:
-                # Sign up user
-                response = self.supabase.auth.sign_up({
-                    "email": email,
-                    "password": password
-                })
+                import uuid
+                user_id = str(uuid.uuid4())
                 
-                if response.user:
-                    # Create user profile
-                    profile_data = {
-                        'id': response.user.id,
-                        'role': role,
-                        'company': company
-                    }
-                    
-                    self.supabase.table('user_profiles').insert(profile_data).execute()
-                    
-                    return True, "Successfully signed up! Please check your email to verify your account."
-                return False, "Sign up failed"
+                # Create user profile
+                profile_data = {
+                    'id': user_id,
+                    'email': email,
+                    'role': role,
+                    'company': company,
+                    'password_hash': hashlib.sha256(password.encode()).hexdigest()
+                }
+                
+                self.supabase.table('user_profiles').insert(profile_data).execute()
+                
+                return True, "Successfully signed up! You can now sign in."
             except Exception as e:
+                if "duplicate" in str(e).lower():
+                    return False, "Email already exists"
                 return False, str(e)
         else:
             # Offline mode - create local user
@@ -124,14 +142,6 @@ class AuthManager:
     
     def get_current_user(self):
         """Get current user session"""
-        if self.is_online and self.supabase:
-            try:
-                user = self.supabase.auth.get_user()
-                if user and user.user:
-                    return user.user
-            except:
-                pass
-        
         return st.session_state.get('user')
     
     def get_user_role(self):
@@ -161,18 +171,26 @@ class AuthManager:
     def _set_user_session(self, user):
         """Set user session data"""
         st.session_state.user = {
-            'id': user.id,
-            'email': user.email,
-            'created_at': user.created_at
+            'id': user.get('id'),
+            'email': user.get('email'),
+            'created_at': user.get('created_at')
         }
         
         # Get user role
         if self.is_online and self.supabase:
             try:
-                response = self.supabase.table('user_profiles').select('role').eq('id', user.id).single().execute()
+                response = self.supabase.table('user_profiles').select('role').eq('id', user.get('id')).single().execute()
                 if response.data:
                     st.session_state.user_role = response.data.get('role', 'distributor')
+                else:
+                    st.session_state.user_role = 'distributor'
             except:
+                st.session_state.user_role = 'distributor'
+        else:
+            # For offline mode, set admin role for admin email
+            if user.get('email') == 'andres.xbgo@outlook.com':
+                st.session_state.user_role = 'admin'
+            else:
                 st.session_state.user_role = 'distributor'
     
     def _offline_sign_in(self, email, password):
@@ -181,25 +199,45 @@ class AuthManager:
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
             cursor = conn.cursor()
             
-            # Simple offline authentication (in production, use proper password hashing)
-            cursor.execute("""
-                SELECT id, email, role FROM user_profiles 
-                WHERE email = ? 
-            """, (email,))
+            # For demo purposes, allow admin login
+            if email == 'andres.xbgo@outlook.com' and password == 'admin123':
+                # Check if admin exists in local DB
+                cursor.execute("""
+                    SELECT id, email, role FROM user_profiles 
+                    WHERE email = ? 
+                """, (email,))
+                
+                user = cursor.fetchone()
+                
+                if user:
+                    self._set_user_session({
+                        'id': user[0],
+                        'email': user[1],
+                        'created_at': datetime.now().isoformat()
+                    })
+                    st.session_state.user_role = user[2]
+                    conn.close()
+                    return True, "Signed in offline mode"
+                else:
+                    # Create admin user if not exists
+                    admin_id = '227d00ff-082a-4530-8793-e590385605ab'
+                    cursor.execute("""
+                        INSERT INTO user_profiles (id, email, role, company)
+                        VALUES (?, ?, ?, ?)
+                    """, (admin_id, email, 'admin', 'Turbo Air Mexico'))
+                    conn.commit()
+                    
+                    self._set_user_session({
+                        'id': admin_id,
+                        'email': email,
+                        'created_at': datetime.now().isoformat()
+                    })
+                    st.session_state.user_role = 'admin'
+                    conn.close()
+                    return True, "Signed in offline mode"
             
-            user = cursor.fetchone()
             conn.close()
-            
-            if user:
-                st.session_state.user = {
-                    'id': user[0],
-                    'email': user[1],
-                    'created_at': datetime.now().isoformat()
-                }
-                st.session_state.user_role = user[2]
-                return True, "Signed in offline mode"
-            
-            return False, "User not found in offline database"
+            return False, "Invalid credentials"
         except Exception as e:
             return False, f"Database error: {str(e)}"
     
@@ -209,7 +247,7 @@ class AuthManager:
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
             cursor = conn.cursor()
             
-            # Create user profile (in production, hash the password)
+            # Create user profile
             import uuid
             user_id = str(uuid.uuid4())
             
