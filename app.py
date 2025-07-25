@@ -8,6 +8,14 @@ import pandas as pd
 import os
 from datetime import datetime
 
+# Page configuration MUST be first Streamlit command
+st.set_page_config(
+    page_title="Turbo Air Equipment Viewer",
+    page_icon="❄️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
 # Initialize database if it doesn't exist
 if not os.path.exists('turbo_air_db_online.sqlite'):
     try:
@@ -31,7 +39,13 @@ def init_session_state():
         'show_product_detail': None,
         'auth_manager': None,
         'db_manager': None,
-        'sync_manager': None
+        'sync_manager': None,
+        'sync_status': {
+            'is_online': False,
+            'last_sync': None,
+            'pending_changes': 0,
+            'sync_errors': []
+        }
     }
     
     for key, default_value in defaults.items():
@@ -40,14 +54,6 @@ def init_session_state():
 
 # Call this before anything else
 init_session_state()
-
-# Page configuration
-st.set_page_config(
-    page_title="Turbo Air Equipment Viewer",
-    page_icon="❄️",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
 
 # Import after session state is initialized
 try:
@@ -114,8 +120,11 @@ if not auth_manager.is_authenticated():
                 unsafe_allow_html=True)
     show_auth_form()
 else:
-    # Update sync status
-    sync_manager.update_sync_status()
+    # Update sync status safely
+    try:
+        sync_manager.update_sync_status()
+    except Exception as e:
+        st.error(f"Error updating sync status: {e}")
     
     # Get current user
     user = auth_manager.get_current_user()
@@ -123,8 +132,12 @@ else:
     
     # Update cart count
     if st.session_state.selected_client:
-        cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
-        st.session_state.cart_count = len(cart_items)
+        try:
+            cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+            st.session_state.cart_count = len(cart_items)
+        except Exception as e:
+            st.error(f"Error loading cart: {e}")
+            st.session_state.cart_count = 0
     
     # Detect device type (simplified)
     is_mobile = st.session_state.get('is_mobile', True)
@@ -158,7 +171,11 @@ else:
         # Client Selection/Creation
         st.markdown("### Clients")
         
-        clients_df = db_manager.get_user_clients(user_id)
+        try:
+            clients_df = db_manager.get_user_clients(user_id)
+        except Exception as e:
+            st.error(f"Error loading clients: {e}")
+            clients_df = pd.DataFrame()
         
         if not clients_df.empty:
             # Show existing clients
@@ -186,8 +203,11 @@ else:
                         st.text(f"Phone: {selected_client_data.get('contact_number', 'N/A')}")
                         
                         # Show quotes for this client
-                        quotes_df = db_manager.get_client_quotes(st.session_state.selected_client)
-                        st.text(f"Quotes: {len(quotes_df)}")
+                        try:
+                            quotes_df = db_manager.get_client_quotes(st.session_state.selected_client)
+                            st.text(f"Quotes: {len(quotes_df)}")
+                        except:
+                            st.text("Quotes: 0")
         
         # Create new client form
         with st.expander("Create New Client"):
@@ -212,7 +232,15 @@ else:
         
         # Dashboard Stats
         st.markdown("### Dashboard")
-        stats = db_manager.get_dashboard_stats(user_id)
+        try:
+            stats = db_manager.get_dashboard_stats(user_id)
+        except:
+            stats = {
+                'total_clients': 0,
+                'total_quotes': 0,
+                'recent_quotes': 0,
+                'cart_items': 0
+            }
         
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -225,14 +253,17 @@ else:
             st.metric("Cart Items", stats['cart_items'])
         
         # Recent Search History
-        search_history = db_manager.get_search_history(user_id)
-        if search_history:
-            st.markdown("### Recent Searches")
-            for search_term in search_history[:5]:
-                if st.button(f"🔍 {search_term}", key=f"recent_{search_term}"):
-                    st.session_state.search_term = search_term
-                    st.session_state.active_page = 'search'
-                    st.rerun()
+        try:
+            search_history = db_manager.get_search_history(user_id)
+            if search_history:
+                st.markdown("### Recent Searches")
+                for search_term in search_history[:5]:
+                    if st.button(f"🔍 {search_term}", key=f"recent_{search_term}"):
+                        st.session_state.search_term = search_term
+                        st.session_state.active_page = 'search'
+                        st.rerun()
+        except:
+            pass
     
     elif st.session_state.active_page == 'search' or st.session_state.active_page == 'products':
         # Search/Products Page
@@ -244,10 +275,17 @@ else:
         if search_term:
             # Add to search history
             if len(search_term) > 2:
-                db_manager.add_search_history(user_id, search_term)
+                try:
+                    db_manager.add_search_history(user_id, search_term)
+                except:
+                    pass
             
             # Search products
-            results_df = db_manager.search_products(search_term)
+            try:
+                results_df = db_manager.search_products(search_term)
+            except Exception as e:
+                st.error(f"Error searching products: {e}")
+                results_df = pd.DataFrame()
             
             if not results_df.empty:
                 st.markdown(f"Found {len(results_df)} products")
@@ -337,7 +375,10 @@ else:
             # Show categories
             st.markdown("### Browse by Category")
             
-            categories = db_manager.get_categories()
+            try:
+                categories = db_manager.get_categories()
+            except:
+                categories = []
             
             if st.session_state.selected_category:
                 # Show subcategories or products
@@ -359,13 +400,16 @@ else:
                                 st.rerun()
                 
                 # Show products in category
-                if st.session_state.selected_subcategory:
-                    products_df = db_manager.get_products_by_category(
-                        st.session_state.selected_category,
-                        st.session_state.selected_subcategory
-                    )
-                else:
-                    products_df = db_manager.get_products_by_category(st.session_state.selected_category)
+                try:
+                    if st.session_state.selected_subcategory:
+                        products_df = db_manager.get_products_by_category(
+                            st.session_state.selected_category,
+                            st.session_state.selected_subcategory
+                        )
+                    else:
+                        products_df = db_manager.get_products_by_category(st.session_state.selected_category)
+                except:
+                    products_df = pd.DataFrame()
                 
                 if not products_df.empty:
                     # Similar display logic as search results
@@ -383,7 +427,11 @@ else:
                        "Go to Home", lambda: setattr(st.session_state, 'active_page', 'home'))
         else:
             # Get cart items
-            cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+            try:
+                cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+            except Exception as e:
+                st.error(f"Error loading cart: {e}")
+                cart_items = pd.DataFrame()
             
             if cart_items.empty:
                 empty_state("🛒", "Cart is Empty", "Add products to your cart to create a quote",

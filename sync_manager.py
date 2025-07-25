@@ -21,6 +21,10 @@ class SyncManager:
         self.last_sync = None
         
         # Initialize sync status in session state
+        self._init_sync_status()
+    
+    def _init_sync_status(self):
+        """Initialize sync status in session state"""
         if 'sync_status' not in st.session_state:
             st.session_state.sync_status = {
                 'is_online': False,
@@ -42,13 +46,19 @@ class SyncManager:
     
     def update_sync_status(self):
         """Update sync status in session state"""
+        # Ensure sync status is initialized
+        self._init_sync_status()
+        
         is_online = self.check_connectivity()
         st.session_state.sync_status['is_online'] = is_online
         
         # Count pending changes
         if self.db_manager:
-            pending_df = self.db_manager.get_pending_sync_items()
-            st.session_state.sync_status['pending_changes'] = len(pending_df)
+            try:
+                pending_df = self.db_manager.get_pending_sync_items()
+                st.session_state.sync_status['pending_changes'] = len(pending_df)
+            except:
+                st.session_state.sync_status['pending_changes'] = 0
         
         return is_online
     
@@ -257,6 +267,7 @@ class SyncManager:
     
     def get_sync_status_display(self) -> str:
         """Get formatted sync status for display"""
+        self._init_sync_status()  # Ensure initialized
         status = st.session_state.sync_status
         
         if status['is_online']:
