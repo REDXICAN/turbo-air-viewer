@@ -1,6 +1,6 @@
 """
-UI Components for Turbo Air Equipment Viewer
-Reusable UI components with Apple-like design
+Mobile-First UI Components for Turbo Air Equipment Viewer
+iOS-style design with clean, modern interface
 """
 
 import streamlit as st
@@ -10,390 +10,568 @@ import os
 from typing import Dict, List, Optional
 import base64
 
-# Color palette
+# Color palette - iOS style
 COLORS = {
-    'turbo_blue': '#20429c',
-    'turbo_red': '#d3242b',
-    'success_green': '#34C759',
-    'warning_yellow': '#FFF3CD',
-    'background_light': '#F2F2F7',
-    'background_dark': '#1C1C1E',
+    'primary': '#007AFF',
+    'background': '#FFFFFF',
+    'surface': '#F2F2F7',
+    'card': '#FFFFFF',
     'text_primary': '#000000',
     'text_secondary': '#6C6C70',
-    'card_bg': '#FFFFFF',
-    'border': '#E5E5EA'
+    'text_tertiary': '#8E8E93',
+    'border': '#C6C6C8',
+    'success': '#34C759',
+    'error': '#FF3B30',
+    'warning': '#FF9500',
+    'divider': '#E5E5EA'
 }
 
-def apply_custom_css():
-    """Apply custom CSS for Apple-like design"""
+def apply_mobile_css():
+    """Apply mobile-first CSS styling"""
     css = f"""
     <style>
-    /* Global Styles */
+    /* Reset and base styles */
     .stApp {{
-        background-color: {COLORS['background_light']};
+        background-color: {COLORS['background']};
+        max-width: 100%;
+    }}
+    
+    /* Hide Streamlit elements */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    .stDeployButton {{display: none;}}
+    
+    /* Mobile-first responsive design */
+    @media (max-width: 768px) {{
+        .stApp > div > div {{
+            padding: 0 !important;
+        }}
+        
+        .main > div {{
+            padding: 0 !important;
+        }}
     }}
     
     /* Typography */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    
-    html, body, [class*="css"] {{
-        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    h1, h2, h3, h4, h5, h6 {{
+        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        font-weight: 600;
+        color: {COLORS['text_primary']};
     }}
     
-    /* Card Styles */
-    .product-card {{
-        background: {COLORS['card_bg']};
+    /* Header styles */
+    .mobile-header {{
+        background: {COLORS['card']};
+        padding: 12px 16px;
+        border-bottom: 1px solid {COLORS['divider']};
+        position: sticky;
+        top: 0;
+        z-index: 100;
+    }}
+    
+    /* Search bar */
+    .search-container {{
+        background: {COLORS['surface']};
+        border-radius: 10px;
+        padding: 8px 12px;
+        margin: 12px 16px;
+    }}
+    
+    /* Category card */
+    .category-card {{
+        background: {COLORS['card']};
         border-radius: 12px;
         padding: 16px;
-        margin-bottom: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-        transition: all 0.3s ease;
-        cursor: pointer;
-    }}
-    
-    .product-card:hover {{
-        transform: translateY(-2px);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-    }}
-    
-    /* Button Styles */
-    .stButton > button {{
-        background: {COLORS['turbo_blue']};
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 10px 20px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }}
-    
-    .stButton > button:hover {{
-        background: #1a3580;
-        transform: translateY(-1px);
-    }}
-    
-    /* Search Bar */
-    .search-container {{
-        background: #F0F0F5;
-        border-radius: 12px;
-        padding: 12px 16px;
-        margin-bottom: 20px;
-    }}
-    
-    .search-container input {{
-        border: none;
-        background: transparent;
-        font-size: 16px;
-        width: 100%;
-        outline: none;
-    }}
-    
-    /* Category Cards */
-    .category-card {{
-        background: white;
-        border-radius: 12px;
-        padding: 20px;
         text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        transition: all 0.2s ease;
         cursor: pointer;
-        transition: all 0.3s ease;
-        border: 1px solid {COLORS['border']};
+        height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
     }}
     
     .category-card:hover {{
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        border-color: {COLORS['turbo_blue']};
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }}
     
-    /* Success Animation */
-    @keyframes success-pulse {{
-        0% {{ transform: scale(1); opacity: 1; }}
-        50% {{ transform: scale(1.2); opacity: 0.8; }}
-        100% {{ transform: scale(1); opacity: 1; }}
+    .category-card img {{
+        width: 60px;
+        height: 60px;
+        object-fit: contain;
+        margin-bottom: 8px;
     }}
     
-    .success-icon {{
-        animation: success-pulse 0.5s ease-in-out;
+    .category-card h4 {{
+        margin: 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: {COLORS['text_primary']};
     }}
     
-    /* Quantity Controls */
-    .quantity-controls {{
+    /* Quick Access section */
+    .quick-access {{
+        background: {COLORS['card']};
+        border-radius: 12px;
+        padding: 16px;
+        margin: 16px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }}
+    
+    .quick-access-title {{
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: {COLORS['text_primary']};
+    }}
+    
+    .quick-access-item {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 12px;
+        border-radius: 8px;
+        transition: background 0.2s ease;
+        cursor: pointer;
+        min-height: 80px;
+    }}
+    
+    .quick-access-item:hover {{
+        background: {COLORS['surface']};
+    }}
+    
+    .quick-access-icon {{
+        font-size: 24px;
+        margin-bottom: 4px;
+    }}
+    
+    .quick-access-label {{
+        font-size: 12px;
+        color: {COLORS['text_secondary']};
+        text-align: center;
+    }}
+    
+    /* Product list item */
+    .product-item {{
+        background: {COLORS['card']};
+        padding: 12px 16px;
+        border-bottom: 1px solid {COLORS['divider']};
         display: flex;
         align-items: center;
         gap: 12px;
     }}
     
-    .quantity-btn {{
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        border: 1px solid {COLORS['border']};
-        background: white;
+    .product-thumbnail {{
+        width: 60px;
+        height: 60px;
+        border-radius: 8px;
+        background: {COLORS['surface']};
+        flex-shrink: 0;
+    }}
+    
+    .product-info {{
+        flex: 1;
+    }}
+    
+    .product-name {{
+        font-size: 14px;
+        font-weight: 500;
+        color: {COLORS['text_primary']};
+        margin: 0;
+    }}
+    
+    .product-model {{
+        font-size: 12px;
+        color: {COLORS['text_secondary']};
+        margin: 0;
+    }}
+    
+    .product-price {{
+        font-size: 16px;
+        font-weight: 600;
+        color: {COLORS['text_primary']};
+    }}
+    
+    /* Bottom navigation */
+    .bottom-nav {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: {COLORS['card']};
+        border-top: 1px solid {COLORS['divider']};
         display: flex;
+        justify-content: space-around;
+        padding: 8px 0;
+        z-index: 1000;
+    }}
+    
+    .nav-item {{
+        display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        flex: 1;
+        padding: 4px;
+        color: {COLORS['text_tertiary']};
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: color 0.2s ease;
     }}
     
-    .quantity-btn:hover {{
-        background: {COLORS['background_light']};
+    .nav-item.active {{
+        color: {COLORS['primary']};
     }}
     
-    /* Hide Streamlit Branding */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
+    .nav-icon {{
+        font-size: 22px;
+        margin-bottom: 2px;
+    }}
+    
+    .nav-label {{
+        font-size: 10px;
+        font-weight: 500;
+    }}
+    
+    /* Filter dropdown */
+    .filter-dropdown {{
+        background: {COLORS['card']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        color: {COLORS['text_primary']};
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+    }}
+    
+    /* Buttons */
+    .primary-button {{
+        background: {COLORS['primary']};
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 14px 24px;
+        font-size: 16px;
+        font-weight: 500;
+        width: 100%;
+        cursor: pointer;
+        transition: opacity 0.2s ease;
+    }}
+    
+    .primary-button:hover {{
+        opacity: 0.9;
+    }}
+    
+    /* Metrics card */
+    .metric-card {{
+        background: {COLORS['surface']};
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+    }}
+    
+    .metric-value {{
+        font-size: 32px;
+        font-weight: 600;
+        color: {COLORS['text_primary']};
+        margin: 0;
+    }}
+    
+    .metric-label {{
+        font-size: 14px;
+        color: {COLORS['text_secondary']};
+        margin-top: 4px;
+    }}
+    
+    /* Sync status */
+    .sync-status {{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: {COLORS['surface']};
+        border-radius: 8px;
+        font-size: 14px;
+    }}
+    
+    .sync-indicator {{
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: {COLORS['error']};
+    }}
+    
+    .sync-indicator.online {{
+        background: {COLORS['success']};
+    }}
+    
+    /* Add padding for bottom nav */
+    .main-content {{
+        padding-bottom: 80px;
+    }}
+    
+    /* Hide default Streamlit buttons styling */
+    .stButton > button {{
+        background: none;
+        border: none;
+        padding: 0;
+        width: 100%;
+    }}
+    
+    /* Responsive adjustments */
+    @media (min-width: 768px) {{
+        .mobile-container {{
+            max-width: 428px;
+            margin: 0 auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+            min-height: 100vh;
+            background: {COLORS['background']};
+        }}
+    }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-def mobile_navigation(active_page: str):
-    """Simple mobile navigation using columns and buttons"""
-    # Create navigation using columns
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        if st.button("Home", key="mob_nav_home", use_container_width=True,
-                    type="primary" if active_page == "home" else "secondary"):
-            st.session_state.active_page = "home"
-            st.rerun()
-    
-    with col2:
-        if st.button("Search", key="mob_nav_search", use_container_width=True,
-                    type="primary" if active_page in ["search", "products"] else "secondary"):
-            st.session_state.active_page = "search"
-            st.rerun()
-    
-    with col3:
-        cart_label = f"Cart ({st.session_state.cart_count})" if st.session_state.cart_count > 0 else "Cart"
-        if st.button(cart_label, key="mob_nav_cart", use_container_width=True,
-                    type="primary" if active_page == "cart" else "secondary"):
-            st.session_state.active_page = "cart"
-            st.rerun()
-    
-    with col4:
-        if st.button("Profile", key="mob_nav_profile", use_container_width=True,
-                    type="primary" if active_page == "profile" else "secondary"):
-            st.session_state.active_page = "profile"
-            st.rerun()
-    
-    # Add divider after navigation
-    st.divider()
-
-def desktop_navigation(active_page: str):
-    """Render desktop sidebar navigation"""
-    with st.sidebar:
-        st.markdown("### Navigation")
-        
-        # Home button
-        if st.button("Home", key="desk_nav_home", use_container_width=True,
-                    type="primary" if active_page == "home" else "secondary"):
-            st.session_state.active_page = "home"
-            st.rerun()
-        
-        # Products button
-        if st.button("Products", key="desk_nav_products", use_container_width=True,
-                    type="primary" if active_page in ["search", "products"] else "secondary"):
-            st.session_state.active_page = "search"
-            st.rerun()
-        
-        # Cart button with count
-        cart_label = f"Cart ({st.session_state.cart_count})" if st.session_state.cart_count > 0 else "Cart"
-        if st.button(cart_label, key="desk_nav_cart", use_container_width=True,
-                    type="primary" if active_page == "cart" else "secondary"):
-            st.session_state.active_page = "cart"
-            st.rerun()
-        
-        # Profile button
-        if st.button("Profile", key="desk_nav_profile", use_container_width=True,
-                    type="primary" if active_page == "profile" else "secondary"):
-            st.session_state.active_page = "profile"
-            st.rerun()
-
-def product_card(product: Dict, show_add_button: bool = True):
-    """Render a product card"""
-    # Try to load product image
-    image_path = f"pdf_screenshots/{product['sku']}/page_1.png"
-    
-    card_html = f'''
-    <div class="product-card">
-        <div style="aspect-ratio: 1; overflow: hidden; border-radius: 8px; margin-bottom: 12px;">
-    '''
-    
-    if os.path.exists(image_path):
-        # Load and encode image
-        with open(image_path, "rb") as f:
-            img_data = base64.b64encode(f.read()).decode()
-        card_html += f'<img src="data:image/png;base64,{img_data}" style="width: 100%; height: 100%; object-fit: cover;">'
-    else:
-        # Placeholder
-        card_html += f'''
-        <div style="width: 100%; height: 100%; background: {COLORS['background_light']}; 
-                    display: flex; align-items: center; justify-content: center;">
-            <span style="color: {COLORS['text_secondary']};">No Image</span>
+def mobile_header(title: str, show_back: bool = False, show_search: bool = False):
+    """Render mobile header with optional back button and search"""
+    header_html = f"""
+    <div class="mobile-header">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            {'<span style="font-size: 20px; cursor: pointer;">←</span>' if show_back else ''}
+            <h2 style="margin: 0; font-size: 20px; font-weight: 600;">{title}</h2>
+            <div style="width: 24px;"></div>
         </div>
-        '''
-    
-    card_html += f'''
-        </div>
-        <h4 style="margin: 0 0 4px 0; font-size: 14px;">{product['sku']}</h4>
-        <p style="margin: 0 0 8px 0; color: {COLORS['text_secondary']}; font-size: 12px;">
-            {product.get('product_type', 'N/A')}
-        </p>
-        <p style="margin: 0; font-weight: 600; color: {COLORS['turbo_blue']};">
-            ${product.get('price', 0):,.2f}
-        </p>
     </div>
-    '''
-    
-    return card_html
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
 
-def search_bar(placeholder: str = "Search products...") -> str:
-    """Render search bar with results dropdown"""
-    search_term = st.text_input("", placeholder=placeholder, key="search_input")
-    
-    # Show search results dropdown if there's a search term
-    if search_term and len(search_term) >= 2:
-        with st.container():
-            # This would be populated with actual search results
-            st.markdown("""
-            <div style="background: white; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-                        padding: 8px; margin-top: 4px;">
-                <!-- Search results would go here -->
-            </div>
-            """, unsafe_allow_html=True)
-    
-    return search_term
+def mobile_search_bar(placeholder: str = "Search for products"):
+    """Render mobile search bar"""
+    search_html = f"""
+    <div class="search-container">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {COLORS['text_secondary']};">🔍</span>
+            <input type="text" placeholder="{placeholder}" 
+                   style="border: none; background: none; outline: none; flex: 1; font-size: 16px;">
+        </div>
+    </div>
+    """
+    st.markdown(search_html, unsafe_allow_html=True)
+    return st.text_input("", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
-def category_grid(categories: List[Dict]):
+def category_grid(categories: List[Dict[str, str]]):
     """Render category grid"""
-    # Determine columns based on screen size
-    cols = st.columns(3)  # Desktop: 3 columns
-    
+    cols = st.columns(2)
     for i, category in enumerate(categories):
-        with cols[i % 3]:
+        with cols[i % 2]:
             if st.button(
-                f"{category['name']}\n({category['count']} items)",
+                category['name'],
                 key=f"cat_{category['name']}",
-                use_container_width=True,
-                help=f"View {category['name']} products"
+                use_container_width=True
             ):
                 st.session_state.selected_category = category['name']
                 st.session_state.active_page = 'products'
                 st.rerun()
+            
+            # Show category image placeholder
+            st.markdown(f"""
+            <div class="category-card">
+                <div style="width: 80px; height: 80px; background: {COLORS['surface']}; 
+                         border-radius: 8px; margin-bottom: 8px;"></div>
+                <h4>{category['name']}</h4>
+            </div>
+            """, unsafe_allow_html=True)
 
-def quantity_selector(current_quantity: int, item_id: int) -> int:
-    """Render quantity selector with +/- buttons"""
-    col1, col2, col3 = st.columns([1, 2, 1])
+def quick_access_section():
+    """Render quick access section"""
+    st.markdown("""
+    <div class="quick-access">
+        <div class="quick-access-title">Quick Access</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Quick access items
+    items = [
+        {"icon": "❄️", "label": "Refrigerators", "category": "Refrigerators"},
+        {"icon": "🧊", "label": "Freezers", "category": "Freezers"},
+        {"icon": "🍦", "label": "Ice Cream", "category": "Ice Cream"},
+        {"icon": "🥤", "label": "Beverages", "category": "Beverages"}
+    ]
+    
+    cols = st.columns(4)
+    for i, item in enumerate(items):
+        with cols[i]:
+            if st.button(
+                f"{item['icon']}\n{item['label']}",
+                key=f"quick_{item['category']}",
+                use_container_width=True
+            ):
+                st.session_state.selected_category = item['category']
+                st.session_state.active_page = 'products'
+                st.rerun()
+
+def bottom_navigation(active_page: str):
+    """Render bottom navigation bar"""
+    nav_items = [
+        {"icon": "🏠", "label": "Home", "page": "home"},
+        {"icon": "🔍", "label": "Search", "page": "search"},
+        {"icon": "🛒", "label": "Cart", "page": "cart"},
+        {"icon": "👤", "label": "Profile", "page": "profile"}
+    ]
+    
+    nav_html = '<div class="bottom-nav">'
+    for item in nav_items:
+        active_class = "active" if item["page"] == active_page else ""
+        nav_html += f'''
+        <div class="nav-item {active_class}" onclick="window.location.hash='#{item["page"]}'">
+            <div class="nav-icon">{item["icon"]}</div>
+            <div class="nav-label">{item["label"]}</div>
+        </div>
+        '''
+    nav_html += '</div>'
+    
+    st.markdown(nav_html, unsafe_allow_html=True)
+    
+    # Handle navigation with buttons (hidden)
+    cols = st.columns(4)
+    for i, item in enumerate(nav_items):
+        with cols[i]:
+            if st.button(
+                "",
+                key=f"nav_{item['page']}",
+                use_container_width=True,
+                disabled=(item["page"] == active_page)
+            ):
+                st.session_state.active_page = item["page"]
+                st.rerun()
+
+def product_list_item(product: Dict):
+    """Render product list item"""
+    item_html = f"""
+    <div class="product-item">
+        <div class="product-thumbnail"></div>
+        <div class="product-info">
+            <p class="product-name">{product.get('sku', 'Unknown')}</p>
+            <p class="product-model">{product.get('product_type', 'Model')}</p>
+        </div>
+        <div class="product-price">${product.get('price', 0):,.2f}</div>
+    </div>
+    """
+    return item_html
+
+def filter_row():
+    """Render filter row with dropdowns"""
+    col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("-", key=f"minus_{item_id}"):
-            return max(1, current_quantity - 1)
+        st.selectbox("Category", ["All", "Refrigerators", "Freezers"], key="filter_category")
     
     with col2:
-        st.markdown(f"<h3 style='text-align: center; margin: 0;'>{current_quantity}</h3>", 
-                   unsafe_allow_html=True)
+        st.selectbox("Price", ["All", "Under $3,000", "$3,000-$5,000", "Over $5,000"], key="filter_price")
     
     with col3:
-        if st.button("+", key=f"plus_{item_id}"):
-            return current_quantity + 1
-    
-    return current_quantity
+        st.selectbox("Dimensions", ["All", "Small", "Medium", "Large"], key="filter_dimensions")
 
-def success_message(message: str):
-    """Show success message with animation"""
+def metric_card(label: str, value: int):
+    """Render metric card"""
     st.markdown(f"""
-    <div class="success-icon" style="text-align: center; color: {COLORS['success_green']}; 
-                font-size: 48px; margin: 20px 0;">
-        ✓
+    <div class="metric-card">
+        <div class="metric-value">{value}</div>
+        <div class="metric-label">{label}</div>
     </div>
-    <p style="text-align: center; font-weight: 500;">{message}</p>
     """, unsafe_allow_html=True)
 
-def loading_spinner(message: str = "Loading..."):
-    """Show loading spinner"""
-    st.markdown(f"""
-    <div style="text-align: center; padding: 40px;">
-        <div class="spinner" style="border: 3px solid {COLORS['border']}; 
-                border-top: 3px solid {COLORS['turbo_blue']}; 
-                border-radius: 50%; width: 40px; height: 40px; 
-                animation: spin 1s linear infinite; margin: 0 auto;">
+def sync_status_bar(is_online: bool, is_synced: bool):
+    """Render sync status bar"""
+    status_text = "All synced" if is_synced else "Sync needed"
+    indicator_class = "online" if is_online else ""
+    
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        st.markdown(f"""
+        <div class="sync-status">
+            <div class="sync-indicator {indicator_class}"></div>
+            <span>{"Online" if is_online else "Offline"}</span>
+            <span style="margin-left: auto; color: {COLORS['text_secondary']};">{status_text}</span>
         </div>
-        <p style="margin-top: 16px; color: {COLORS['text_secondary']};">{message}</p>
-    </div>
-    <style>
-    @keyframes spin {{
-        0% {{ transform: rotate(0deg); }}
-        100% {{ transform: rotate(360deg); }}
-    }}
-    </style>
-    """, unsafe_allow_html=True)
-
-def empty_state(icon: str, title: str, description: str, action_label: str = None, action_callback = None):
-    """Show empty state message"""
-    st.markdown(f"""
-    <div style="text-align: center; padding: 60px 20px;">
-        <div style="font-size: 64px; margin-bottom: 16px;">{icon}</div>
-        <h3 style="margin: 0 0 8px 0;">{title}</h3>
-        <p style="color: {COLORS['text_secondary']}; margin: 0 0 24px 0;">{description}</p>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
-    if action_label and action_callback:
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col2:
-            if st.button(action_label, use_container_width=True):
-                action_callback()
-
-def confirm_dialog(title: str, message: str, confirm_label: str = "Confirm", 
-                  cancel_label: str = "Cancel") -> bool:
-    """Show confirmation dialog"""
-    with st.container():
-        st.markdown(f"### {title}")
-        st.markdown(message)
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(cancel_label, use_container_width=True):
-                return False
-        with col2:
-            if st.button(confirm_label, use_container_width=True, type="primary"):
-                return True
+    with col2:
+        if st.button("Sync Now", key="sync_now", use_container_width=True):
+            return True
     
     return False
 
-def format_price(price: float) -> str:
-    """Format price for display"""
-    return f"${price:,.2f}"
+def mobile_button(label: str, variant: str = "primary", key: str = None):
+    """Render mobile-style button"""
+    if variant == "primary":
+        if st.button(label, key=key, use_container_width=True):
+            return True
+    else:
+        if st.button(label, key=key, use_container_width=True):
+            return True
+    return False
 
-def truncate_text(text: str, max_length: int = 50) -> str:
-    """Truncate text with ellipsis"""
-    if len(text) > max_length:
-        return text[:max_length-3] + "..."
-    return text
+def cart_item(product: Dict, quantity: int, item_id: str):
+    """Render cart item with quantity controls"""
+    col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
+    
+    with col1:
+        # Product thumbnail
+        st.markdown(f'<div class="product-thumbnail"></div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"**{product.get('sku', 'Unknown')}**")
+        st.caption(product.get('product_type', ''))
+    
+    with col3:
+        # Quantity controls
+        q_col1, q_col2, q_col3 = st.columns([1, 1, 1])
+        with q_col1:
+            if st.button("-", key=f"minus_{item_id}"):
+                return max(1, quantity - 1)
+        with q_col2:
+            st.markdown(f"<p style='text-align: center; margin: 0;'>{quantity}</p>", unsafe_allow_html=True)
+        with q_col3:
+            if st.button("+", key=f"plus_{item_id}"):
+                return quantity + 1
+    
+    with col4:
+        st.markdown(f"**${product.get('price', 0) * quantity:,.2f}**")
+    
+    return quantity
 
-def get_placeholder_image():
-    """Get base64 encoded placeholder image"""
-    # Create a simple placeholder image
-    from PIL import Image, ImageDraw
+def summary_section(subtotal: float, tax_rate: float = 0.075):
+    """Render cart/quote summary section"""
+    tax = subtotal * tax_rate
+    total = subtotal + tax
     
-    img = Image.new('RGB', (200, 200), color=COLORS['background_light'])
-    draw = ImageDraw.Draw(img)
+    st.markdown("### Summary")
     
-    # Draw text
-    text = "No Image"
-    bbox = draw.textbbox((0, 0), text)
-    text_width = bbox[2] - bbox[0]
-    text_height = bbox[3] - bbox[1]
+    st.markdown(f"""
+    <div style="padding: 16px; background: {COLORS['surface']}; border-radius: 12px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>Subtotal</span>
+            <span>${subtotal:,.2f}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>Estimated Taxes</span>
+            <span>${tax:,.2f}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 18px; 
+                    padding-top: 8px; border-top: 1px solid {COLORS['divider']};">
+            <span>Total</span>
+            <span>${total:,.2f}</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
-    position = ((200 - text_width) // 2, (200 - text_height) // 2)
-    draw.text(position, text, fill=COLORS['text_secondary'])
-    
-    # Convert to base64
-    from io import BytesIO
-    buffer = BytesIO()
-    img.save(buffer, format='PNG')
-    img_str = base64.b64encode(buffer.getvalue()).decode()
-    
-    return f"data:image/png;base64,{img_str}"
+    return total
