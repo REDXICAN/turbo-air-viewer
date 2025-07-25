@@ -147,14 +147,8 @@ else:
             st.error(f"Error loading cart: {e}")
             st.session_state.cart_count = 0
     
-    # Detect device type (simplified)
-    is_mobile = st.session_state.get('is_mobile', True)
-    
-    # Navigation
-    if is_mobile:
-        mobile_navigation(st.session_state.active_page)
-    else:
-        desktop_navigation(st.session_state.active_page)
+    # Show navigation - simple approach using buttons
+    mobile_navigation(st.session_state.active_page)
     
     # Route to appropriate page
     if st.session_state.active_page == 'home':
@@ -307,9 +301,9 @@ else:
                 # Display results
                 if st.session_state.view_mode == 'grid':
                     # Grid view
-                    cols = st.columns(3 if not is_mobile else 2)
+                    cols = st.columns(3)
                     for idx, (_, product) in enumerate(results_df.iterrows()):
-                        with cols[idx % (3 if not is_mobile else 2)]:
+                        with cols[idx % 3]:
                             # Product card
                             with st.container():
                                 # Try to show product image
@@ -398,11 +392,11 @@ else:
                 # Get category data
                 category_data = next((c for c in categories if c['name'] == st.session_state.selected_category), None)
                 
-                if category_data and category_data['subcategories']:
+                if category_data and category_data.get('subcategories'):
                     # Show subcategories
-                    cols = st.columns(2 if is_mobile else 3)
+                    cols = st.columns(3)
                     for idx, subcat in enumerate(category_data['subcategories']):
-                        with cols[idx % (2 if is_mobile else 3)]:
+                        with cols[idx % 3]:
                             if st.button(subcat, key=f"subcat_{subcat}", use_container_width=True):
                                 st.session_state.selected_subcategory = subcat
                                 st.rerun()
@@ -420,8 +414,45 @@ else:
                     products_df = pd.DataFrame()
                 
                 if not products_df.empty:
-                    # Similar display logic as search results
-                    pass
+                    # Display products in grid
+                    cols = st.columns(3)
+                    for idx, (_, product) in enumerate(products_df.iterrows()):
+                        with cols[idx % 3]:
+                            # Product card
+                            with st.container():
+                                # Try to show product image
+                                image_path = f"pdf_screenshots/{product['sku']}/page_1.png"
+                                if os.path.exists(image_path):
+                                    st.image(image_path, use_container_width=True)
+                                else:
+                                    st.markdown(f"""
+                                    <div style="background: {COLORS['background_light']}; 
+                                                height: 200px; display: flex; align-items: center; 
+                                                justify-content: center; border-radius: 8px;">
+                                        <span>No Image</span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                
+                                st.markdown(f"**{product['sku']}**")
+                                st.caption(truncate_text(product.get('product_type', ''), 30))
+                                st.markdown(f"**{format_price(product.get('price', 0))}**")
+                                
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("View", key=f"cat_view_{product['id']}", use_container_width=True):
+                                        st.session_state.show_product_detail = product.to_dict()
+                                with col2:
+                                    if st.button("Add +", key=f"cat_add_{product['id']}", type="primary", use_container_width=True):
+                                        if st.session_state.selected_client:
+                                            success, message = db_manager.add_to_cart(
+                                                user_id, product['id'], st.session_state.selected_client
+                                            )
+                                            if success:
+                                                st.success("Added to cart!")
+                                                st.session_state.cart_count += 1
+                                                st.rerun()
+                                        else:
+                                            st.error("Please select a client first")
             else:
                 # Show main categories
                 category_grid(categories)

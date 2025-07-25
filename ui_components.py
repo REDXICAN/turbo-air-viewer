@@ -88,89 +88,6 @@ def apply_custom_css():
         outline: none;
     }}
     
-    /* Mobile Navigation */
-    @media (max-width: 768px) {{
-        .bottom-nav {{
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            border-top: 1px solid {COLORS['border']};
-            padding: 8px 0;
-            z-index: 1000;
-            display: flex;
-            justify-content: space-around;
-        }}
-        
-        .nav-item {{
-            flex: 1;
-            text-align: center;
-            padding: 8px;
-            color: {COLORS['text_secondary']};
-            font-size: 12px;
-        }}
-        
-        .nav-item.active {{
-            color: {COLORS['turbo_blue']};
-        }}
-        
-        /* Add padding to main content to account for bottom nav */
-        .main {{
-            padding-bottom: 83px !important;
-        }}
-    }}
-    
-    /* Desktop Navigation */
-    @media (min-width: 769px) {{
-        .top-nav {{
-            background: white;
-            padding: 16px 32px;
-            border-bottom: 1px solid {COLORS['border']};
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }}
-    }}
-    
-    /* Modal Styles */
-    .modal-overlay {{
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.5);
-        z-index: 2000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }}
-    
-    .modal-content {{
-        background: white;
-        border-radius: 20px;
-        max-width: 90%;
-        max-height: 90%;
-        overflow: auto;
-        padding: 24px;
-    }}
-    
-    /* Grid Styles */
-    .product-grid {{
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 16px;
-        margin-bottom: 20px;
-    }}
-    
-    @media (max-width: 768px) {{
-        .product-grid {{
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-        }}
-    }}
-    
     /* Category Cards */
     .category-card {{
         background: white;
@@ -232,53 +149,67 @@ def apply_custom_css():
     st.markdown(css, unsafe_allow_html=True)
 
 def mobile_navigation(active_page: str):
-    """Render mobile bottom navigation"""
-    nav_items = [
-        {"name": "Home", "icon": "🏠", "page": "home"},
-        {"name": "Search", "icon": "🔍", "page": "search"},
-        {"name": "Cart", "icon": "🛒", "page": "cart"},
-        {"name": "Profile", "icon": "👤", "page": "profile"}
-    ]
-    
-    # Get cart count
-    cart_count = st.session_state.get('cart_count', 0)
-    
-    nav_html = '<div class="bottom-nav">'
-    for item in nav_items:
-        active_class = "active" if item['page'] == active_page else ""
-        badge = f'<span class="badge">{cart_count}</span>' if item['page'] == 'cart' and cart_count > 0 else ''
-        nav_html += f'''
-        <div class="nav-item {active_class}" onclick="window.location.hash='#{item['page']}'">
-            <div>{item['icon']}</div>
-            <div>{item['name']}</div>
-            {badge}
-        </div>
-        '''
-    nav_html += '</div>'
-    
-    st.markdown(nav_html, unsafe_allow_html=True)
-
-def desktop_navigation(active_page: str):
-    """Render desktop top navigation"""
-    col1, col2, col3 = st.columns([2, 3, 2])
+    """Simple mobile navigation using columns and buttons"""
+    # Create navigation using columns
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.markdown(f"<h1 style='color: {COLORS['turbo_blue']}; margin: 0;'>Turbo Air</h1>", 
-                   unsafe_allow_html=True)
+        if st.button("Home", key="mob_nav_home", use_container_width=True,
+                    type="primary" if active_page == "home" else "secondary"):
+            st.session_state.active_page = "home"
+            st.rerun()
     
     with col2:
-        nav_cols = st.columns(4)
-        pages = ["Home", "Products", "Cart", "Profile"]
-        for i, page in enumerate(pages):
-            with nav_cols[i]:
-                if st.button(page, key=f"nav_{page}", use_container_width=True):
-                    st.session_state.active_page = page.lower()
-                    st.rerun()
+        if st.button("Search", key="mob_nav_search", use_container_width=True,
+                    type="primary" if active_page in ["search", "products"] else "secondary"):
+            st.session_state.active_page = "search"
+            st.rerun()
     
     with col3:
-        # User info and sync status
-        if st.session_state.get('user'):
-            st.markdown(f"👤 {st.session_state.user['email']}")
+        cart_label = f"Cart ({st.session_state.cart_count})" if st.session_state.cart_count > 0 else "Cart"
+        if st.button(cart_label, key="mob_nav_cart", use_container_width=True,
+                    type="primary" if active_page == "cart" else "secondary"):
+            st.session_state.active_page = "cart"
+            st.rerun()
+    
+    with col4:
+        if st.button("Profile", key="mob_nav_profile", use_container_width=True,
+                    type="primary" if active_page == "profile" else "secondary"):
+            st.session_state.active_page = "profile"
+            st.rerun()
+    
+    # Add divider after navigation
+    st.divider()
+
+def desktop_navigation(active_page: str):
+    """Render desktop sidebar navigation"""
+    with st.sidebar:
+        st.markdown("### Navigation")
+        
+        # Home button
+        if st.button("Home", key="desk_nav_home", use_container_width=True,
+                    type="primary" if active_page == "home" else "secondary"):
+            st.session_state.active_page = "home"
+            st.rerun()
+        
+        # Products button
+        if st.button("Products", key="desk_nav_products", use_container_width=True,
+                    type="primary" if active_page in ["search", "products"] else "secondary"):
+            st.session_state.active_page = "search"
+            st.rerun()
+        
+        # Cart button with count
+        cart_label = f"Cart ({st.session_state.cart_count})" if st.session_state.cart_count > 0 else "Cart"
+        if st.button(cart_label, key="desk_nav_cart", use_container_width=True,
+                    type="primary" if active_page == "cart" else "secondary"):
+            st.session_state.active_page = "cart"
+            st.rerun()
+        
+        # Profile button
+        if st.button("Profile", key="desk_nav_profile", use_container_width=True,
+                    type="primary" if active_page == "profile" else "secondary"):
+            st.session_state.active_page = "profile"
+            st.rerun()
 
 def product_card(product: Dict, show_add_button: bool = True):
     """Render a product card"""
