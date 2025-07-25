@@ -464,32 +464,6 @@ def show_auth_form():
                         st.error(message)
                 else:
                     st.error("Please enter email and password")
-        
-        # OAuth options
-        st.divider()
-        st.markdown("<p style='text-align: center; color: #666;'>Or sign in with:</p>", unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col2:
-            # Google Sign In Button
-            if st.button("Sign in with Google", key="google_signin", use_container_width=True):
-                success, result = auth_manager.sign_in_with_google()
-                if success:
-                    st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
-                else:
-                    st.error(result)
-            
-            # Add some spacing
-            st.markdown("")
-            
-            # Microsoft Sign In Button
-            if st.button("Sign in with Microsoft", key="microsoft_signin", use_container_width=True):
-                success, result = auth_manager.sign_in_with_microsoft()
-                if success:
-                    st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
-                else:
-                    st.error(result)
     
     with tab2:
         st.subheader("Create Account")
