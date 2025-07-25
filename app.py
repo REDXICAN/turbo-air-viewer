@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+import sys
 
 # Page configuration
 st.set_page_config(
@@ -64,22 +65,52 @@ try:
 except ImportError:
     HAS_SUPABASE = False
 
-# Import custom modules
-from auth import AuthManager, show_auth_form
-from database import DatabaseManager
-from sync_manager import SyncManager
-from mobile_ui_components import (
-    apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
-    quick_access_section, bottom_navigation, product_list_item, filter_row,
-    metric_card, sync_status_bar, mobile_button, cart_item, summary_section,
-    COLORS
-)
+# Import custom modules with error handling
+try:
+    from auth import AuthManager, show_auth_form
+    from database import DatabaseManager
+    from sync_manager import SyncManager
+except ImportError as e:
+    st.error(f"Error importing core modules: {e}")
+    st.stop()
+
+# Import mobile UI components with error handling
+try:
+    from mobile_ui_components import (
+        apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
+        quick_access_section, bottom_navigation, product_list_item, filter_row,
+        metric_card, sync_status_bar, mobile_button, cart_item, summary_section,
+        COLORS
+    )
+except ImportError as e:
+    st.error(f"Error importing mobile_ui_components: {e}")
+    st.info("Please ensure mobile_ui_components.py is in the root directory of your project.")
+    st.stop()
+
 # Keep the old UI components for functions not yet migrated
-from ui_components import (
-    quantity_selector, empty_state, format_price, truncate_text
-)
-from export_utils import export_quote_to_excel, export_quote_to_pdf
-from email_service import show_email_quote_dialog, get_email_service
+try:
+    from ui_components import (
+        quantity_selector, empty_state, format_price, truncate_text
+    )
+except ImportError as e:
+    st.error(f"Error importing ui_components: {e}")
+    st.stop()
+
+# Import export utilities
+try:
+    from export_utils import export_quote_to_excel, export_quote_to_pdf
+    from email_service import show_email_quote_dialog, get_email_service
+except ImportError as e:
+    st.warning(f"Export/Email features may be limited: {e}")
+    # Define dummy functions if imports fail
+    def export_quote_to_excel(*args, **kwargs):
+        return "quote.xlsx"
+    def export_quote_to_pdf(*args, **kwargs):
+        return "quote.pdf"
+    def show_email_quote_dialog(*args, **kwargs):
+        st.error("Email service not available")
+    def get_email_service():
+        return None
 
 # Initialize services
 @st.cache_resource
@@ -136,7 +167,7 @@ with st.container():
         try:
             sync_manager.update_sync_status()
         except Exception as e:
-            st.error(f"Error updating sync status: {e}")
+            print(f"Error updating sync status: {e}")
         
         # Get current user
         user = auth_manager.get_current_user()
@@ -202,7 +233,8 @@ with st.container():
                         {"name": "Freezers", "count": 0}
                     ]
                     category_grid(categories)
-            except:
+            except Exception as e:
+                print(f"Error loading categories: {e}")
                 categories = [
                     {"name": "Refrigerators", "count": 0},
                     {"name": "Freezers", "count": 0}
@@ -498,26 +530,32 @@ with st.container():
                                 col1, col2, col3 = st.columns(3)
                                 
                                 with col1:
-                                    excel_file = export_quote_to_excel(quote_data, cart_items_df, client_data)
-                                    with open(excel_file, 'rb') as f:
-                                        st.download_button(
-                                            "📊 Download Excel",
-                                            f.read(),
-                                            file_name=excel_file,
-                                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                            use_container_width=True
-                                        )
+                                    try:
+                                        excel_file = export_quote_to_excel(quote_data, cart_items_df, client_data)
+                                        with open(excel_file, 'rb') as f:
+                                            st.download_button(
+                                                "📊 Download Excel",
+                                                f.read(),
+                                                file_name=excel_file,
+                                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                                use_container_width=True
+                                            )
+                                    except Exception as e:
+                                        st.error(f"Excel export error: {e}")
                                 
                                 with col2:
-                                    pdf_file = export_quote_to_pdf(quote_data, cart_items_df, client_data)
-                                    with open(pdf_file, 'rb') as f:
-                                        st.download_button(
-                                            "📄 Download PDF",
-                                            f.read(),
-                                            file_name=pdf_file,
-                                            mime="application/pdf",
-                                            use_container_width=True
-                                        )
+                                    try:
+                                        pdf_file = export_quote_to_pdf(quote_data, cart_items_df, client_data)
+                                        with open(pdf_file, 'rb') as f:
+                                            st.download_button(
+                                                "📄 Download PDF",
+                                                f.read(),
+                                                file_name=pdf_file,
+                                                mime="application/pdf",
+                                                use_container_width=True
+                                            )
+                                    except Exception as e:
+                                        st.error(f"PDF export error: {e}")
                                 
                                 with col3:
                                     if st.button("📧 Email Quote", use_container_width=True):
@@ -565,34 +603,40 @@ with st.container():
             st.markdown("### Export Options")
             col1, col2 = st.columns(2)
             with col1:
-                excel_file = export_quote_to_excel(
-                    quote['quote_data'], 
-                    quote['items'], 
-                    quote['client_data']
-                )
-                with open(excel_file, 'rb') as f:
-                    st.download_button(
-                        "Export as Excel",
-                        f.read(),
-                        file_name=excel_file,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
+                try:
+                    excel_file = export_quote_to_excel(
+                        quote['quote_data'], 
+                        quote['items'], 
+                        quote['client_data']
                     )
+                    with open(excel_file, 'rb') as f:
+                        st.download_button(
+                            "Export as Excel",
+                            f.read(),
+                            file_name=excel_file,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                except Exception as e:
+                    st.error(f"Excel export error: {e}")
             with col2:
-                pdf_file = export_quote_to_pdf(
-                    quote['quote_data'], 
-                    quote['items'], 
-                    quote['client_data']
-                )
-                with open(pdf_file, 'rb') as f:
-                    st.download_button(
-                        "Export as PDF",
-                        f.read(),
-                        file_name=pdf_file,
-                        mime="application/pdf",
-                        use_container_width=True,
-                        type="primary"
+                try:
+                    pdf_file = export_quote_to_pdf(
+                        quote['quote_data'], 
+                        quote['items'], 
+                        quote['client_data']
                     )
+                    with open(pdf_file, 'rb') as f:
+                        st.download_button(
+                            "Export as PDF",
+                            f.read(),
+                            file_name=pdf_file,
+                            mime="application/pdf",
+                            use_container_width=True,
+                            type="primary"
+                        )
+                except Exception as e:
+                    st.error(f"PDF export error: {e}")
             
             # Email option
             if st.button("📧 Email Quote", use_container_width=True):
