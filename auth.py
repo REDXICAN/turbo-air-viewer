@@ -195,7 +195,37 @@ class AuthManager:
             # Offline mode - create local user
             return self._offline_sign_up(email, password, role, company)
     
-    def sign_out(self):
+    def sign_in_with_google(self):
+        """Sign in with Google OAuth"""
+        if self.is_online and self.supabase:
+            try:
+                # This will redirect to Google OAuth
+                url = self.supabase.auth.sign_in_with_oauth({
+                    "provider": "google",
+                    "options": {
+                        "redirect_to": st.secrets.get("app", {}).get("redirect_url", "https://turboairinc.streamlit.app")
+                    }
+                })
+                return True, url.url
+            except Exception as e:
+                return False, str(e)
+        return False, "Google sign-in requires internet connection"
+    
+    def sign_in_with_microsoft(self):
+        """Sign in with Microsoft OAuth"""
+        if self.is_online and self.supabase:
+            try:
+                # This will redirect to Microsoft OAuth
+                url = self.supabase.auth.sign_in_with_oauth({
+                    "provider": "azure",
+                    "options": {
+                        "redirect_to": st.secrets.get("app", {}).get("redirect_url", "https://turboairinc.streamlit.app")
+                    }
+                })
+                return True, url.url
+            except Exception as e:
+                return False, str(e)
+        return False, "Microsoft sign-in requires internet connection"
         """Sign out current user"""
         # Remove auth token
         if 'auth_token' in st.session_state:
@@ -442,95 +472,19 @@ def show_auth_form():
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col2:
-            # Google Sign In Button with official branding
-            google_button_html = """
-            <style>
-            .google-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background-color: #ffffff;
-                border: 1px solid #dadce0;
-                border-radius: 4px;
-                padding: 12px 24px;
-                cursor: pointer;
-                transition: background-color 0.3s, box-shadow 0.3s;
-                width: 100%;
-                margin-bottom: 12px;
-                text-decoration: none;
-                color: #3c4043;
-                font-family: 'Roboto', arial, sans-serif;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            .google-btn:hover {
-                background-color: #f8f9fa;
-                box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);
-            }
-            .google-logo {
-                width: 18px;
-                height: 18px;
-                margin-right: 8px;
-            }
-            </style>
-            <button class="google-btn" onclick="document.getElementById('google_signin_btn').click()">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" class="google-logo">
-                Sign in with Google
-            </button>
-            """
-            st.markdown(google_button_html, unsafe_allow_html=True)
-            
-            if st.button("", key="google_signin_btn", help="Sign in with Google", label_visibility="collapsed"):
+            # Google Sign In Button
+            if st.button("Sign in with Google", key="google_signin", use_container_width=True):
                 success, result = auth_manager.sign_in_with_google()
                 if success:
                     st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
                 else:
                     st.error(result)
             
-            # Microsoft Sign In Button with official branding
-            microsoft_button_html = """
-            <style>
-            .microsoft-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background-color: #ffffff;
-                border: 1px solid #8c8c8c;
-                border-radius: 4px;
-                padding: 12px 24px;
-                cursor: pointer;
-                transition: background-color 0.3s, box-shadow 0.3s;
-                width: 100%;
-                text-decoration: none;
-                color: #5e5e5e;
-                font-family: 'Segoe UI', system-ui, sans-serif;
-                font-size: 14px;
-                font-weight: 600;
-            }
-            .microsoft-btn:hover {
-                background-color: #f8f8f8;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }
-            .microsoft-logo {
-                width: 20px;
-                height: 20px;
-                margin-right: 8px;
-            }
-            </style>
-            <button class="microsoft-btn" onclick="document.getElementById('microsoft_signin_btn').click()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 23 23" class="microsoft-logo">
-                    <path fill="#f3f3f3" d="M0 0h23v23H0z"/>
-                    <path fill="#f35325" d="M1 1h10v10H1z"/>
-                    <path fill="#81bc06" d="M12 1h10v10H12z"/>
-                    <path fill="#05a6f0" d="M1 12h10v10H1z"/>
-                    <path fill="#ffba08" d="M12 12h10v10H12z"/>
-                </svg>
-                Sign in with Microsoft
-            </button>
-            """
-            st.markdown(microsoft_button_html, unsafe_allow_html=True)
+            # Add some spacing
+            st.markdown("")
             
-            if st.button("", key="microsoft_signin_btn", help="Sign in with Microsoft", label_visibility="collapsed"):
+            # Microsoft Sign In Button
+            if st.button("Sign in with Microsoft", key="microsoft_signin", use_container_width=True):
                 success, result = auth_manager.sign_in_with_microsoft()
                 if success:
                     st.markdown(f'<meta http-equiv="refresh" content="0;url={result}">', unsafe_allow_html=True)
