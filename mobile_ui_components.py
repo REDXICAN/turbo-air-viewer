@@ -13,6 +13,7 @@ import base64
 # Color palette - iOS style
 COLORS = {
     'primary': '#007AFF',
+    'turbo_blue': '#20429c',
     'background': '#FFFFFF',
     'surface': '#F2F2F7',
     'card': '#FFFFFF',
@@ -80,7 +81,7 @@ def apply_mobile_css():
     
     /* Category card */
     .category-card {{
-        background: {COLORS['card']};
+        background: {COLORS['turbo_blue']};
         border-radius: 12px;
         padding: 16px;
         text-align: center;
@@ -99,18 +100,11 @@ def apply_mobile_css():
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }}
     
-    .category-card img {{
-        width: 60px;
-        height: 60px;
-        object-fit: contain;
-        margin-bottom: 8px;
-    }}
-    
     .category-card h4 {{
         margin: 0;
         font-size: 14px;
         font-weight: 500;
-        color: {COLORS['text_primary']};
+        color: white;
     }}
     
     /* Quick Access section */
@@ -172,6 +166,13 @@ def apply_mobile_css():
         border-radius: 8px;
         background: {COLORS['surface']};
         flex-shrink: 0;
+        overflow: hidden;
+    }}
+    
+    .product-thumbnail img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }}
     
     .product-info {{
@@ -340,11 +341,10 @@ def apply_mobile_css():
     st.markdown(css, unsafe_allow_html=True)
 
 def mobile_header(title: str, show_back: bool = False, show_search: bool = False):
-    """Render mobile header with optional back button and search"""
+    """Render mobile header"""
     header_html = f"""
     <div class="mobile-header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
-            {'<span style="font-size: 20px; cursor: pointer;">←</span>' if show_back else ''}
             <h2 style="margin: 0; font-size: 20px; font-weight: 600;">{title}</h2>
             <div style="width: 24px;"></div>
         </div>
@@ -353,21 +353,11 @@ def mobile_header(title: str, show_back: bool = False, show_search: bool = False
     st.markdown(header_html, unsafe_allow_html=True)
 
 def mobile_search_bar(placeholder: str = "Search for products"):
-    """Render mobile search bar"""
-    search_html = f"""
-    <div class="search-container">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {COLORS['text_secondary']};">🔍</span>
-            <input type="text" placeholder="{placeholder}" 
-                   style="border: none; background: none; outline: none; flex: 1; font-size: 16px;">
-        </div>
-    </div>
-    """
-    st.markdown(search_html, unsafe_allow_html=True)
-    return st.text_input("", placeholder=placeholder, key="search_input", label_visibility="collapsed")
+    """Render mobile search bar with Streamlit input only"""
+    return st.text_input("🔍", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
 def category_grid(categories: List[Dict[str, str]]):
-    """Render category grid"""
+    """Render category grid with blue buttons"""
     cols = st.columns(2)
     for i, category in enumerate(categories):
         with cols[i % 2]:
@@ -380,12 +370,11 @@ def category_grid(categories: List[Dict[str, str]]):
                 st.session_state.active_page = 'products'
                 st.rerun()
             
-            # Show category image placeholder
+            # Show category as blue button with white text
             st.markdown(f"""
             <div class="category-card">
-                <div style="width: 80px; height: 80px; background: {COLORS['surface']}; 
-                         border-radius: 8px; margin-bottom: 8px;"></div>
                 <h4>{category['name']}</h4>
+                <p style="color: white; font-size: 12px; margin: 0;">{category.get('count', 0)} items</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -453,17 +442,56 @@ def bottom_navigation(active_page: str):
                 st.rerun()
 
 def product_list_item(product: Dict):
-    """Render product list item"""
-    item_html = f"""
-    <div class="product-item">
-        <div class="product-thumbnail"></div>
-        <div class="product-info">
-            <p class="product-name">{product.get('sku', 'Unknown')}</p>
-            <p class="product-model">{product.get('product_type', 'Model')}</p>
+    """Render product list item with thumbnail"""
+    # Try to load thumbnail
+    thumbnail_path = f"pdf_screenshots/{product.get('sku', '')}/{product.get('sku', '')} P.1.png"
+    
+    if os.path.exists(thumbnail_path):
+        # Load and display actual thumbnail
+        try:
+            from PIL import Image
+            img = Image.open(thumbnail_path)
+            # Create thumbnail
+            img.thumbnail((60, 60))
+            # Save to temp location for display
+            temp_path = f"temp_thumb_{product.get('sku', '')}.png"
+            img.save(temp_path)
+            
+            item_html = f"""
+            <div class="product-item">
+                <div class="product-thumbnail">
+                    <img src="{temp_path}" alt="{product.get('sku', '')}">
+                </div>
+                <div class="product-info">
+                    <p class="product-name">{product.get('sku', 'Unknown')}</p>
+                    <p class="product-model">{product.get('product_type', 'Model')}</p>
+                </div>
+                <div class="product-price">${product.get('price', 0):,.2f}</div>
+            </div>
+            """
+        except:
+            # Fallback if image processing fails
+            item_html = f"""
+            <div class="product-item">
+                <div class="product-info" style="margin-left: 0;">
+                    <p class="product-name">{product.get('sku', 'Unknown')}</p>
+                    <p class="product-model">{product.get('product_type', 'Model')}</p>
+                </div>
+                <div class="product-price">${product.get('price', 0):,.2f}</div>
+            </div>
+            """
+    else:
+        # No thumbnail available
+        item_html = f"""
+        <div class="product-item">
+            <div class="product-info" style="margin-left: 0;">
+                <p class="product-name">{product.get('sku', 'Unknown')}</p>
+                <p class="product-model">{product.get('product_type', 'Model')}</p>
+            </div>
+            <div class="product-price">${product.get('price', 0):,.2f}</div>
         </div>
-        <div class="product-price">${product.get('price', 0):,.2f}</div>
-    </div>
-    """
+        """
+    
     return item_html
 
 def filter_row():
@@ -521,18 +549,14 @@ def mobile_button(label: str, variant: str = "primary", key: str = None):
     return False
 
 def cart_item(product: Dict, quantity: int, item_id: str):
-    """Render cart item with quantity controls"""
-    col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
+    """Render cart item with quantity controls (no thumbnail)"""
+    col1, col2, col3 = st.columns([3, 2, 1])
     
     with col1:
-        # Product thumbnail
-        st.markdown(f'<div class="product-thumbnail"></div>', unsafe_allow_html=True)
-    
-    with col2:
         st.markdown(f"**{product.get('sku', 'Unknown')}**")
         st.caption(product.get('product_type', ''))
     
-    with col3:
+    with col2:
         # Quantity controls
         q_col1, q_col2, q_col3 = st.columns([1, 1, 1])
         with q_col1:
@@ -544,7 +568,7 @@ def cart_item(product: Dict, quantity: int, item_id: str):
             if st.button("+", key=f"plus_{item_id}"):
                 return quantity + 1
     
-    with col4:
+    with col3:
         st.markdown(f"**${product.get('price', 0) * quantity:,.2f}**")
     
     return quantity

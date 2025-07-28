@@ -65,52 +65,27 @@ try:
 except ImportError:
     HAS_SUPABASE = False
 
-# Import custom modules with error handling
-try:
-    from auth import AuthManager, show_auth_form
-    from database import DatabaseManager
-    from sync_manager import SyncManager
-except ImportError as e:
-    st.error(f"Error importing core modules: {e}")
-    st.stop()
+# Import custom modules - DIRECT IMPORTS, NO FALLBACKS
+from auth import AuthManager, show_auth_form
+from database import DatabaseManager
+from sync_manager import SyncManager
 
-# Import mobile UI components with error handling
-try:
-    from mobile_ui_components import (
-        apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
-        quick_access_section, bottom_navigation, product_list_item, filter_row,
-        metric_card, sync_status_bar, mobile_button, cart_item, summary_section,
-        COLORS
-    )
-except ImportError as e:
-    st.error(f"Error importing mobile_ui_components: {e}")
-    st.info("Please ensure mobile_ui_components.py is in the root directory of your project.")
-    st.stop()
+# Import mobile UI components
+from mobile_ui_components import (
+    apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
+    quick_access_section, bottom_navigation, product_list_item, filter_row,
+    metric_card, sync_status_bar, mobile_button, cart_item, summary_section,
+    COLORS
+)
 
 # Keep the old UI components for functions not yet migrated
-try:
-    from ui_components import (
-        quantity_selector, empty_state, format_price, truncate_text
-    )
-except ImportError as e:
-    st.error(f"Error importing ui_components: {e}")
-    st.stop()
+from ui_components import (
+    quantity_selector, empty_state, format_price, truncate_text
+)
 
-# Import export utilities
-try:
-    from export_utils import export_quote_to_excel, export_quote_to_pdf
-    from email_service import show_email_quote_dialog, get_email_service
-except ImportError as e:
-    st.warning(f"Export/Email features may be limited: {e}")
-    # Define dummy functions if imports fail
-    def export_quote_to_excel(*args, **kwargs):
-        return "quote.xlsx"
-    def export_quote_to_pdf(*args, **kwargs):
-        return "quote.pdf"
-    def show_email_quote_dialog(*args, **kwargs):
-        st.error("Email service not available")
-    def get_email_service():
-        return None
+# Import export utilities - DIRECT IMPORTS
+from export_utils import export_quote_to_excel, export_quote_to_pdf
+from email_service import show_email_quote_dialog, get_email_service
 
 # Initialize services
 @st.cache_resource
@@ -226,20 +201,13 @@ with st.container():
                             })
                     if main_categories:
                         category_grid(main_categories[:4])  # Show top 4 categories
+                    else:
+                        st.info("No categories available. Please sync products.")
                 else:
-                    # Fallback categories
-                    categories = [
-                        {"name": "Refrigerators", "count": 0},
-                        {"name": "Freezers", "count": 0}
-                    ]
-                    category_grid(categories)
+                    st.info("No categories available. Please sync products.")
             except Exception as e:
                 print(f"Error loading categories: {e}")
-                categories = [
-                    {"name": "Refrigerators", "count": 0},
-                    {"name": "Freezers", "count": 0}
-                ]
-                category_grid(categories)
+                st.info("No categories available. Please sync products.")
             
             # Quick Access
             quick_access_section()
@@ -738,7 +706,8 @@ with st.container():
             col1, col2 = st.columns(2)
             
             with col1:
-                image_path = f"pdf_screenshots/{product['sku']}/page_1.png"
+                # Fixed path construction
+                image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
                 if os.path.exists(image_path):
                     st.image(image_path, caption="Page 1", use_container_width=True)
                 else:
@@ -751,7 +720,8 @@ with st.container():
                     """, unsafe_allow_html=True)
             
             with col2:
-                image_path = f"pdf_screenshots/{product['sku']}/page_2.png"
+                # Fixed path construction
+                image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.2.png"
                 if os.path.exists(image_path):
                     st.image(image_path, caption="Page 2", use_container_width=True)
                 else:
