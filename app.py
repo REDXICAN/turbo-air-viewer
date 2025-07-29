@@ -33,6 +33,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# Remove top padding immediately after page config
+st.markdown("""
+<style>
+    #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 0rem;}
+    .main > div:first-child { padding-top: 0rem !important; }
+    div[data-testid="stDecoration"] { display: none; }
+</style>
+""", unsafe_allow_html=True)
+
 def check_and_migrate_database():
     """Check database and run migrations if needed"""
     db_path = 'turbo_air_db_online.sqlite'

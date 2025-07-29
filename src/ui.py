@@ -73,6 +73,25 @@ def apply_mobile_css():
     """Apply mobile-first CSS styling"""
     css = f"""
     <style>
+    /* Remove Streamlit's default top padding */
+    .stApp > header {{
+        display: none;
+    }}
+    
+    .main > div:first-child {{
+        padding-top: 0 !important;
+    }}
+    
+    #root > div:nth-child(1) > div > div > div > div > section > div {{
+        padding-top: 0 !important;
+    }}
+    
+    .block-container {{
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        max-width: 100% !important;
+    }}
+    
     /* Reset and base styles */
     .stApp {{
         background-color: {COLORS['background']};
@@ -111,6 +130,7 @@ def apply_mobile_css():
         position: sticky;
         top: 0;
         z-index: 100;
+        margin-top: 0;
     }}
     
     /* Search bar */
@@ -274,6 +294,12 @@ def apply_mobile_css():
     /* Add padding for bottom nav */
     .main-content {{
         padding-bottom: 80px;
+    }}
+    
+    /* Mobile container should start at top */
+    .mobile-container {{
+        margin-top: 0 !important;
+        padding-top: 0 !important;
     }}
     
     /* Hide default Streamlit buttons styling */
