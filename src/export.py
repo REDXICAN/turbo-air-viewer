@@ -5,8 +5,8 @@ Handles Excel and PDF generation for quotes
 
 import pandas as pd
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from openpyxl import Workbook
@@ -15,16 +15,15 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 import os
-from typing import Dict, List
+from typing import Dict
 import io
-from PIL import Image
 
 # Color constants
 TURBO_BLUE = '#20429c'
 TURBO_RED = '#d3242b'
 
 def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Generate Excel quote with product images"""
+    """Generate Excel quote"""
     wb = Workbook()
     ws = wb.active
     ws.title = f"Quote {quote_data['quote_number']}"
@@ -101,11 +100,10 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
     current_row = start_row + 1
     
     for _, item in items_df.iterrows():
-        # Set row height for image
         ws.row_dimensions[current_row].height = 60
         
         # Try to add product image
-        image_path = f"pdf_screenshots/{item['sku']}/page_1.png"
+        image_path = f"pdf_screenshots/{item['sku']}/{item['sku']} P.1.png"
         if os.path.exists(image_path):
             try:
                 img = XLImage(image_path)
@@ -122,7 +120,7 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
         ws.cell(row=current_row, column=2, value=item['sku']).border = thin_border
         ws.cell(row=current_row, column=3, value=item.get('description', '')).border = thin_border
         
-        # Specifications (combine key specs)
+        # Specifications
         specs = []
         if item.get('dimensions'):
             specs.append(f"Dimensions: {item['dimensions']}")
@@ -187,11 +185,10 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
     return output
 
 def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Generate PDF quote with professional layout"""
+    """Generate PDF quote"""
     output = io.BytesIO()
     doc = SimpleDocTemplate(output, pagesize=letter, topMargin=0.5*inch)
     
-    # Container for the 'Flowable' objects
     elements = []
     
     # Define styles
@@ -246,9 +243,13 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
     table_data = [['SKU', 'Description', 'Qty', 'Unit Price', 'Total']]
     
     for _, item in items_df.iterrows():
+        description = item.get('description', '')
+        if len(description) > 50:
+            description = description[:50] + '...'
+        
         table_data.append([
             item['sku'],
-            Paragraph(item.get('description', '')[:50] + '...', styles['Normal']),
+            Paragraph(description, styles['Normal']),
             str(item['quantity']),
             f"${item['price']:,.2f}",
             f"${item['price'] * item['quantity']:,.2f}"
@@ -323,7 +324,7 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
 
 def export_quote_to_excel(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, 
                          filename: str = None) -> str:
-    """Export quote to Excel file and return filename"""
+    """Export quote to Excel file"""
     if not filename:
         filename = f"Quote_{quote_data['quote_number']}_{datetime.now().strftime('%Y%m%d')}.xlsx"
     
@@ -337,7 +338,7 @@ def export_quote_to_excel(quote_data: Dict, items_df: pd.DataFrame, client_data:
 
 def export_quote_to_pdf(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict,
                        filename: str = None) -> str:
-    """Export quote to PDF file and return filename"""
+    """Export quote to PDF file"""
     if not filename:
         filename = f"Quote_{quote_data['quote_number']}_{datetime.now().strftime('%Y%m%d')}.pdf"
     

@@ -1,17 +1,13 @@
 """
-Mobile-First UI Components for Turbo Air Equipment Viewer
-iOS-style design with clean, modern interface
-Updated with correct Turbo Air Inc categories and desktop display fix
+UI Components for Turbo Air Equipment Viewer
+Mobile-First iOS-style design
 """
 
 import streamlit as st
-import pandas as pd
-from PIL import Image
 import os
-from typing import Dict, List, Optional
-import base64
+from typing import Dict, List, Optional, Callable
 
-# Color palette - iOS style with Turbo Air blue
+# Color palette
 COLORS = {
     'primary': '#007AFF',
     'turbo_blue': '#20429c',
@@ -28,7 +24,7 @@ COLORS = {
     'divider': '#E5E5EA'
 }
 
-# Turbo Air Inc Official Categories
+# Turbo Air Official Categories
 TURBO_AIR_CATEGORIES = {
     "GLASS DOOR MERCHANDISERS": {
         "icon": "🥤",
@@ -159,68 +155,6 @@ def apply_mobile_css():
         line-height: 1.2;
     }}
     
-    /* Quick Access section */
-    .quick-access {{
-        background: {COLORS['card']};
-        border-radius: 12px;
-        padding: 16px;
-        margin: 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    }}
-    
-    .quick-access-title {{
-        font-size: 18px;
-        font-weight: 600;
-        margin-bottom: 16px;
-        color: {COLORS['text_primary']};
-    }}
-    
-    .quick-access-item {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 12px;
-        border-radius: 8px;
-        transition: background 0.2s ease;
-        cursor: pointer;
-        min-height: 80px;
-    }}
-    
-    .quick-access-item:hover {{
-        background: {COLORS['surface']};
-    }}
-    
-    .quick-access-icon {{
-        font-size: 24px;
-        margin-bottom: 4px;
-    }}
-    
-    .quick-access-label {{
-        font-size: 11px;
-        color: {COLORS['text_secondary']};
-        text-align: center;
-        line-height: 1.2;
-    }}
-    
-    /* Subcategory button */
-    .subcategory-btn {{
-        background: {COLORS['surface']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 8px;
-        padding: 12px 16px;
-        margin-bottom: 8px;
-        width: 100%;
-        text-align: left;
-        transition: all 0.2s ease;
-    }}
-    
-    .subcategory-btn:hover {{
-        background: {COLORS['primary']};
-        color: white;
-        border-color: {COLORS['primary']};
-    }}
-    
     /* Product list item */
     .product-item {{
         background: {COLORS['card']};
@@ -229,21 +163,6 @@ def apply_mobile_css():
         display: flex;
         align-items: center;
         gap: 12px;
-    }}
-    
-    .product-thumbnail {{
-        width: 60px;
-        height: 60px;
-        border-radius: 8px;
-        background: {COLORS['surface']};
-        flex-shrink: 0;
-        overflow: hidden;
-    }}
-    
-    .product-thumbnail img {{
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
     }}
     
     .product-info {{
@@ -309,38 +228,6 @@ def apply_mobile_css():
         font-weight: 500;
     }}
     
-    /* Filter dropdown */
-    .filter-dropdown {{
-        background: {COLORS['card']};
-        border: 1px solid {COLORS['border']};
-        border-radius: 8px;
-        padding: 10px 12px;
-        font-size: 14px;
-        color: {COLORS['text_primary']};
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-    }}
-    
-    /* Buttons */
-    .primary-button {{
-        background: {COLORS['primary']};
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 14px 24px;
-        font-size: 16px;
-        font-weight: 500;
-        width: 100%;
-        cursor: pointer;
-        transition: opacity 0.2s ease;
-    }}
-    
-    .primary-button:hover {{
-        opacity: 0.9;
-    }}
-    
     /* Metrics card */
     .metric-card {{
         background: {COLORS['surface']};
@@ -397,7 +284,7 @@ def apply_mobile_css():
         width: 100%;
     }}
     
-    /* Responsive adjustments - FIXED FOR DESKTOP */
+    /* Responsive adjustments */
     @media (min-width: 768px) {{
         .mobile-container {{
             max-width: 768px;
@@ -407,19 +294,16 @@ def apply_mobile_css():
             background: {COLORS['background']};
         }}
         
-        /* Adjust grid layouts for desktop */
         .category-card {{
             height: 160px;
         }}
         
-        /* Wider search container on desktop */
         .search-container {{
             max-width: 500px;
             margin: 12px auto;
         }}
     }}
     
-    /* Full desktop mode for larger screens */
     @media (min-width: 1024px) {{
         .mobile-container {{
             max-width: 100%;
@@ -428,31 +312,17 @@ def apply_mobile_css():
             padding: 0 20px;
         }}
         
-        /* Better spacing for desktop */
         .main-content {{
             padding: 20px;
             padding-bottom: 100px;
-        }}
-        
-        /* Show more columns on desktop */
-        .product-grid {{
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-        }}
-        
-        /* Adjust auth form width on desktop */
-        .auth-container {{
-            max-width: 600px;
-            margin: 0 auto;
         }}
     }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-def mobile_header(title: str, show_back: bool = False, show_search: bool = False):
-    """Render mobile header with optional back button and search"""
+def mobile_header(title: str, show_back: bool = False):
+    """Render mobile header"""
     header_html = f"""
     <div class="mobile-header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -466,24 +336,13 @@ def mobile_header(title: str, show_back: bool = False, show_search: bool = False
 
 def mobile_search_bar(placeholder: str = "Search for products"):
     """Render mobile search bar"""
-    search_html = f"""
-    <div class="search-container">
-        <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="color: {COLORS['text_secondary']};">🔍</span>
-            <input type="text" placeholder="{placeholder}" 
-                   style="border: none; background: none; outline: none; flex: 1; font-size: 16px;">
-        </div>
-    </div>
-    """
-    st.markdown(search_html, unsafe_allow_html=True)
     return st.text_input("", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
 def category_grid(categories: List[Dict[str, str]]):
-    """Render category grid with Turbo Air categories"""
+    """Render category grid"""
     cols = st.columns(2)
     for i, category in enumerate(categories):
         with cols[i % 2]:
-            # Get icon from TURBO_AIR_CATEGORIES if available
             icon = TURBO_AIR_CATEGORIES.get(category['name'], {}).get('icon', '📦')
             
             if st.button(
@@ -495,7 +354,6 @@ def category_grid(categories: List[Dict[str, str]]):
                 st.session_state.active_page = 'products'
                 st.rerun()
             
-            # Show category card with icon
             st.markdown(f"""
             <div class="category-card">
                 <div class="icon">{icon}</div>
@@ -505,14 +363,9 @@ def category_grid(categories: List[Dict[str, str]]):
             """, unsafe_allow_html=True)
 
 def quick_access_section():
-    """Render quick access section with Turbo Air categories"""
-    st.markdown("""
-    <div class="quick-access">
-        <div class="quick-access-title">Quick Access</div>
-    </div>
-    """, unsafe_allow_html=True)
+    """Render quick access section"""
+    st.markdown("### Quick Access")
     
-    # Quick access items for main Turbo Air categories
     items = [
         {"icon": "🥤", "label": "Glass Door\nMerchandisers", "category": "GLASS DOOR MERCHANDISERS"},
         {"icon": "🍰", "label": "Display\nCases", "category": "DISPLAY CASES"},
@@ -533,7 +386,7 @@ def quick_access_section():
                 st.rerun()
 
 def subcategory_list(subcategories: List[str], parent_category: str):
-    """Render subcategory list as buttons"""
+    """Render subcategory list"""
     st.markdown(f"### Select {parent_category} Type")
     
     for subcat in subcategories:
@@ -544,23 +397,6 @@ def subcategory_list(subcategories: List[str], parent_category: str):
         ):
             st.session_state.selected_subcategory = subcat
             st.rerun()
-        
-        # Add custom styling for subcategory buttons
-        st.markdown(f"""
-        <style>
-        div[data-testid="stButton"] button[kind="secondary"] {{
-            background-color: {COLORS['surface']};
-            border: 1px solid {COLORS['border']};
-            color: {COLORS['text_primary']};
-            margin-bottom: 8px;
-        }}
-        div[data-testid="stButton"] button[kind="secondary"]:hover {{
-            background-color: {COLORS['primary']};
-            color: white;
-            border-color: {COLORS['primary']};
-        }}
-        </style>
-        """, unsafe_allow_html=True)
 
 def bottom_navigation(active_page: str):
     """Render bottom navigation bar"""
@@ -575,7 +411,7 @@ def bottom_navigation(active_page: str):
     for item in nav_items:
         active_class = "active" if item["page"] == active_page else ""
         nav_html += f'''
-        <div class="nav-item {active_class}" onclick="window.location.hash='#{item["page"]}'">
+        <div class="nav-item {active_class}">
             <div class="nav-icon">{item["icon"]}</div>
             <div class="nav-label">{item["label"]}</div>
         </div>
@@ -584,7 +420,7 @@ def bottom_navigation(active_page: str):
     
     st.markdown(nav_html, unsafe_allow_html=True)
     
-    # Handle navigation with buttons (hidden)
+    # Handle navigation with hidden buttons
     cols = st.columns(4)
     for i, item in enumerate(nav_items):
         with cols[i]:
@@ -599,63 +435,22 @@ def bottom_navigation(active_page: str):
 
 def product_list_item(product: Dict):
     """Render product list item"""
-    # Try to load thumbnail
-    thumbnail_path = f"pdf_screenshots/{product.get('sku', '')}/{product.get('sku', '')} P.1.png"
-    
-    if os.path.exists(thumbnail_path):
-        # Load and display actual thumbnail
-        try:
-            from PIL import Image
-            img = Image.open(thumbnail_path)
-            # Create thumbnail
-            img.thumbnail((60, 60))
-            # Save to temp location for display
-            temp_path = f"temp_thumb_{product.get('sku', '')}.png"
-            img.save(temp_path)
-            
-            item_html = f"""
-            <div class="product-item">
-                <div class="product-thumbnail">
-                    <img src="{temp_path}" alt="{product.get('sku', '')}">
-                </div>
-                <div class="product-info">
-                    <p class="product-name">{product.get('sku', 'Unknown')}</p>
-                    <p class="product-model">{product.get('product_type', 'Model')}</p>
-                </div>
-                <div class="product-price">${product.get('price', 0):,.2f}</div>
-            </div>
-            """
-        except:
-            # Fallback if image processing fails
-            item_html = f"""
-            <div class="product-item">
-                <div class="product-info" style="margin-left: 0;">
-                    <p class="product-name">{product.get('sku', 'Unknown')}</p>
-                    <p class="product-model">{product.get('product_type', 'Model')}</p>
-                </div>
-                <div class="product-price">${product.get('price', 0):,.2f}</div>
-            </div>
-            """
-    else:
-        # No thumbnail available
-        item_html = f"""
-        <div class="product-item">
-            <div class="product-info" style="margin-left: 0;">
-                <p class="product-name">{product.get('sku', 'Unknown')}</p>
-                <p class="product-model">{product.get('product_type', 'Model')}</p>
-            </div>
-            <div class="product-price">${product.get('price', 0):,.2f}</div>
+    item_html = f"""
+    <div class="product-item">
+        <div class="product-info" style="margin-left: 0;">
+            <p class="product-name">{product.get('sku', 'Unknown')}</p>
+            <p class="product-model">{product.get('product_type', 'Model')}</p>
         </div>
-        """
-    
+        <div class="product-price">${product.get('price', 0):,.2f}</div>
+    </div>
+    """
     return item_html
 
 def filter_row():
-    """Render filter row with dropdowns"""
+    """Render filter row"""
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        # Main categories
         categories = ["All"] + list(TURBO_AIR_CATEGORIES.keys())
         st.selectbox("Category", categories, key="filter_category")
     
@@ -696,45 +491,6 @@ def sync_status_bar(is_online: bool, is_synced: bool):
     
     return False
 
-def mobile_button(label: str, variant: str = "primary", key: str = None):
-    """Render mobile-style button"""
-    if variant == "primary":
-        if st.button(label, key=key, use_container_width=True):
-            return True
-    else:
-        if st.button(label, key=key, use_container_width=True):
-            return True
-    return False
-
-def cart_item(product: Dict, quantity: int, item_id: str):
-    """Render cart item with quantity controls"""
-    col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
-    
-    with col1:
-        # Product thumbnail
-        st.markdown(f'<div class="product-thumbnail"></div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"**{product.get('sku', 'Unknown')}**")
-        st.caption(product.get('product_type', ''))
-    
-    with col3:
-        # Quantity controls
-        q_col1, q_col2, q_col3 = st.columns([1, 1, 1])
-        with q_col1:
-            if st.button("-", key=f"minus_{item_id}"):
-                return max(1, quantity - 1)
-        with q_col2:
-            st.markdown(f"<p style='text-align: center; margin: 0;'>{quantity}</p>", unsafe_allow_html=True)
-        with q_col3:
-            if st.button("+", key=f"plus_{item_id}"):
-                return quantity + 1
-    
-    with col4:
-        st.markdown(f"**${product.get('price', 0) * quantity:,.2f}**")
-    
-    return quantity
-
 def summary_section(subtotal: float, tax_rate: float = 0.075):
     """Render cart/quote summary section"""
     tax = subtotal * tax_rate
@@ -761,3 +517,57 @@ def summary_section(subtotal: float, tax_rate: float = 0.075):
     """, unsafe_allow_html=True)
     
     return total
+
+def quantity_selector(current_quantity: int, unique_key: str) -> int:
+    """Create a quantity selector"""
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col1:
+        if st.button("−", key=f"decrease_{unique_key}"):
+            return max(1, current_quantity - 1)
+    
+    with col2:
+        st.markdown(f"<h4 style='text-align: center; margin: 0;'>{current_quantity}</h4>", 
+                   unsafe_allow_html=True)
+    
+    with col3:
+        if st.button("+", key=f"increase_{unique_key}"):
+            return current_quantity + 1
+    
+    return current_quantity
+
+def empty_state(icon: str, title: str, description: str, 
+                button_text: Optional[str] = None, 
+                button_action: Optional[Callable] = None):
+    """Display an empty state"""
+    st.markdown(
+        f"""
+        <div style='text-align: center; padding: 3rem 1rem;'>
+            <div style='font-size: 4rem; margin-bottom: 1rem;'>{icon}</div>
+            <h3 style='margin-bottom: 0.5rem;'>{title}</h3>
+            <p style='color: #666; margin-bottom: 2rem;'>{description}</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    if button_text and button_action:
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button(button_text, use_container_width=True):
+                button_action()
+                st.rerun()
+
+def format_price(price: float, currency_symbol: str = "$") -> str:
+    """Format a price value"""
+    return f"{currency_symbol}{price:,.2f}"
+
+def truncate_text(text: str, max_length: int = 50, suffix: str = "...") -> str:
+    """Truncate text to a maximum length"""
+    if not text:
+        return ""
+    
+    if len(text) <= max_length:
+        return text
+    
+    return text[:max_length - len(suffix)] + suffix

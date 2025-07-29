@@ -4,13 +4,10 @@ Handles synchronization between SQLite (offline) and Supabase (online)
 """
 
 import streamlit as st
-import sqlite3
 import json
 from datetime import datetime
 import pandas as pd
 from typing import Dict, List
-import time
-import threading
 
 class SyncManager:
     def __init__(self, database_manager=None, supabase_client=None):
@@ -46,7 +43,6 @@ class SyncManager:
     
     def update_sync_status(self):
         """Update sync status in session state"""
-        # Ensure sync status is initialized
         self._init_sync_status()
         
         is_online = self.check_connectivity()
@@ -124,6 +120,8 @@ class SyncManager:
         
         finally:
             self.is_syncing = False
+            # Update sync status
+            self.update_sync_status()
         
         return results
     
@@ -201,6 +199,7 @@ class SyncManager:
                 return True
             
             # Update local database
+            import sqlite3
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
             cursor = conn.cursor()
             
@@ -253,21 +252,9 @@ class SyncManager:
             print(f"Error syncing products: {str(e)}")
             return False
     
-    def auto_sync(self, interval_seconds=300):
-        """Auto sync at specified interval (default 5 minutes)"""
-        def sync_loop():
-            while True:
-                time.sleep(interval_seconds)
-                if self.check_connectivity():
-                    self.sync_all()
-        
-        # Start sync thread
-        sync_thread = threading.Thread(target=sync_loop, daemon=True)
-        sync_thread.start()
-    
     def get_sync_status_display(self) -> str:
         """Get formatted sync status for display"""
-        self._init_sync_status()  # Ensure initialized
+        self._init_sync_status()
         status = st.session_state.sync_status
         
         if status['is_online']:
@@ -286,55 +273,3 @@ class SyncManager:
             last_sync = "🕐 Never synced"
         
         return f"{online_status} | {pending} | {last_sync}"
-
-def show_sync_status():
-    """Display sync status in the UI"""
-    sync_status = st.session_state.get('sync_status', {})
-    
-    col1, col2, col3 = st.columns([1, 1, 1])
-    
-    with col1:
-        if sync_status.get('is_online'):
-            st.success("🟢 Online")
-        else:
-            st.warning("🔴 Offline")
-    
-    with col2:
-        pending = sync_status.get('pending_changes', 0)
-        if pending > 0:
-            st.info(f"📤 {pending} changes pending")
-        else:
-            st.success("✅ All synced")
-    
-    with col3:
-        last_sync = sync_status.get('last_sync')
-        if last_sync:
-            st.caption(f"Last sync: {last_sync.strftime('%H:%M')}")
-        else:
-            st.caption("Never synced")
-    
-    # Show sync errors if any
-    if sync_status.get('sync_errors'):
-        with st.expander("Sync Errors", expanded=False):
-            for error in sync_status['sync_errors']:
-                st.error(error)
-
-def manual_sync_button(sync_manager):
-    """Display manual sync button"""
-    if st.button("🔄 Sync Now", help="Manually sync data with cloud"):
-        with st.spinner("Syncing..."):
-            results = sync_manager.sync_all()
-            
-            if results['success']:
-                st.success(results['message'])
-            else:
-                st.error(results['message'])
-            
-            if results['errors']:
-                with st.expander("Sync Errors"):
-                    for error in results['errors']:
-                        st.error(error)
-            
-            # Update sync status
-            sync_manager.update_sync_status()
-            st.rerun()

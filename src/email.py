@@ -9,49 +9,35 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-import base64
-from typing import Dict, List
+from typing import Dict
 import io
 from datetime import datetime
 import pandas as pd
-import os
 
-# Check if email service is configured
-def is_email_configured():
-    """Check if email service credentials are configured"""
+def is_email_configured() -> bool:
+    """Check if email service is configured"""
     try:
-        # Try Streamlit secrets first
-        if hasattr(st, 'secrets') and 'email' in st.secrets:
-            return bool(st.secrets['email'].get('sender_email') and 
-                       st.secrets['email'].get('sender_password'))
-        else:
-            # Try environment variables
-            from dotenv import load_dotenv
-            load_dotenv()
-            return bool(os.getenv('EMAIL_SENDER') and 
-                       os.getenv('EMAIL_PASSWORD'))
+        config = st.session_state.get('config')
+        if config and config.has_email:
+            return True
+        return False
     except:
         return False
 
 class EmailService:
     def __init__(self, smtp_server: str, smtp_port: int, sender_email: str, sender_password: str):
-        """Initialize email service with Gmail credentials"""
+        """Initialize email service"""
         self.smtp_server = smtp_server
         self.smtp_port = smtp_port
         self.sender_email = sender_email
         self.sender_password = sender_password
-        
-        # Check if credentials are provided
-        if all([smtp_server, smtp_port, sender_email, sender_password]):
-            self.configured = True
-        else:
-            self.configured = False
+        self.configured = all([smtp_server, smtp_port, sender_email, sender_password])
     
     def send_quote_email(self, recipient_email: str, quote_data: Dict, 
                         client_data: Dict, attachments: Dict[str, io.BytesIO]) -> bool:
         """Send quote email with attachments"""
         if not self.configured:
-            st.error("Email service is not configured. Please add email credentials.")
+            st.error("Email service is not configured")
             return False
             
         try:
@@ -136,13 +122,12 @@ class EmailService:
             return False
     
     def send_test_email(self, recipient_email: str) -> bool:
-        """Send a test email to verify configuration"""
+        """Send a test email"""
         if not self.configured:
             st.error("Email service is not configured")
             return False
             
         try:
-            # Create message
             msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = recipient_email
@@ -172,38 +157,24 @@ class EmailService:
             st.error(f"Test email error: {str(e)}")
             return False
 
-# Helper function to initialize email service
 def get_email_service():
-    """Get email service instance from secrets or environment variables"""
+    """Get email service instance"""
     if not is_email_configured():
         return None
     
     try:
-        # Try Streamlit secrets first
-        if hasattr(st, 'secrets') and 'email' in st.secrets:
-            email_config = st.secrets['email']
+        config = st.session_state.get('config')
+        if config and config.email_config:
             return EmailService(
-                smtp_server=email_config.get('smtp_server', 'smtp.gmail.com'),
-                smtp_port=email_config.get('smtp_port', 587),
-                sender_email=email_config.get('sender_email', ''),
-                sender_password=email_config.get('sender_password', '')
-            )
-        else:
-            # Try environment variables
-            from dotenv import load_dotenv
-            load_dotenv()
-            
-            return EmailService(
-                smtp_server=os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com'),
-                smtp_port=int(os.getenv('EMAIL_SMTP_PORT', '587')),
-                sender_email=os.getenv('EMAIL_SENDER', ''),
-                sender_password=os.getenv('EMAIL_PASSWORD', '')
+                smtp_server=config.email_config.get('smtp_server', 'smtp.gmail.com'),
+                smtp_port=config.email_config.get('smtp_port', 587),
+                sender_email=config.email_config.get('sender_email', ''),
+                sender_password=config.email_config.get('sender_password', '')
             )
     except Exception as e:
         print(f"Failed to initialize email service: {str(e)}")
         return None
 
-# UI Components for email functionality
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
     """Show dialog to email quote"""
     email_service = get_email_service()
@@ -213,8 +184,7 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         st.info("To enable email functionality, configure Gmail credentials in your secrets.")
         return
     
-    import pandas as pd
-    from export_utils import prepare_email_attachments
+    from .export import prepare_email_attachments
     
     with st.form("email_quote_form"):
         st.subheader("Email Quote")
