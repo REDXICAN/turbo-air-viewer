@@ -4,9 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
 build/
 develop-eggs/
 dist/
@@ -19,37 +16,159 @@ parts/
 sdist/
 var/
 wheels/
+share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
 
-# Virtual Environment
+# Virtual Environments
+.env
+.venv
+env/
 venv/
 ENV/
-env/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
+env.bak/
+venv.bak/
+.python-version
 
 # Streamlit
 .streamlit/secrets.toml
-*.log
+.streamlit/config.toml
 
-# Local files
-*.xlsx
-*.csv
-test_*
-temp_*
+# Database
+*.db
+*.sqlite
+*.sqlite3
+turbo_air_db_online.sqlite
+turbo_air_db_offline.sqlite
 
-# Keep the database and PDFs
-!turbo_air_db_online.sqlite
-!pdf_screenshots/.env
+# Environment variables
 .env
+.env.local
+.env.production
+.env.*.local
+secrets.toml
+
+# IDE - VSCode
+.vscode/
+*.code-workspace
+
+# IDE - PyCharm
+.idea/
+*.iml
+*.iws
+
+# IDE - Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS - macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# OS - Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# OS - Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Project specific
+temp_thumb_*.png
+temp_*.png
+exports/
+*.xlsx
+*.pdf
+*.csv
+!sample_data/*.csv
+quote_exports/
+email_attachments/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Documentation
+docs/_build/
+site/
+
+# Backup files
+*.bak
+*.backup
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cer
+*.pfx
+*.p12
+
+# Node (if using any JS tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+cython_debug/
+
+# Keep these files
+!requirements.txt
+!README.md
+!.gitignore
+!app.py
+!mobile_ui_components.py
+!ui_components.py
+!auth.py
+!database.py
+!sync_manager.py
+!export_utils.py
+!email_service.py
+!create_database.py
+!pdf_screenshots/**

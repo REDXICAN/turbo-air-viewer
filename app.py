@@ -75,7 +75,7 @@ from mobile_ui_components import (
     apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
     quick_access_section, bottom_navigation, product_list_item, filter_row,
     metric_card, sync_status_bar, mobile_button, cart_item, summary_section,
-    COLORS
+    subcategory_list, COLORS, TURBO_AIR_CATEGORIES
 )
 
 # Keep the old UI components for functions not yet migrated
@@ -187,27 +187,27 @@ with st.container():
             
             # Categories
             st.markdown("### Categories")
-            try:
-                # Get actual categories from database
-                all_categories = db_manager.get_categories()
-                if all_categories:
-                    # Show only main categories on home
-                    main_categories = []
-                    for cat in all_categories:
-                        if cat['name'] not in ['UNCATEGORIZED']:
-                            main_categories.append({
-                                "name": cat['name'],
-                                "count": cat.get('count', 0)
-                            })
-                    if main_categories:
-                        category_grid(main_categories[:4])  # Show top 4 categories
-                    else:
-                        st.info("No categories available. Please sync products.")
-                else:
-                    st.info("No categories available. Please sync products.")
-            except Exception as e:
-                print(f"Error loading categories: {e}")
-                st.info("No categories available. Please sync products.")
+            
+            # Use Turbo Air official categories
+            main_categories = []
+            for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
+                # Try to get count from database
+                try:
+                    products_df = db_manager.get_products_by_category(cat_name)
+                    count = len(products_df) if products_df is not None else 0
+                except:
+                    count = 0
+                
+                main_categories.append({
+                    "name": cat_name,
+                    "count": count,
+                    "icon": cat_info["icon"]
+                })
+            
+            if main_categories:
+                category_grid(main_categories)  # Show all 4 main categories
+            else:
+                st.error("Failed to load categories")
             
             # Quick Access
             quick_access_section()
@@ -338,10 +338,20 @@ with st.container():
                 if not st.session_state.selected_category:
                     st.markdown("### Browse by Category")
                     
-                    try:
-                        categories = db_manager.get_categories()
-                    except:
-                        categories = []
+                    # Use Turbo Air official categories
+                    categories = []
+                    for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
+                        try:
+                            products_df = db_manager.get_products_by_category(cat_name)
+                            count = len(products_df) if products_df is not None else 0
+                        except:
+                            count = 0
+                        
+                        categories.append({
+                            "name": cat_name,
+                            "count": count,
+                            "icon": cat_info["icon"]
+                        })
                     
                     if categories:
                         category_grid(categories)
@@ -355,33 +365,36 @@ with st.container():
                     
                     st.markdown(f"### {st.session_state.selected_category}")
                     
-                    # Get category data
-                    try:
-                        categories = db_manager.get_categories()
-                        category_data = next((c for c in categories if c['name'] == st.session_state.selected_category), None)
-                    except:
-                        category_data = None
+                    # Get subcategories from TURBO_AIR_CATEGORIES
+                    category_data = TURBO_AIR_CATEGORIES.get(st.session_state.selected_category, {})
                     
                     if category_data and category_data.get('subcategories'):
                         # Show subcategories
-                        cols = st.columns(2)
-                        for idx, subcat in enumerate(category_data['subcategories']):
-                            with cols[idx % 2]:
-                                if st.button(subcat, key=f"subcat_{subcat}", use_container_width=True):
-                                    st.session_state.selected_subcategory = subcat
-                                    st.rerun()
-                    
-                    # Show products in category
-                    try:
-                        if st.session_state.selected_subcategory:
-                            results_df = db_manager.get_products_by_category(
-                                st.session_state.selected_category,
-                                st.session_state.selected_subcategory
-                            )
+                        if not st.session_state.selected_subcategory:
+                            subcategory_list(category_data['subcategories'], st.session_state.selected_category)
+                            results_df = pd.DataFrame()
                         else:
+                            # Subcategory is selected, show products
+                            if st.button("← Back to Subcategories", key="back_to_subcategories"):
+                                st.session_state.selected_subcategory = None
+                                st.rerun()
+                            
+                            st.markdown(f"#### {st.session_state.selected_subcategory}")
+                            
+                            try:
+                                # Search for products with both category and subcategory
+                                results_df = db_manager.get_products_by_category(
+                                    st.session_state.selected_category,
+                                    st.session_state.selected_subcategory
+                                )
+                            except:
+                                results_df = pd.DataFrame()
+                    else:
+                        # No subcategories, show products directly
+                        try:
                             results_df = db_manager.get_products_by_category(st.session_state.selected_category)
-                    except:
-                        results_df = pd.DataFrame()
+                        except:
+                            results_df = pd.DataFrame()
             
             # Display products if we have results
             if not results_df.empty:

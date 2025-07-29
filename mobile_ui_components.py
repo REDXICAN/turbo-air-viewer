@@ -1,6 +1,7 @@
 """
 Mobile-First UI Components for Turbo Air Equipment Viewer
 iOS-style design with clean, modern interface
+Updated with correct Turbo Air Inc categories
 """
 
 import streamlit as st
@@ -10,7 +11,7 @@ import os
 from typing import Dict, List, Optional
 import base64
 
-# Color palette - iOS style
+# Color palette - iOS style with Turbo Air blue
 COLORS = {
     'primary': '#007AFF',
     'turbo_blue': '#20429c',
@@ -25,6 +26,51 @@ COLORS = {
     'error': '#FF3B30',
     'warning': '#FF9500',
     'divider': '#E5E5EA'
+}
+
+# Turbo Air Inc Official Categories
+TURBO_AIR_CATEGORIES = {
+    "GLASS DOOR MERCHANDISERS": {
+        "icon": "🥤",
+        "subcategories": [
+            "Super Deluxe Series Glass Door Merchandisers",
+            "Super Deluxe Jumbo Series Glass Door Merchandisers",
+            "Standard Series Glass Door Merchandisers",
+            "Ice Merchandisers",
+            "E-line - Swing Doors Refrigerators",
+            "Top Open Island Freezers",
+            "Ice Cream Dipping Cabinets"
+        ]
+    },
+    "DISPLAY CASES": {
+        "icon": "🍰",
+        "subcategories": [
+            "Open Display Merchandisers",
+            "Sandwich & Cheese Cases",
+            "Vertical Cases",
+            "Vertical Air Curtains",
+            "Island Display Cases",
+            "Bakery & Deli Display Cases",
+            "Sushi Cases"
+        ]
+    },
+    "UNDERBAR EQUIPMENT": {
+        "icon": "🍺",
+        "subcategories": [
+            "Bottle Coolers",
+            "Glass / Mug Frosters",
+            "Beer Dispensers",
+            "Club Top Beer Dispensers",
+            "Back Bars",
+            "Narrow Back Bars"
+        ]
+    },
+    "MILK COOLERS": {
+        "icon": "🥛",
+        "subcategories": [
+            "Milk Coolers"
+        ]
+    }
 }
 
 def apply_mobile_css():
@@ -100,11 +146,17 @@ def apply_mobile_css():
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }}
     
+    .category-card .icon {{
+        font-size: 36px;
+        margin-bottom: 8px;
+    }}
+    
     .category-card h4 {{
         margin: 0;
-        font-size: 14px;
+        font-size: 13px;
         font-weight: 500;
         color: white;
+        line-height: 1.2;
     }}
     
     /* Quick Access section */
@@ -145,9 +197,28 @@ def apply_mobile_css():
     }}
     
     .quick-access-label {{
-        font-size: 12px;
+        font-size: 11px;
         color: {COLORS['text_secondary']};
         text-align: center;
+        line-height: 1.2;
+    }}
+    
+    /* Subcategory button */
+    .subcategory-btn {{
+        background: {COLORS['surface']};
+        border: 1px solid {COLORS['border']};
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+        width: 100%;
+        text-align: left;
+        transition: all 0.2s ease;
+    }}
+    
+    .subcategory-btn:hover {{
+        background: {COLORS['primary']};
+        color: white;
+        border-color: {COLORS['primary']};
     }}
     
     /* Product list item */
@@ -357,12 +428,15 @@ def mobile_search_bar(placeholder: str = "Search for products"):
     return st.text_input("🔍", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
 def category_grid(categories: List[Dict[str, str]]):
-    """Render category grid with blue buttons"""
+    """Render category grid with Turbo Air categories"""
     cols = st.columns(2)
     for i, category in enumerate(categories):
         with cols[i % 2]:
+            # Get icon from TURBO_AIR_CATEGORIES if available
+            icon = TURBO_AIR_CATEGORIES.get(category['name'], {}).get('icon', '📦')
+            
             if st.button(
-                category['name'],
+                f"{icon}\n{category['name']}",
                 key=f"cat_{category['name']}",
                 use_container_width=True
             ):
@@ -370,28 +444,29 @@ def category_grid(categories: List[Dict[str, str]]):
                 st.session_state.active_page = 'products'
                 st.rerun()
             
-            # Show category as blue button with white text
+            # Show category card with icon
             st.markdown(f"""
             <div class="category-card">
+                <div class="icon">{icon}</div>
                 <h4>{category['name']}</h4>
                 <p style="color: white; font-size: 12px; margin: 0;">{category.get('count', 0)} items</p>
             </div>
             """, unsafe_allow_html=True)
 
 def quick_access_section():
-    """Render quick access section"""
+    """Render quick access section with Turbo Air categories"""
     st.markdown("""
     <div class="quick-access">
         <div class="quick-access-title">Quick Access</div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Quick access items
+    # Quick access items for main Turbo Air categories
     items = [
-        {"icon": "❄️", "label": "Refrigerators", "category": "Refrigerators"},
-        {"icon": "🧊", "label": "Freezers", "category": "Freezers"},
-        {"icon": "🍦", "label": "Ice Cream", "category": "Ice Cream"},
-        {"icon": "🥤", "label": "Beverages", "category": "Beverages"}
+        {"icon": "🥤", "label": "Glass Door\nMerchandisers", "category": "GLASS DOOR MERCHANDISERS"},
+        {"icon": "🍰", "label": "Display\nCases", "category": "DISPLAY CASES"},
+        {"icon": "🍺", "label": "Underbar\nEquipment", "category": "UNDERBAR EQUIPMENT"},
+        {"icon": "🥛", "label": "Milk\nCoolers", "category": "MILK COOLERS"}
     ]
     
     cols = st.columns(4)
@@ -405,6 +480,36 @@ def quick_access_section():
                 st.session_state.selected_category = item['category']
                 st.session_state.active_page = 'products'
                 st.rerun()
+
+def subcategory_list(subcategories: List[str], parent_category: str):
+    """Render subcategory list as buttons"""
+    st.markdown(f"### Select {parent_category} Type")
+    
+    for subcat in subcategories:
+        if st.button(
+            subcat,
+            key=f"subcat_{subcat}",
+            use_container_width=True
+        ):
+            st.session_state.selected_subcategory = subcat
+            st.rerun()
+        
+        # Add custom styling for subcategory buttons
+        st.markdown(f"""
+        <style>
+        div[data-testid="stButton"] button[kind="secondary"] {{
+            background-color: {COLORS['surface']};
+            border: 1px solid {COLORS['border']};
+            color: {COLORS['text_primary']};
+            margin-bottom: 8px;
+        }}
+        div[data-testid="stButton"] button[kind="secondary"]:hover {{
+            background-color: {COLORS['primary']};
+            color: white;
+            border-color: {COLORS['primary']};
+        }}
+        </style>
+        """, unsafe_allow_html=True)
 
 def bottom_navigation(active_page: str):
     """Render bottom navigation bar"""
@@ -499,13 +604,15 @@ def filter_row():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        st.selectbox("Category", ["All", "Refrigerators", "Freezers"], key="filter_category")
+        # Main categories
+        categories = ["All"] + list(TURBO_AIR_CATEGORIES.keys())
+        st.selectbox("Category", categories, key="filter_category")
     
     with col2:
-        st.selectbox("Price", ["All", "Under $3,000", "$3,000-$5,000", "Over $5,000"], key="filter_price")
+        st.selectbox("Price", ["All", "Under $3,000", "$3,000-$5,000", "$5,000-$10,000", "Over $10,000"], key="filter_price")
     
     with col3:
-        st.selectbox("Dimensions", ["All", "Small", "Medium", "Large"], key="filter_dimensions")
+        st.selectbox("Type", ["All", "Refrigerator", "Freezer", "Display", "Underbar"], key="filter_type")
 
 def metric_card(label: str, value: int):
     """Render metric card"""
