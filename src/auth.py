@@ -1,6 +1,7 @@
 """
 Authentication module for Turbo Air Equipment Viewer
 Handles Supabase authentication with offline fallback
+Fixed: First user admin, password_hash handling
 """
 
 import streamlit as st
@@ -32,6 +33,18 @@ class AuthManager:
         
         # Check for existing auth token
         self._check_auth_token()
+    
+    def _check_if_first_user(self) -> bool:
+        """Check if this would be the first user in the system"""
+        try:
+            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM user_profiles")
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count == 0
+        except:
+            return True
     
     def _generate_auth_token(self) -> str:
         """Generate a secure authentication token"""
@@ -149,6 +162,11 @@ class AuthManager:
     
     def sign_up_with_email(self, email: str, password: str, role: str = 'distributor', company: str = '') -> Tuple[bool, str]:
         """Sign up with email and password"""
+        # Check if this is the first user
+        is_first_user = self._check_if_first_user()
+        if is_first_user:
+            role = 'admin'  # First user is always admin
+        
         user_id = str(uuid.uuid4())
         password_hash = self._hash_password(password)
         
@@ -163,7 +181,11 @@ class AuthManager:
                 }
                 
                 self.supabase.table('user_profiles').insert(profile_data).execute()
-                return True, "Successfully signed up! You can now sign in."
+                
+                if is_first_user:
+                    return True, "Admin account created successfully! You can now sign in."
+                else:
+                    return True, "Successfully signed up! You can now sign in."
             except Exception as e:
                 if "duplicate" in str(e).lower():
                     return False, "Email already exists"
@@ -288,6 +310,11 @@ class AuthManager:
     def _offline_sign_up(self, email: str, password: str, role: str, company: str) -> Tuple[bool, str]:
         """Handle offline sign up using local database"""
         try:
+            # Check if this is the first user
+            is_first_user = self._check_if_first_user()
+            if is_first_user:
+                role = 'admin'  # First user is always admin
+            
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
             cursor = conn.cursor()
             
@@ -311,7 +338,11 @@ class AuthManager:
             })
             
             conn.close()
-            return True, "Account created (will sync when online)"
+            
+            if is_first_user:
+                return True, "Admin account created (will sync when online)"
+            else:
+                return True, "Account created (will sync when online)"
         except sqlite3.IntegrityError:
             return False, "Email already exists"
         except Exception as e:
@@ -331,6 +362,9 @@ class AuthManager:
     
     def show_auth_form(self):
         """Display authentication form"""
+        # Check if this is the first user
+        is_first_user = self._check_if_first_user()
+        
         # Authentication tabs
         tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
         
@@ -361,12 +395,20 @@ class AuthManager:
         with tab2:
             st.subheader("Create Account")
             
+            if is_first_user:
+                st.info("🎉 Welcome! The first account will have admin privileges.")
+            
             with st.form("signup_form"):
                 new_email = st.text_input("Email", key="signup_email")
                 new_password = st.text_input("Password", type="password", key="signup_password")
                 confirm_password = st.text_input("Confirm Password", type="password", key="confirm_password")
                 
-                role = st.selectbox("Role", ["distributor", "sales"], key="signup_role")
+                if is_first_user:
+                    st.info("Role: Admin (automatically assigned)")
+                    role = "admin"
+                else:
+                    role = st.selectbox("Role", ["distributor", "sales"], key="signup_role")
+                
                 company = st.text_input("Company", key="signup_company")
                 
                 col1, col2, col3 = st.columns([1, 2, 1])

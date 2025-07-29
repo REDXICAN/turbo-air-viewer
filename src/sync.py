@@ -7,7 +7,7 @@ import streamlit as st
 import json
 from datetime import datetime
 import pandas as pd
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 class SyncManager:
     def __init__(self, database_manager=None, supabase_client=None):
@@ -78,10 +78,16 @@ class SyncManager:
                 results['message'] = 'No internet connection'
                 return results
             
+            # First sync products if needed
+            if self.should_sync_products():
+                product_success, product_message = self.sync_products()
+                if not product_success:
+                    results['errors'].append(f"Product sync failed: {product_message}")
+            
             # Get pending sync items
             pending_df = self.db_manager.get_pending_sync_items()
             
-            if pending_df.empty:
+            if pending_df.empty and not self.should_sync_products():
                 results['message'] = 'No items to sync'
                 return results
             
@@ -251,6 +257,18 @@ class SyncManager:
         except Exception as e:
             print(f"Error syncing products: {str(e)}")
             return False
+    
+    def should_sync_products(self) -> bool:
+        """Check if products need syncing"""
+        # You can implement logic here to check if products need syncing
+        # For now, we'll sync if requested by admin
+        return False
+    
+    def sync_products(self) -> Tuple[bool, str]:
+        """Sync products to Supabase"""
+        if self.db_manager:
+            return self.db_manager.sync_products_to_supabase()
+        return False, "Database manager not initialized"
     
     def get_sync_status_display(self) -> str:
         """Get formatted sync status for display"""

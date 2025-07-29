@@ -429,6 +429,14 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
                 else:
                     st.error("Failed to update products")
         
+        if st.button("📤 Upload Products to Cloud", use_container_width=True):
+            with st.spinner("Uploading products to Supabase..."):
+                success, message = db_manager.sync_products_to_supabase()
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+        
         if st.button("📊 View System Stats", use_container_width=True):
             try:
                 total_products = len(db_manager.get_all_products())
@@ -505,7 +513,7 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     
     # Product info
     st.markdown(f"### {product['sku']}")
-    st.markdown(f"**{product.get('product_type', 'N/A')}**")
+    st.markdown(f"**{product.get('product_type') or '-'}**")
     st.markdown(f"### {format_price(product.get('price', 0))}")
     
     if product.get('description'):
@@ -514,35 +522,37 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     # Specifications
     st.markdown("### Specifications")
     
+    # Helper function to display value or "-"
+    def display_value(value):
+        return value if value else "-"
+    
     specs_left = {
-        "Capacity": product.get('capacity'),
-        "Dimensions": product.get('dimensions'),
-        "Weight": product.get('weight'),
-        "Voltage": product.get('voltage'),
-        "Amperage": product.get('amperage')
+        "Capacity": display_value(product.get('capacity')),
+        "Dimensions": display_value(product.get('dimensions')),
+        "Weight": display_value(product.get('weight')),
+        "Voltage": display_value(product.get('voltage')),
+        "Amperage": display_value(product.get('amperage'))
     }
     
     specs_right = {
-        "Temperature Range": product.get('temperature_range'),
-        "Refrigerant": product.get('refrigerant'),
-        "Compressor": product.get('compressor'),
-        "Shelves": product.get('shelves'),
-        "Doors": product.get('doors')
+        "Temperature Range": display_value(product.get('temperature_range')),
+        "Refrigerant": display_value(product.get('refrigerant')),
+        "Compressor": display_value(product.get('compressor')),
+        "Shelves": display_value(product.get('shelves')),
+        "Doors": display_value(product.get('doors'))
     }
     
     col1, col2 = st.columns(2)
     
     with col1:
         for key, value in specs_left.items():
-            if value:
-                st.caption(key)
-                st.markdown(f"**{value}**")
+            st.caption(key)
+            st.markdown(f"**{value}**")
     
     with col2:
         for key, value in specs_right.items():
-            if value:
-                st.caption(key)
-                st.markdown(f"**{value}**")
+            st.caption(key)
+            st.markdown(f"**{value}**")
     
     if product.get('features'):
         st.markdown("### Features")

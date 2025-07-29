@@ -435,13 +435,18 @@ def bottom_navigation(active_page: str):
 
 def product_list_item(product: Dict):
     """Render product list item"""
+    # Get values with "-" for None/empty
+    sku = product.get('sku', 'Unknown')
+    product_type = product.get('product_type') or '-'
+    price = product.get('price', 0)
+    
     item_html = f"""
     <div class="product-item">
         <div class="product-info" style="margin-left: 0;">
-            <p class="product-name">{product.get('sku', 'Unknown')}</p>
-            <p class="product-model">{product.get('product_type', 'Model')}</p>
+            <p class="product-name">{sku}</p>
+            <p class="product-model">{product_type}</p>
         </div>
-        <div class="product-price">${product.get('price', 0):,.2f}</div>
+        <div class="product-price">${price:,.2f}</div>
     </div>
     """
     return item_html
