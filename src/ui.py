@@ -287,9 +287,8 @@ def apply_mobile_css():
     /* Responsive adjustments */
     @media (min-width: 768px) {{
         .mobile-container {{
-            max-width: 768px;
+            max-width: 100%;
             margin: 0 auto;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
             min-height: 100vh;
             background: {COLORS['background']};
         }}
@@ -302,19 +301,36 @@ def apply_mobile_css():
             max-width: 500px;
             margin: 12px auto;
         }}
+        
+        /* Center content on larger screens */
+        .stButton > button {{
+            max-width: 400px;
+            margin: 0 auto;
+        }}
+        
+        /* Adjust form width on desktop */
+        [data-testid="stForm"] {{
+            max-width: 600px;
+            margin: 0 auto;
+        }}
     }}
     
     @media (min-width: 1024px) {{
         .mobile-container {{
             max-width: 100%;
-            max-width: 1200px;
             margin: 0 auto;
-            padding: 0 20px;
         }}
         
         .main-content {{
+            max-width: 1200px;
+            margin: 0 auto;
             padding: 20px;
             padding-bottom: 100px;
+        }}
+        
+        /* Hide bottom nav on desktop */
+        .bottom-nav {{
+            display: none;
         }}
     }}
     </style>

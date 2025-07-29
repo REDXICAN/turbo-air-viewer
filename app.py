@@ -153,7 +153,7 @@ def main():
     
     # Check authentication
     if not auth_manager.is_authenticated():
-        # Show login page with proper header
+        # Show login page with proper header and centered content
         st.markdown("""
         <div class="mobile-header">
             <div style="display: flex; align-items: center; justify-content: center;">
@@ -165,8 +165,11 @@ def main():
         # Add some spacing
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Show auth form
-        auth_manager.show_auth_form()
+        # Center the auth form on larger screens
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            # Show auth form
+            auth_manager.show_auth_form()
     else:
         # Update sync status
         try:
