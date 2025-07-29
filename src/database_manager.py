@@ -634,3 +634,73 @@ class DatabaseManager:
         """, sync_ids)
         conn.commit()
         conn.close()
+    
+    def sync_products_to_supabase(self) -> Tuple[bool, str]:
+        """Sync all products from SQLite to Supabase"""
+        if not self.is_online:
+            return False, "No internet connection"
+        
+        try:
+            # Get all products from SQLite
+            conn = self.get_connection()
+            products_df = pd.read_sql_query("SELECT * FROM products", conn)
+            conn.close()
+            
+            if products_df.empty:
+                return True, "No products to sync"
+            
+            # Convert DataFrame to list of dicts
+            products = products_df.to_dict('records')
+            
+            # Remove SQLite-specific fields
+            for product in products:
+                if 'id' in product:
+                    del product['id']
+                if 'created_at' in product:
+                    del product['created_at']
+                if 'updated_at' in product:
+                    del product['updated_at']
+            
+            # Clear existing products in Supabase
+            self.supabase.table('products').delete().neq('sku', '').execute()
+            
+            # Batch insert to Supabase (in chunks of 100)
+            chunk_size = 100
+            total_synced = 0
+            
+            for i in range(0, len(products), chunk_size):
+                chunk = products[i:i + chunk_size]
+                self.supabase.table('products').insert(chunk).execute()
+                total_synced += len(chunk)
+            
+            return True, f"Successfully synced {total_synced} products"
+            
+        except Exception as e:
+            return False, f"Sync error: {str(e)}"
+    
+    def load_products_from_excel(self, file_path: str) -> Tuple[bool, str]:
+        """Load products from Excel file"""
+        try:
+            # Import the loading function
+            from .database.create_db import load_products_from_excel
+            
+            conn = self.get_connection()
+            load_products_from_excel(conn)
+            conn.close()
+            
+            # If online, sync immediately
+            if self.is_online:
+                sync_success, sync_message = self.sync_products_to_supabase()
+                if sync_success:
+                    return True, "Products loaded and synced successfully"
+                else:
+                    return True, f"Products loaded locally. Sync failed: {sync_message}"
+            else:
+                return True, "Products loaded locally (will sync when online)"
+                
+        except Exception as e:
+            return False, f"Error loading products: {str(e)}"
+    
+    def get_null_display_value(self) -> str:
+        """Get display value for NULL/empty fields"""
+        return "-"

@@ -10,7 +10,6 @@ secrets.toml
 *.db
 turbo_air_db_online.sqlite
 turbo_air_db_offline.sqlite
-old_turbo_air_db_online.qlite
 
 # Python
 __pycache__/

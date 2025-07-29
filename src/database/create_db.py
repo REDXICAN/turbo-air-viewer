@@ -1,12 +1,35 @@
 """
 Database Creation Script for Turbo Air Equipment Viewer
-Creates local SQLite database with schema
+Creates local SQLite database and syncs with Supabase
+Updated to handle new Excel structure with Category/Subcategory
 """
 
 import sqlite3
 import pandas as pd
 import os
 from datetime import datetime
+from supabase import create_client, Client
+from typing import Optional
+import re
+
+def get_supabase_client() -> Optional[Client]:
+    """Get Supabase client if credentials are available"""
+    try:
+        import streamlit as st
+        supabase_url = st.secrets.get("supabase", {}).get("url")
+        supabase_key = st.secrets.get("supabase", {}).get("anon_key")
+        
+        if supabase_url and supabase_key:
+            return create_client(supabase_url, supabase_key)
+    except:
+        # Try environment variables as fallback
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        
+        if supabase_url and supabase_key:
+            return create_client(supabase_url, supabase_key)
+    
+    return None
 
 def create_local_database():
     """Create local SQLite database with schema"""
@@ -185,230 +208,155 @@ def create_local_database():
     conn.close()
     return True
 
-def load_products_from_excel(conn):
-    """Load products from Excel file into database"""
-    try:
-        # Load product data
-        products_df = pd.read_excel('turbo_air_products.xlsx')
-        
-        # Load price data if available
-        prices = {}
-        if os.path.exists('2024 List Price Norbaja Copy.xlsx'):
+def clean_price(price_value) -> Optional[float]:
+    """Clean and convert price value to float"""
+    if pd.isna(price_value):
+        return None
+    
+    if isinstance(price_value, (int, float)):
+        return float(price_value)
+    
+    if isinstance(price_value, str):
+        # Remove currency symbols and commas
+        clean_value = re.sub(r'[$,]', '', price_value.strip())
+        if clean_value:
             try:
-                price_df = pd.read_excel('2024 List Price Norbaja Copy.xlsx')
-                # Build price dictionary from price file
-                for idx, row in price_df.iterrows():
-                    try:
-                        if pd.notna(row.iloc[0]) and pd.notna(row.iloc[4]):
-                            model = str(row.iloc[0]).strip()
-                            price_val = row.iloc[4]
-                            
-                            if isinstance(price_val, (int, float)):
-                                prices[model] = float(price_val)
-                            elif isinstance(price_val, str):
-                                clean_price = price_val.replace('$', '').replace(',', '').strip()
-                                if clean_price:
-                                    try:
-                                        prices[model] = float(clean_price)
-                                    except:
-                                        pass
-                    except:
-                        continue
-            except:
-                pass
+                return float(clean_value)
+            except ValueError:
+                return None
+    
+    return None
+
+def load_products_from_excel(conn):
+    """Load products from Excel file into database and Supabase"""
+    try:
+        # Load product data with new column structure
+        products_df = pd.read_excel('turbo_air_products.xlsx', sheet_name=0)
+        
+        # Expected columns in order
+        expected_columns = [
+            'SKU', 'Category', 'Subcategory', 'Product Type', 'Description',
+            'Voltage', 'Amperage', 'Phase', 'Frequency', 'Plug Type',
+            'Dimensions', 'Dimensions (Metric)', 'Weight', 'Weight (Metric)',
+            'Temperature Range', 'Temperature Range (Metric)', 'Refrigerant',
+            'Compressor', 'Capacity', 'Doors', 'Shelves', 'Features',
+            'Certifications', 'Price'
+        ]
+        
+        # Verify columns exist
+        missing_columns = set(expected_columns) - set(products_df.columns)
+        if missing_columns:
+            print(f"Warning: Missing columns in Excel file: {missing_columns}")
+        
+        # Get Supabase client
+        supabase = get_supabase_client()
         
         # Insert products
         cursor = conn.cursor()
+        products_inserted = 0
+        products_for_supabase = []
         
-        for _, row in products_df.iterrows():
+        for idx, row in products_df.iterrows():
             try:
-                sku = str(row.get('SKU', '')).strip()
-                price = prices.get(sku, row.get('Price', 0))
+                # Get values with None for empty cells
+                sku = str(row.get('SKU', '')).strip() if pd.notna(row.get('SKU')) else None
                 
+                if not sku:
+                    continue
+                
+                # Prepare product data
+                product_data = {
+                    'sku': sku,
+                    'category': str(row.get('Category', '')).strip() if pd.notna(row.get('Category')) else None,
+                    'subcategory': str(row.get('Subcategory', '')).strip() if pd.notna(row.get('Subcategory')) else None,
+                    'product_type': str(row.get('Product Type', '')).strip() if pd.notna(row.get('Product Type')) else None,
+                    'description': str(row.get('Description', '')).strip() if pd.notna(row.get('Description')) else None,
+                    'voltage': str(row.get('Voltage', '')).strip() if pd.notna(row.get('Voltage')) else None,
+                    'amperage': str(row.get('Amperage', '')).strip() if pd.notna(row.get('Amperage')) else None,
+                    'phase': str(row.get('Phase', '')).strip() if pd.notna(row.get('Phase')) else None,
+                    'frequency': str(row.get('Frequency', '')).strip() if pd.notna(row.get('Frequency')) else None,
+                    'plug_type': str(row.get('Plug Type', '')).strip() if pd.notna(row.get('Plug Type')) else None,
+                    'dimensions': str(row.get('Dimensions', '')).strip() if pd.notna(row.get('Dimensions')) else None,
+                    'dimensions_metric': str(row.get('Dimensions (Metric)', '')).strip() if pd.notna(row.get('Dimensions (Metric)')) else None,
+                    'weight': str(row.get('Weight', '')).strip() if pd.notna(row.get('Weight')) else None,
+                    'weight_metric': str(row.get('Weight (Metric)', '')).strip() if pd.notna(row.get('Weight (Metric)')) else None,
+                    'temperature_range': str(row.get('Temperature Range', '')).strip() if pd.notna(row.get('Temperature Range')) else None,
+                    'temperature_range_metric': str(row.get('Temperature Range (Metric)', '')).strip() if pd.notna(row.get('Temperature Range (Metric)')) else None,
+                    'refrigerant': str(row.get('Refrigerant', '')).strip() if pd.notna(row.get('Refrigerant')) else None,
+                    'compressor': str(row.get('Compressor', '')).strip() if pd.notna(row.get('Compressor')) else None,
+                    'capacity': str(row.get('Capacity', '')).strip() if pd.notna(row.get('Capacity')) else None,
+                    'doors': str(row.get('Doors', '')).strip() if pd.notna(row.get('Doors')) else None,
+                    'shelves': str(row.get('Shelves', '')).strip() if pd.notna(row.get('Shelves')) else None,
+                    'features': str(row.get('Features', '')).strip() if pd.notna(row.get('Features')) else None,
+                    'certifications': str(row.get('Certifications', '')).strip() if pd.notna(row.get('Certifications')) else None,
+                    'price': clean_price(row.get('Price'))
+                }
+                
+                # Insert into SQLite
                 cursor.execute("""
                     INSERT INTO products (
-                        sku, product_type, description, capacity, doors, amperage,
+                        sku, category, subcategory, product_type, description,
+                        voltage, amperage, phase, frequency, plug_type,
                         dimensions, dimensions_metric, weight, weight_metric,
-                        temperature_range, temperature_range_metric, voltage, phase,
-                        frequency, plug_type, refrigerant, compressor, shelves,
-                        features, certifications, price, category, subcategory
+                        temperature_range, temperature_range_metric, refrigerant,
+                        compressor, capacity, doors, shelves, features,
+                        certifications, price
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    sku,
-                    row.get('Product Type', ''),
-                    row.get('Description', ''),
-                    row.get('Capacity', ''),
-                    row.get('Doors', ''),
-                    row.get('Amperage', ''),
-                    row.get('Dimensions', ''),
-                    row.get('Dimensions (Metric)', ''),
-                    row.get('Weight', ''),
-                    row.get('Weight (Metric)', ''),
-                    row.get('Temperature Range', ''),
-                    row.get('Temperature Range (Metric)', ''),
-                    row.get('Voltage', ''),
-                    row.get('Phase', ''),
-                    row.get('Frequency', ''),
-                    row.get('Plug Type', ''),
-                    row.get('Refrigerant', ''),
-                    row.get('Compressor', ''),
-                    row.get('Shelves', ''),
-                    row.get('Features', ''),
-                    row.get('Certifications', ''),
-                    price,
-                    row.get('Category', 'UNCATEGORIZED'),
-                    row.get('Subcategory', 'General')
+                    product_data['sku'], product_data['category'], product_data['subcategory'],
+                    product_data['product_type'], product_data['description'],
+                    product_data['voltage'], product_data['amperage'], product_data['phase'],
+                    product_data['frequency'], product_data['plug_type'],
+                    product_data['dimensions'], product_data['dimensions_metric'],
+                    product_data['weight'], product_data['weight_metric'],
+                    product_data['temperature_range'], product_data['temperature_range_metric'],
+                    product_data['refrigerant'], product_data['compressor'], product_data['capacity'],
+                    product_data['doors'], product_data['shelves'], product_data['features'],
+                    product_data['certifications'], product_data['price']
                 ))
+                
+                products_inserted += 1
+                
+                # Prepare for Supabase (collect for batch insert)
+                if supabase:
+                    products_for_supabase.append(product_data)
+                
             except Exception as e:
                 print(f"Error inserting product {sku}: {e}")
         
         conn.commit()
-        print(f"Successfully loaded {len(products_df)} products")
+        print(f"Successfully loaded {products_inserted} products into SQLite")
+        
+        # Sync to Supabase if online
+        if supabase and products_for_supabase:
+            try:
+                # Clear existing products in Supabase
+                supabase.table('products').delete().neq('sku', '').execute()
+                
+                # Batch insert to Supabase (in chunks of 100)
+                chunk_size = 100
+                for i in range(0, len(products_for_supabase), chunk_size):
+                    chunk = products_for_supabase[i:i + chunk_size]
+                    supabase.table('products').insert(chunk).execute()
+                
+                print(f"Successfully synced {len(products_for_supabase)} products to Supabase")
+            except Exception as e:
+                print(f"Error syncing to Supabase: {e}")
+                # Add to sync queue for later
+                cursor = conn.cursor()
+                import json
+                for product in products_for_supabase:
+                    cursor.execute("""
+                        INSERT INTO sync_queue (table_name, operation, data)
+                        VALUES (?, ?, ?)
+                    """, ('products', 'insert', json.dumps(product)))
+                conn.commit()
+                print("Products queued for sync when online")
         
     except Exception as e:
         print(f"Error loading products: {e}")
         conn.rollback()
 
-# Supabase SQL Schema for reference
-SUPABASE_SCHEMA = """
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Products table
-CREATE TABLE IF NOT EXISTS products (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    sku TEXT UNIQUE NOT NULL,
-    product_type TEXT,
-    description TEXT,
-    capacity TEXT,
-    doors TEXT,
-    amperage TEXT,
-    dimensions TEXT,
-    dimensions_metric TEXT,
-    weight TEXT,
-    weight_metric TEXT,
-    temperature_range TEXT,
-    temperature_range_metric TEXT,
-    voltage TEXT,
-    phase TEXT,
-    frequency TEXT,
-    plug_type TEXT,
-    refrigerant TEXT,
-    compressor TEXT,
-    shelves TEXT,
-    features TEXT,
-    certifications TEXT,
-    price DECIMAL(10, 2),
-    category TEXT,
-    subcategory TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Clients table
-CREATE TABLE IF NOT EXISTS clients (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID NOT NULL,
-    company TEXT NOT NULL,
-    contact_name TEXT,
-    contact_email TEXT,
-    contact_number TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Quotes table
-CREATE TABLE IF NOT EXISTS quotes (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID NOT NULL,
-    client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
-    quote_number TEXT UNIQUE NOT NULL,
-    total_amount DECIMAL(10, 2),
-    status TEXT DEFAULT 'draft',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Quote items table
-CREATE TABLE IF NOT EXISTS quote_items (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    quote_id UUID REFERENCES quotes(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id),
-    quantity INTEGER NOT NULL,
-    unit_price DECIMAL(10, 2),
-    total_price DECIMAL(10, 2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Cart items table
-CREATE TABLE IF NOT EXISTS cart_items (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID NOT NULL,
-    client_id UUID REFERENCES clients(id),
-    product_id UUID REFERENCES products(id),
-    quantity INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Search history table
-CREATE TABLE IF NOT EXISTS search_history (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID NOT NULL,
-    search_term TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- User profiles table
-CREATE TABLE IF NOT EXISTS user_profiles (
-    id UUID PRIMARY KEY,
-    email TEXT UNIQUE,
-    role TEXT DEFAULT 'distributor' CHECK (role IN ('admin', 'sales', 'distributor')),
-    company TEXT,
-    phone TEXT,
-    password_hash TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Row Level Security Policies
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quotes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE quote_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
-ALTER TABLE search_history ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-
--- Products policies (everyone can read)
-CREATE POLICY "Products are viewable by everyone" ON products
-    FOR SELECT USING (true);
-
--- Clients policies (users can only see their own)
-CREATE POLICY "Users can view own clients" ON clients
-    FOR SELECT USING (user_id = current_user_id());
-
-CREATE POLICY "Users can create own clients" ON clients
-    FOR INSERT WITH CHECK (user_id = current_user_id());
-
-CREATE POLICY "Users can update own clients" ON clients
-    FOR UPDATE USING (user_id = current_user_id());
-
--- Similar policies for other tables...
-
--- Create indexes for performance
-CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
-CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
-CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
-CREATE INDEX IF NOT EXISTS idx_quotes_user_id ON quotes(user_id);
-CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id);
-"""
-
 if __name__ == "__main__":
     create_local_database()
     print("Database created successfully!")
-    print("\nTo set up Supabase:")
-    print("1. Copy the SUPABASE_SCHEMA above")
-    print("2. Go to your Supabase SQL Editor")
-    print("3. Run the schema to create tables")
-    print("4. Your cloud database will be ready!")
