@@ -51,4 +51,4 @@ temp_*
 
 # Keep the database and PDFs
 !turbo_air_db_online.sqlite
-!pdf_screenshots/
+!pdf_screenshots/.env
