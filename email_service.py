@@ -1,56 +1,67 @@
 """
 Email Service for Turbo Air Equipment Viewer
-Handles sending quotes via Microsoft 365 Graph API
+Handles sending quotes via Gmail SMTP
 """
 
 import streamlit as st
-from msal import ConfidentialClientApplication
-import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 import base64
 from typing import Dict, List
 import io
 from datetime import datetime
 import pandas as pd
+import os
+
+# Check if email service is configured
+def is_email_configured():
+    """Check if email service credentials are configured"""
+    try:
+        # Try Streamlit secrets first
+        if hasattr(st, 'secrets') and 'email' in st.secrets:
+            return bool(st.secrets['email'].get('sender_email') and 
+                       st.secrets['email'].get('sender_password'))
+        else:
+            # Try environment variables
+            from dotenv import load_dotenv
+            load_dotenv()
+            return bool(os.getenv('EMAIL_SENDER') and 
+                       os.getenv('EMAIL_PASSWORD'))
+    except:
+        return False
 
 class EmailService:
-    def __init__(self, tenant_id: str, client_id: str, client_secret: str, sender_email: str):
-        """Initialize email service with Microsoft 365 credentials"""
-        self.tenant_id = tenant_id
-        self.client_id = client_id
-        self.client_secret = client_secret
+    def __init__(self, smtp_server: str, smtp_port: int, sender_email: str, sender_password: str):
+        """Initialize email service with Gmail credentials"""
+        self.smtp_server = smtp_server
+        self.smtp_port = smtp_port
         self.sender_email = sender_email
+        self.sender_password = sender_password
         
-        # Initialize MSAL app
-        self.app = ConfidentialClientApplication(
-            client_id,
-            authority=f"https://login.microsoftonline.com/{tenant_id}",
-            client_credential=client_secret
-        )
-        
-        self.graph_url = "https://graph.microsoft.com/v1.0"
-        self.scope = ["https://graph.microsoft.com/.default"]
-    
-    def _get_access_token(self) -> str:
-        """Get access token for Microsoft Graph API"""
-        result = self.app.acquire_token_silent(self.scope, account=None)
-        
-        if not result:
-            result = self.app.acquire_token_for_client(scopes=self.scope)
-        
-        if "access_token" in result:
-            return result["access_token"]
+        # Check if credentials are provided
+        if all([smtp_server, smtp_port, sender_email, sender_password]):
+            self.configured = True
         else:
-            raise Exception(f"Could not acquire token: {result.get('error')}")
+            self.configured = False
     
     def send_quote_email(self, recipient_email: str, quote_data: Dict, 
                         client_data: Dict, attachments: Dict[str, io.BytesIO]) -> bool:
         """Send quote email with attachments"""
+        if not self.configured:
+            st.error("Email service is not configured. Please add email credentials.")
+            return False
+            
         try:
-            access_token = self._get_access_token()
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = self.sender_email
+            msg['To'] = recipient_email
+            msg['Subject'] = f"Turbo Air Quote {quote_data['quote_number']} - {client_data.get('company', 'Your Company')}"
             
-            # Prepare email content
-            subject = f"Turbo Air Quote {quote_data['quote_number']} - {client_data.get('company', 'Your Company')}"
-            
+            # Email body
             body_content = f"""
             <html>
             <body style="font-family: Arial, sans-serif;">
@@ -96,53 +107,29 @@ class EmailService:
             </html>
             """
             
-            # Prepare email message
-            message = {
-                "message": {
-                    "subject": subject,
-                    "body": {
-                        "contentType": "HTML",
-                        "content": body_content
-                    },
-                    "toRecipients": [
-                        {
-                            "emailAddress": {
-                                "address": recipient_email
-                            }
-                        }
-                    ],
-                    "attachments": []
-                }
-            }
+            msg.attach(MIMEText(body_content, 'html'))
             
             # Add attachments
             for filename, file_buffer in attachments.items():
                 file_buffer.seek(0)
-                file_content = file_buffer.read()
                 
-                attachment = {
-                    "@odata.type": "#microsoft.graph.fileAttachment",
-                    "name": filename,
-                    "contentType": "application/octet-stream",
-                    "contentBytes": base64.b64encode(file_content).decode('utf-8')
-                }
-                
-                message["message"]["attachments"].append(attachment)
+                # Create attachment
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(file_buffer.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename= {filename}'
+                )
+                msg.attach(part)
             
             # Send email
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.sender_email, self.sender_password)
+                server.send_message(msg)
             
-            send_url = f"{self.graph_url}/users/{self.sender_email}/sendMail"
-            
-            response = requests.post(send_url, headers=headers, json=message)
-            
-            if response.status_code == 202:
-                return True
-            else:
-                raise Exception(f"Failed to send email: {response.status_code} - {response.text}")
+            return True
                 
         except Exception as e:
             st.error(f"Email error: {str(e)}")
@@ -150,44 +137,36 @@ class EmailService:
     
     def send_test_email(self, recipient_email: str) -> bool:
         """Send a test email to verify configuration"""
+        if not self.configured:
+            st.error("Email service is not configured")
+            return False
+            
         try:
-            access_token = self._get_access_token()
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = self.sender_email
+            msg['To'] = recipient_email
+            msg['Subject'] = "Turbo Air - Test Email"
             
-            message = {
-                "message": {
-                    "subject": "Turbo Air - Test Email",
-                    "body": {
-                        "contentType": "HTML",
-                        "content": """
-                        <html>
-                        <body>
-                            <h2>Test Email from Turbo Air Quote System</h2>
-                            <p>This is a test email to verify that your email configuration is working correctly.</p>
-                            <p>If you received this email, your Microsoft 365 integration is properly configured!</p>
-                        </body>
-                        </html>
-                        """
-                    },
-                    "toRecipients": [
-                        {
-                            "emailAddress": {
-                                "address": recipient_email
-                            }
-                        }
-                    ]
-                }
-            }
+            body = """
+            <html>
+            <body>
+                <h2>Test Email from Turbo Air Quote System</h2>
+                <p>This is a test email to verify that your email configuration is working correctly.</p>
+                <p>If you received this email, your Gmail integration is properly configured!</p>
+            </body>
+            </html>
+            """
             
-            headers = {
-                "Authorization": f"Bearer {access_token}",
-                "Content-Type": "application/json"
-            }
+            msg.attach(MIMEText(body, 'html'))
             
-            send_url = f"{self.graph_url}/users/{self.sender_email}/sendMail"
+            # Send email
+            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
+                server.starttls()
+                server.login(self.sender_email, self.sender_password)
+                server.send_message(msg)
             
-            response = requests.post(send_url, headers=headers, json=message)
-            
-            return response.status_code == 202
+            return True
             
         except Exception as e:
             st.error(f"Test email error: {str(e)}")
@@ -195,25 +174,45 @@ class EmailService:
 
 # Helper function to initialize email service
 def get_email_service():
-    """Get email service instance from secrets"""
-    if 'email' not in st.secrets:
+    """Get email service instance from secrets or environment variables"""
+    if not is_email_configured():
         return None
     
     try:
-        email_config = st.secrets['email']
-        return EmailService(
-            tenant_id=email_config['tenant_id'],
-            client_id=email_config['client_id'],
-            client_secret=email_config['client_secret'],
-            sender_email=email_config['sender_email']
-        )
+        # Try Streamlit secrets first
+        if hasattr(st, 'secrets') and 'email' in st.secrets:
+            email_config = st.secrets['email']
+            return EmailService(
+                smtp_server=email_config.get('smtp_server', 'smtp.gmail.com'),
+                smtp_port=email_config.get('smtp_port', 587),
+                sender_email=email_config.get('sender_email', ''),
+                sender_password=email_config.get('sender_password', '')
+            )
+        else:
+            # Try environment variables
+            from dotenv import load_dotenv
+            load_dotenv()
+            
+            return EmailService(
+                smtp_server=os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com'),
+                smtp_port=int(os.getenv('EMAIL_SMTP_PORT', '587')),
+                sender_email=os.getenv('EMAIL_SENDER', ''),
+                sender_password=os.getenv('EMAIL_PASSWORD', '')
+            )
     except Exception as e:
-        st.error(f"Failed to initialize email service: {str(e)}")
+        print(f"Failed to initialize email service: {str(e)}")
         return None
 
 # UI Components for email functionality
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
     """Show dialog to email quote"""
+    email_service = get_email_service()
+    
+    if not email_service or not email_service.configured:
+        st.warning("Email service is not configured. Quote cannot be sent via email.")
+        st.info("To enable email functionality, configure Gmail credentials in your secrets.")
+        return
+    
     import pandas as pd
     from export_utils import prepare_email_attachments
     
@@ -240,12 +239,6 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
             cancel_button = st.form_submit_button("Cancel", use_container_width=True)
         
         if send_button and recipient_email:
-            email_service = get_email_service()
-            
-            if not email_service:
-                st.error("Email service not configured. Please check your settings.")
-                return False
-            
             with st.spinner("Sending email..."):
                 # Prepare attachments
                 attachments = prepare_email_attachments(quote_data, items_df, client_data)
