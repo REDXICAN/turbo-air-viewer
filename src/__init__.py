@@ -4,7 +4,7 @@ Turbo Air Equipment Viewer - Core Modules
 
 from .config import Config, init_session_state, AppError, DatabaseError, AuthError, SyncError
 from .auth import AuthManager
-from .database import DatabaseManager
+from .database_manager import DatabaseManager
 from .sync import SyncManager
 from .ui import (
     apply_mobile_css, mobile_header, mobile_search_bar, category_grid,

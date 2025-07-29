@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from src.config import Config, init_session_state
 from src.auth import AuthManager
-from src.database import DatabaseManager
+from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.ui import apply_mobile_css, mobile_header, bottom_navigation
 from src.pages import (
