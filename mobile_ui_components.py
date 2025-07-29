@@ -1,7 +1,7 @@
 """
 Mobile-First UI Components for Turbo Air Equipment Viewer
 iOS-style design with clean, modern interface
-Updated with correct Turbo Air Inc categories
+Updated with correct Turbo Air Inc categories and desktop display fix
 """
 
 import streamlit as st
@@ -397,14 +397,54 @@ def apply_mobile_css():
         width: 100%;
     }}
     
-    /* Responsive adjustments */
+    /* Responsive adjustments - FIXED FOR DESKTOP */
     @media (min-width: 768px) {{
         .mobile-container {{
-            max-width: 428px;
+            max-width: 768px;
             margin: 0 auto;
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
             min-height: 100vh;
             background: {COLORS['background']};
+        }}
+        
+        /* Adjust grid layouts for desktop */
+        .category-card {{
+            height: 160px;
+        }}
+        
+        /* Wider search container on desktop */
+        .search-container {{
+            max-width: 500px;
+            margin: 12px auto;
+        }}
+    }}
+    
+    /* Full desktop mode for larger screens */
+    @media (min-width: 1024px) {{
+        .mobile-container {{
+            max-width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }}
+        
+        /* Better spacing for desktop */
+        .main-content {{
+            padding: 20px;
+            padding-bottom: 100px;
+        }}
+        
+        /* Show more columns on desktop */
+        .product-grid {{
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }}
+        
+        /* Adjust auth form width on desktop */
+        .auth-container {{
+            max-width: 600px;
+            margin: 0 auto;
         }}
     }}
     </style>
@@ -412,10 +452,11 @@ def apply_mobile_css():
     st.markdown(css, unsafe_allow_html=True)
 
 def mobile_header(title: str, show_back: bool = False, show_search: bool = False):
-    """Render mobile header"""
+    """Render mobile header with optional back button and search"""
     header_html = f"""
     <div class="mobile-header">
         <div style="display: flex; align-items: center; justify-content: space-between;">
+            {'<span style="font-size: 20px; cursor: pointer;">←</span>' if show_back else ''}
             <h2 style="margin: 0; font-size: 20px; font-weight: 600;">{title}</h2>
             <div style="width: 24px;"></div>
         </div>
@@ -424,8 +465,18 @@ def mobile_header(title: str, show_back: bool = False, show_search: bool = False
     st.markdown(header_html, unsafe_allow_html=True)
 
 def mobile_search_bar(placeholder: str = "Search for products"):
-    """Render mobile search bar with Streamlit input only"""
-    return st.text_input("🔍", placeholder=placeholder, key="search_input", label_visibility="collapsed")
+    """Render mobile search bar"""
+    search_html = f"""
+    <div class="search-container">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="color: {COLORS['text_secondary']};">🔍</span>
+            <input type="text" placeholder="{placeholder}" 
+                   style="border: none; background: none; outline: none; flex: 1; font-size: 16px;">
+        </div>
+    </div>
+    """
+    st.markdown(search_html, unsafe_allow_html=True)
+    return st.text_input("", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
 def category_grid(categories: List[Dict[str, str]]):
     """Render category grid with Turbo Air categories"""
@@ -547,7 +598,7 @@ def bottom_navigation(active_page: str):
                 st.rerun()
 
 def product_list_item(product: Dict):
-    """Render product list item with thumbnail"""
+    """Render product list item"""
     # Try to load thumbnail
     thumbnail_path = f"pdf_screenshots/{product.get('sku', '')}/{product.get('sku', '')} P.1.png"
     
@@ -656,14 +707,18 @@ def mobile_button(label: str, variant: str = "primary", key: str = None):
     return False
 
 def cart_item(product: Dict, quantity: int, item_id: str):
-    """Render cart item with quantity controls (no thumbnail)"""
-    col1, col2, col3 = st.columns([3, 2, 1])
+    """Render cart item with quantity controls"""
+    col1, col2, col3, col4 = st.columns([1, 3, 2, 1])
     
     with col1:
+        # Product thumbnail
+        st.markdown(f'<div class="product-thumbnail"></div>', unsafe_allow_html=True)
+    
+    with col2:
         st.markdown(f"**{product.get('sku', 'Unknown')}**")
         st.caption(product.get('product_type', ''))
     
-    with col2:
+    with col3:
         # Quantity controls
         q_col1, q_col2, q_col3 = st.columns([1, 1, 1])
         with q_col1:
@@ -675,7 +730,7 @@ def cart_item(product: Dict, quantity: int, item_id: str):
             if st.button("+", key=f"plus_{item_id}"):
                 return quantity + 1
     
-    with col3:
+    with col4:
         st.markdown(f"**${product.get('price', 0) * quantity:,.2f}**")
     
     return quantity
