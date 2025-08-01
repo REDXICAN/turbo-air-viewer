@@ -465,7 +465,7 @@ def mobile_header(title: str, show_back: bool = False):
 
 def mobile_search_bar(placeholder: str = "Search for products"):
     """Render mobile search bar"""
-    return st.text_input("", placeholder=placeholder, key="search_input", label_visibility="collapsed")
+    return st.text_input("Search", placeholder=placeholder, key="search_input", label_visibility="collapsed")
 
 def category_grid(categories: List[Dict[str, str]]):
     """Render category grid"""

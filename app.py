@@ -1,5 +1,5 @@
 """
-Turbo Air Equipment Viewer - Main Application
+Turbo Air Catalog - Main Application
 Mobile-First Equipment Catalog and Quote Generation System
 Fixed: UI rendering and database initialization
 """
@@ -27,7 +27,7 @@ from src.pages import (
 
 # Page configuration - MUST be first Streamlit command
 st.set_page_config(
-    page_title="Turbo Air",
+    page_title="Turbo Air Catalog",
     page_icon="❄️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -224,7 +224,7 @@ def main():
         
         # Add centered title for all authenticated pages
         st.markdown("""
-        <h1 style="text-align: center; font-weight: bold; margin-bottom: 2rem;">Turbo Air</h1>
+        <h1 style="text-align: center; font-weight: bold; margin-bottom: 2rem;">Turbo Air Catalog</h1>
         """, unsafe_allow_html=True)
         
         if active_page == 'home':

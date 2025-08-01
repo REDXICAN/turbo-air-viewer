@@ -31,8 +31,12 @@ class AuthManager:
                 print(f"Supabase connection failed: {e}")
                 self.is_online = False
         
-        # Check for existing auth token
-        self._check_auth_token()
+        # Check for existing Supabase session first
+        if self.is_online and self.supabase:
+            self._check_supabase_session()
+        else:
+            # Fall back to local auth token
+            self._check_auth_token()
     
     def _check_if_first_user(self) -> bool:
         """Check if this would be the first user in the system"""
@@ -51,9 +55,15 @@ class AuthManager:
         return secrets.token_urlsafe(32)
     
     def _save_auth_token(self, user_id: str, token: str, remember_days: int = 30) -> bool:
-        """Save auth token to database"""
+    """Save auth token to database with retry logic"""
+    import time
+    max_retries = 5
+    retry_delay = 0.1
+    
+    for attempt in range(max_retries):
         try:
-            conn = sqlite3.connect('turbo_air_db_online.sqlite')
+            conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
+            conn.execute("PRAGMA journal_mode=WAL")  # Better concurrency
             cursor = conn.cursor()
             
             # Create auth_tokens table if not exists
@@ -70,6 +80,9 @@ class AuthManager:
             # Calculate expiration
             expires_at = datetime.now() + timedelta(days=remember_days)
             
+            # Delete any existing tokens for this user
+            cursor.execute("DELETE FROM auth_tokens WHERE user_id = ?", (user_id,))
+            
             # Save token
             cursor.execute("""
                 INSERT INTO auth_tokens (user_id, token, expires_at)
@@ -83,9 +96,62 @@ class AuthManager:
             st.session_state.auth_token = token
             
             return True
+            
+        except sqlite3.OperationalError as e:
+            if "locked" in str(e) and attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                print(f"Error saving auth token after {attempt + 1} attempts: {e}")
+                return False
         except Exception as e:
             print(f"Error saving auth token: {e}")
             return False
+    
+    return False
+    
+    def _check_supabase_session(self) -> bool:
+        """Check for existing Supabase session"""
+        try:
+            # Get session from Supabase
+            response = self.supabase.auth.get_session()
+            
+            if response and response.session and response.session.user:
+                # Valid session exists
+                user = response.session.user
+                
+                # Get role from local database
+                conn = sqlite3.connect('turbo_air_db_online.sqlite')
+                cursor = conn.cursor()
+                cursor.execute("SELECT role FROM user_profiles WHERE id = ?", (user.id,))
+                result = cursor.fetchone()
+                
+                if result:
+                    role = result[0]
+                else:
+                    # First time login - sync user
+                    role = 'distributor'
+                    self._sync_user_to_local({'id': user.id, 'email': user.email}, role)
+                
+                conn.close()
+                
+                # Set session
+                self._set_user_session({
+                    'id': user.id,
+                    'email': user.email,
+                    'created_at': datetime.now().isoformat()
+                })
+                st.session_state.user_role = role
+                
+                # Store session in session state for persistence
+                st.session_state.supabase_session = response.session
+                
+                return True
+        except Exception as e:
+            print(f"Error checking Supabase session: {e}")
+        
+        return False
     
     def _check_auth_token(self) -> bool:
         """Check if user has a valid auth token"""
@@ -128,14 +194,14 @@ class AuthManager:
         salt = "turbo_air_salt_2024"
         return hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
     
-    def _sync_user_to_local(self, supabase_user: Dict, role: str = 'distributor', company: str = '') -> bool:
+    def _sync_user_to_local(self, user_data: Dict, role: str = 'distributor', company: str = '') -> bool:
         """Sync Supabase user to local database"""
         try:
             conn = sqlite3.connect('turbo_air_db_online.sqlite')
             cursor = conn.cursor()
             
             # Check if user exists
-            cursor.execute("SELECT id FROM user_profiles WHERE id = ?", (supabase_user['id'],))
+            cursor.execute("SELECT id FROM user_profiles WHERE id = ?", (user_data['id'],))
             exists = cursor.fetchone() is not None
             
             if exists:
@@ -144,13 +210,13 @@ class AuthManager:
                     UPDATE user_profiles 
                     SET email = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
-                """, (supabase_user['email'], supabase_user['id']))
+                """, (user_data['email'], user_data['id']))
             else:
                 # Insert new user
                 cursor.execute("""
                     INSERT INTO user_profiles (id, email, role, company, password_hash)
                     VALUES (?, ?, ?, ?, ?)
-                """, (supabase_user['id'], supabase_user['email'], role, company, ''))
+                """, (user_data['id'], user_data['email'], role, company, ''))
             
             conn.commit()
             conn.close()
@@ -169,7 +235,10 @@ class AuthManager:
                     "password": password
                 })
                 
-                if response.user:
+                if response.user and response.session:
+                    # Store session for persistence
+                    st.session_state.supabase_session = response.session
+                    
                     # Get role from local database
                     conn = sqlite3.connect('turbo_air_db_online.sqlite')
                     cursor = conn.cursor()
@@ -181,7 +250,7 @@ class AuthManager:
                     else:
                         # First time login - sync user
                         role = 'distributor'
-                        self._sync_user_to_local(response.user, role)
+                        self._sync_user_to_local({'id': response.user.id, 'email': response.user.email}, role)
                     
                     conn.close()
                     
@@ -193,9 +262,10 @@ class AuthManager:
                     })
                     st.session_state.user_role = role
                     
+                    # For extra persistence, also save a local token
                     if remember_me:
                         token = self._generate_auth_token()
-                        self._save_auth_token(response.user.id, token)
+                        self._save_auth_token(response.user.id, token, remember_days=365)  # 1 year
                     
                     return True, "Successfully signed in!"
                 else:
@@ -230,7 +300,7 @@ class AuthManager:
                 
                 if response.user:
                     # Sync to local database
-                    self._sync_user_to_local(response.user, role, company)
+                    self._sync_user_to_local({'id': response.user.id, 'email': response.user.email}, role, company)
                     
                     # Also save in user_profiles with password hash for offline
                     password_hash = self._hash_password(password)
@@ -286,11 +356,25 @@ class AuthManager:
         st.session_state.user = None
         st.session_state.user_role = 'distributor'
         st.session_state.auth_token = None
+        st.session_state.supabase_session = None
         
         # Clear other session state
         for key in ['selected_client', 'cart_count', 'active_page']:
             if key in st.session_state:
                 del st.session_state[key]
+    
+    def refresh_session(self) -> bool:
+        """Refresh the current session if needed"""
+        if self.is_online and self.supabase and 'supabase_session' in st.session_state:
+            try:
+                # Refresh the session
+                response = self.supabase.auth.refresh_session()
+                if response and response.session:
+                    st.session_state.supabase_session = response.session
+                    return True
+            except Exception as e:
+                print(f"Error refreshing session: {e}")
+        return False
     
     def get_current_user(self) -> Optional[Dict]:
         """Get current user session"""
@@ -306,7 +390,21 @@ class AuthManager:
     
     def is_authenticated(self) -> bool:
         """Check if user is authenticated"""
-        return st.session_state.get('user') is not None
+        # First check if we have a user in session state
+        if st.session_state.get('user') is not None:
+            return True
+        
+        # If online, check Supabase session
+        if self.is_online and self.supabase and 'supabase_session' in st.session_state:
+            try:
+                # Check if session is still valid
+                response = self.supabase.auth.get_session()
+                if response and response.session and response.session.user:
+                    return True
+            except:
+                pass
+        
+        return False
     
     def _set_user_session(self, user: Dict):
         """Set user session data"""
@@ -340,7 +438,7 @@ class AuthManager:
                 
                 if remember_me:
                     token = self._generate_auth_token()
-                    self._save_auth_token(user[0], token)
+                    self._save_auth_token(user[0], token, remember_days=365)  # 1 year for offline
                 
                 conn.close()
                 return True, "Signed in (offline mode)"
@@ -417,7 +515,7 @@ class AuthManager:
             with st.form("signin_form"):
                 email = st.text_input("Email", key="signin_email")
                 password = st.text_input("Password", type="password", key="signin_password")
-                remember_me = st.checkbox("Remember me for 30 days", key="remember_me")
+                remember_me = st.checkbox("Keep me signed in", key="remember_me", value=True)
                 
                 col1, col2, col3 = st.columns([1, 2, 1])
                 
