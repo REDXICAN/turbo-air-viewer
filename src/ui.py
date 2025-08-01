@@ -486,7 +486,8 @@ def mobile_search_bar(placeholder: str = "Search for products"):
         "Search", 
         placeholder=placeholder, 
         key=search_key, 
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        help="Start typing to search products"
     )
 
 def category_grid(categories: List[Dict[str, str]]):

@@ -38,32 +38,6 @@ class DatabaseManager:
                     print(f"Excel file '{excel_path}' not found in project root")
         except Exception as e:
             print(f"Error during product initialization: {e}")
-        
-    def check_products_exist(self) -> bool:
-        """Check if any products exist in the database"""
-        try:
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT COUNT(*) FROM products")
-            count = cursor.fetchone()[0]
-            conn.close()
-            return count > 0
-        except Exception as e:
-            print(f"Error checking products: {e}")
-            return False
-            
-        # Check if products need to be loaded
-        if not self.check_products_exist():
-            print("No products found in database.")
-            if os.path.exists('turbo_air_products.xlsx'):
-                print("Loading products from Excel file...")
-                success, message = self.load_products_from_excel()
-                if success:
-                    print(message)
-                else:
-                    print(f"Failed to load products: {message}")
-            else:
-                print("Excel file 'turbo_air_products.xlsx' not found.")
     
     def _init_cache(self):
         """Initialize in-memory cache"""
@@ -80,29 +54,33 @@ class DatabaseManager:
     
     def check_products_exist(self) -> bool:
         """Check if any products exist in the database"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM products")
-        count = cursor.fetchone()[0]
-        conn.close()
-        return count > 0
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products")
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count > 0
+        except Exception as e:
+            print(f"Error checking products: {e}")
+            return False
     
     @st.cache_data(ttl=300)
-    def get_all_products(self) -> pd.DataFrame:
+    def get_all_products(_self) -> pd.DataFrame:
         """Get all products with caching"""
-        if self.is_online:
+        if _self.is_online:
             try:
-                response = self.supabase.table('products').select('*').execute()
+                response = _self.supabase.table('products').select('*').execute()
                 if response.data:
                     df = pd.DataFrame(response.data)
                     # Update local cache
-                    self._update_local_products(df)
+                    _self._update_local_products(df)
                     return df
             except Exception as e:
                 print(f"Error fetching from Supabase: {e}")
         
         # Fallback to SQLite
-        conn = self.get_connection()
+        conn = _self.get_connection()
         df = pd.read_sql_query("SELECT * FROM products", conn)
         conn.close()
         
@@ -149,15 +127,15 @@ class DatabaseManager:
         return df
     
     @st.cache_data(ttl=300)
-    def get_products_by_category(self, category: str, subcategory: Optional[str] = None) -> pd.DataFrame:
+    def get_products_by_category(_self, category: str, subcategory: Optional[str] = None) -> pd.DataFrame:
         """Get products by category with caching"""
         # Return empty DataFrame if no products exist
-        if not self.check_products_exist():
+        if not _self.check_products_exist():
             return pd.DataFrame()
         
-        if self.is_online:
+        if _self.is_online:
             try:
-                query = self.supabase.table('products').select('*').eq('category', category)
+                query = _self.supabase.table('products').select('*').eq('category', category)
                 if subcategory:
                     query = query.eq('subcategory', subcategory)
                 response = query.execute()
@@ -166,7 +144,7 @@ class DatabaseManager:
                 pass
         
         # Use SQLite
-        conn = self.get_connection()
+        conn = _self.get_connection()
         if subcategory:
             query = "SELECT * FROM products WHERE category = ? AND subcategory = ?"
             df = pd.read_sql_query(query, conn, params=(category, subcategory))

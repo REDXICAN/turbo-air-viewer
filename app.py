@@ -1,12 +1,13 @@
 """
 Turbo Air Catalog - Main Application
 Mobile-First Equipment Catalog and Quote Generation System
-Fixed: UI rendering and database initialization
+Fixed: Removed welcome text, added persistence, improved product loading
 """
 
 import streamlit as st
 import os
 import sys
+import atexit
 
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -15,6 +16,7 @@ from src.config import Config, init_session_state
 from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
+from src.persistence import PersistenceManager
 from src.ui import apply_mobile_css, bottom_navigation
 from src.pages import (
     show_home_page,
@@ -101,6 +103,15 @@ def check_and_migrate_database():
                 )
             """)
             
+            # Ensure database_backups table info is stored
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             conn.commit()
         except Exception as e:
             st.error(f"Migration error: {e}")
@@ -131,13 +142,28 @@ def initialize_services():
             supabase_client=auth_manager.supabase
         )
         
+        # Initialize persistence manager
+        persistence_manager = PersistenceManager(
+            db_manager=db_manager,
+            supabase_client=auth_manager.supabase
+        )
+        
         # Store in session state
         st.session_state.auth_manager = auth_manager
         st.session_state.db_manager = db_manager
         st.session_state.sync_manager = sync_manager
         st.session_state.config = config
+        st.session_state.persistence_manager = persistence_manager
         
-        return auth_manager, db_manager, sync_manager
+        # Initialize persistence on startup
+        persistence_manager.initialize_on_startup()
+        
+        # Set up automatic backup on shutdown (for Streamlit Cloud)
+        if 'backup_registered' not in st.session_state:
+            atexit.register(lambda: persistence_manager.backup_on_shutdown() if auth_manager.is_online else None)
+            st.session_state.backup_registered = True
+        
+        return auth_manager, db_manager, sync_manager, persistence_manager
         
     except Exception as e:
         st.error(f"Failed to initialize services: {str(e)}")
@@ -155,6 +181,21 @@ def check_excel_file():
         """)
         return False
     return True
+
+def periodic_backup(persistence_manager, auth_manager):
+    """Perform periodic backup if online"""
+    # Check if it's been more than 1 hour since last backup
+    import time
+    current_time = time.time()
+    last_backup_time = st.session_state.get('last_backup_time', 0)
+    
+    if current_time - last_backup_time > 3600:  # 1 hour
+        if auth_manager.is_online:
+            try:
+                persistence_manager.backup_to_supabase()
+                st.session_state.last_backup_time = current_time
+            except:
+                pass
 
 def main():
     """Main application entry point"""
@@ -191,7 +232,10 @@ def main():
             # Don't stop - allow app to continue with empty database
     
     # Initialize services
-    auth_manager, db_manager, sync_manager = initialize_services()
+    auth_manager, db_manager, sync_manager, persistence_manager = initialize_services()
+    
+    # Perform periodic backup
+    periodic_backup(persistence_manager, auth_manager)
     
     # Check authentication
     if not auth_manager.is_authenticated():
@@ -222,10 +266,7 @@ def main():
         # Route to appropriate page
         active_page = st.session_state.active_page
         
-        # Add centered title for all authenticated pages
-        st.markdown("""
-        <h1 style="text-align: center; font-weight: bold; margin-bottom: 2rem;">Turbo Air Catalog</h1>
-        """, unsafe_allow_html=True)
+        # Note: Removed the centered title "Turbo Air Catalog" as requested
         
         if active_page == 'home':
             show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
