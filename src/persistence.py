@@ -83,10 +83,13 @@ class PersistenceManager:
                     for col in df.columns:
                         if df[col].dtype == 'object':
                             try:
-                                df[col] = pd.to_datetime(df[col], errors='ignore')
-                                if df[col].dtype == 'datetime64[ns]':
-                                    df[col] = df[col].astype(str)
+                                # Try to convert to datetime
+                                temp_series = pd.to_datetime(df[col], errors='coerce')
+                                # If successful (contains valid datetimes), convert to string
+                                if not temp_series.isna().all():
+                                    df[col] = temp_series.astype(str).where(temp_series.notna(), df[col])
                             except:
+                                # If conversion fails, leave the column as is
                                 pass
                     backup_data[table] = df.to_dict('records')
                 except Exception as e:
@@ -118,19 +121,21 @@ class PersistenceManager:
             print(f"Backup error: {e}")
             return False
     
-    def restore_from_supabase(self) -> bool:
+    def restore_from_supabase(self, silent: bool = False) -> bool:
         """Restore SQLite database from Supabase backup"""
         if not self.supabase:
             return False
             
         try:
-            print("Restoring database from Supabase...")
+            if not silent:
+                print("Restoring database from Supabase...")
             
             # Get latest backup
             response = self.supabase.table(self.backup_table).select('*').order('created_at', desc=True).limit(1).execute()
             
             if not response.data:
-                print("No backup found")
+                if not silent:
+                    print("No backup found")
                 return False
             
             backup = response.data[0]
@@ -152,18 +157,22 @@ class PersistenceManager:
                         # Insert backed up data
                         df = pd.DataFrame(records)
                         df.to_sql(table, conn, if_exists='append', index=False)
-                        print(f"Restored {len(records)} records to {table}")
+                        if not silent:
+                            print(f"Restored {len(records)} records to {table}")
                     except Exception as e:
-                        print(f"Warning: Could not restore table {table}: {e}")
+                        if not silent:
+                            print(f"Warning: Could not restore table {table}: {e}")
             
             conn.commit()
             conn.close()
             
-            print("Database restored successfully!")
+            if not silent:
+                print("Database restored successfully!")
             return True
             
         except Exception as e:
-            print(f"Restore error: {e}")
+            if not silent:
+                print(f"Restore error: {e}")
             return False
     
     def initialize_on_startup(self):
@@ -185,7 +194,7 @@ class PersistenceManager:
         
         # Try to restore from Supabase
         if self.supabase:
-            if self.restore_from_supabase():
+            if self.restore_from_supabase(silent=True):
                 # Mark as initialized
                 with open(self.initialized_marker, 'w') as f:
                     f.write(datetime.now().isoformat())
@@ -270,7 +279,7 @@ class PersistenceManager:
                 
             if response.data:
                 # Process the restore...
-                return self.restore_from_supabase()
+                return self.restore_from_supabase(silent=False)
                 
         except Exception as e:
             print(f"Manual restore error: {e}")

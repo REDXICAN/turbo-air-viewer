@@ -34,6 +34,10 @@ wheels/
 *.egg
 MANIFEST
 update_excel_categories.py
+manual_upload.py
+test_categories.py
+test_rls.py
+test_resetRLS.py
 
 # Virtual environments
 venv/
