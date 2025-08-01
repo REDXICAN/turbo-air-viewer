@@ -33,6 +33,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+update_excel_categories.py
 
 # Virtual environments
 venv/
