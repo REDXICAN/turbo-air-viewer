@@ -12,6 +12,7 @@ import json
 import hashlib
 import secrets
 import uuid
+import time
 from typing import Optional, Tuple, Dict
 
 class AuthManager:
@@ -55,61 +56,60 @@ class AuthManager:
         return secrets.token_urlsafe(32)
     
     def _save_auth_token(self, user_id: str, token: str, remember_days: int = 30) -> bool:
-    """Save auth token to database with retry logic"""
-    import time
-    max_retries = 5
-    retry_delay = 0.1
-    
-    for attempt in range(max_retries):
-        try:
-            conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
-            conn.execute("PRAGMA journal_mode=WAL")  # Better concurrency
-            cursor = conn.cursor()
-            
-            # Create auth_tokens table if not exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS auth_tokens (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    token TEXT UNIQUE NOT NULL,
-                    expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Calculate expiration
-            expires_at = datetime.now() + timedelta(days=remember_days)
-            
-            # Delete any existing tokens for this user
-            cursor.execute("DELETE FROM auth_tokens WHERE user_id = ?", (user_id,))
-            
-            # Save token
-            cursor.execute("""
-                INSERT INTO auth_tokens (user_id, token, expires_at)
-                VALUES (?, ?, ?)
-            """, (user_id, token, expires_at))
-            
-            conn.commit()
-            conn.close()
-            
-            # Store in session state
-            st.session_state.auth_token = token
-            
-            return True
-            
-        except sqlite3.OperationalError as e:
-            if "locked" in str(e) and attempt < max_retries - 1:
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-                continue
-            else:
-                print(f"Error saving auth token after {attempt + 1} attempts: {e}")
+        """Save auth token to database with retry logic"""
+        max_retries = 5
+        retry_delay = 0.1
+        
+        for attempt in range(max_retries):
+            try:
+                conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
+                conn.execute("PRAGMA journal_mode=WAL")  # Better concurrency
+                cursor = conn.cursor()
+                
+                # Create auth_tokens table if not exists
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS auth_tokens (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id TEXT NOT NULL,
+                        token TEXT UNIQUE NOT NULL,
+                        expires_at TIMESTAMP NOT NULL,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Calculate expiration
+                expires_at = datetime.now() + timedelta(days=remember_days)
+                
+                # Delete any existing tokens for this user
+                cursor.execute("DELETE FROM auth_tokens WHERE user_id = ?", (user_id,))
+                
+                # Save token
+                cursor.execute("""
+                    INSERT INTO auth_tokens (user_id, token, expires_at)
+                    VALUES (?, ?, ?)
+                """, (user_id, token, expires_at))
+                
+                conn.commit()
+                conn.close()
+                
+                # Store in session state
+                st.session_state.auth_token = token
+                
+                return True
+                
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e) and attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    print(f"Error saving auth token after {attempt + 1} attempts: {e}")
+                    return False
+            except Exception as e:
+                print(f"Error saving auth token: {e}")
                 return False
-        except Exception as e:
-            print(f"Error saving auth token: {e}")
-            return False
-    
-    return False
+        
+        return False
     
     def _check_supabase_session(self) -> bool:
         """Check for existing Supabase session"""
