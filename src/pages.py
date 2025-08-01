@@ -20,10 +20,47 @@ from .email import show_email_quote_dialog
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     """Display home page"""
     
-    # Welcome section
+    # Search bar at the top
+    search_term = mobile_search_bar("Search products...")
+    
+    # Handle live search
+    if search_term and len(search_term) >= 2:
+        with st.spinner("Searching..."):
+            results_df = db_manager.search_products(search_term)
+            if not results_df.empty:
+                st.markdown(f"### Search Results ({len(results_df)} items)")
+                
+                # Display results with thumbnails
+                cols = st.columns(2)
+                for idx, (_, product) in enumerate(results_df.iterrows()):
+                    with cols[idx % 2]:
+                        # Try to show thumbnail
+                        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
+                        if os.path.exists(image_path):
+                            st.image(image_path, use_container_width=True)
+                        else:
+                            # Placeholder
+                            st.markdown(f"""
+                            <div style="height: 150px; background: #f0f0f0; 
+                                        border-radius: 8px; display: flex; 
+                                        align-items: center; justify-content: center;">
+                                <span style="color: #999;">No Image</span>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        st.markdown(f"**{product['sku']}**")
+                        st.caption(f"{product.get('product_type', '-')}")
+                        st.markdown(f"**${product.get('price', 0):,.2f}**")
+                        
+                        if st.button("View Details", key=f"search_{product['id']}", use_container_width=True):
+                            st.session_state.show_product_detail = product.to_dict()
+                            st.rerun()
+                
+                st.divider()
+    
+    # User info and sync status row
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown(f"**Welcome to Turbo Air**")
         st.caption(f"Hello, {user.get('email', 'User')}! • Role: {auth_manager.get_user_role().title()}")
     with col2:
         if st.button("Sign Out", key="signout", use_container_width=True):
@@ -38,122 +75,121 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         sync_manager.sync_all()
         st.rerun()
     
-    # Search bar
-    mobile_search_bar()
-    
-    # Categories
-    st.markdown("### Categories")
-    
-    main_categories = []
-    for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
+    # Only show categories if no search
+    if not search_term:
+        # Categories
+        st.markdown("### Categories")
+        
+        main_categories = []
+        for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
+            try:
+                products_df = db_manager.get_products_by_category(cat_name)
+                count = len(products_df) if products_df is not None else 0
+            except:
+                count = 0
+            
+            main_categories.append({
+                "name": cat_name,
+                "count": count,
+                "icon": cat_info["icon"]
+            })
+        
+        if main_categories:
+            category_grid(main_categories)
+        else:
+            st.error("Failed to load categories")
+        
+        # Quick Access
+        quick_access_section()
+        
+        # Clients section
+        st.markdown("### Clients")
+        
         try:
-            products_df = db_manager.get_products_by_category(cat_name)
-            count = len(products_df) if products_df is not None else 0
+            clients_df = db_manager.get_user_clients(user_id)
         except:
-            count = 0
+            clients_df = pd.DataFrame()
         
-        main_categories.append({
-            "name": cat_name,
-            "count": count,
-            "icon": cat_info["icon"]
-        })
-    
-    if main_categories:
-        category_grid(main_categories)
-    else:
-        st.error("Failed to load categories")
-    
-    # Quick Access
-    quick_access_section()
-    
-    # Clients section
-    st.markdown("### Clients")
-    
-    try:
-        clients_df = db_manager.get_user_clients(user_id)
-    except:
-        clients_df = pd.DataFrame()
-    
-    if not clients_df.empty:
-        client_names = clients_df['company'].tolist()
-        client_ids = clients_df['id'].tolist()
-        
-        selected_idx = st.selectbox(
-            "Select Client",
-            range(len(client_names)),
-            format_func=lambda x: client_names[x],
-            key="client_selector"
-        )
-        
-        if selected_idx is not None:
-            st.session_state.selected_client = client_ids[selected_idx]
-            selected_client_data = clients_df.iloc[selected_idx]
+        if not clients_df.empty:
+            client_names = clients_df['company'].tolist()
+            client_ids = clients_df['id'].tolist()
             
-            with st.expander("Client Details", expanded=False):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.text(f"Contact: {selected_client_data.get('contact_name', 'N/A')}")
-                    st.text(f"Email: {selected_client_data.get('contact_email', 'N/A')}")
-                with col2:
-                    st.text(f"Phone: {selected_client_data.get('contact_number', 'N/A')}")
-                    try:
-                        quotes_df = db_manager.get_client_quotes(st.session_state.selected_client)
-                        st.text(f"Quotes: {len(quotes_df)}")
-                    except:
-                        st.text("Quotes: 0")
-    
-    with st.expander("Create New Client"):
-        with st.form("new_client_form"):
-            company = st.text_input("Company Name*")
-            contact_name = st.text_input("Contact Name")
-            contact_email = st.text_input("Contact Email")
-            contact_number = st.text_input("Contact Phone")
+            selected_idx = st.selectbox(
+                "Select Client",
+                range(len(client_names)),
+                format_func=lambda x: client_names[x],
+                key="client_selector"
+            )
             
-            if st.form_submit_button("Create Client", type="primary", use_container_width=True):
-                if company:
-                    success, message = db_manager.create_client(
-                        user_id, company, contact_name, contact_email, contact_number
-                    )
-                    if success:
-                        st.success(message)
-                        st.rerun()
+            if selected_idx is not None:
+                st.session_state.selected_client = client_ids[selected_idx]
+                selected_client_data = clients_df.iloc[selected_idx]
+                
+                with st.expander("Client Details", expanded=False):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text(f"Contact: {selected_client_data.get('contact_name', 'N/A')}")
+                        st.text(f"Email: {selected_client_data.get('contact_email', 'N/A')}")
+                    with col2:
+                        st.text(f"Phone: {selected_client_data.get('contact_number', 'N/A')}")
+                        try:
+                            quotes_df = db_manager.get_client_quotes(st.session_state.selected_client)
+                            st.text(f"Quotes: {len(quotes_df)}")
+                        except:
+                            st.text("Quotes: 0")
+        
+        with st.expander("Create New Client"):
+            with st.form("new_client_form"):
+                company = st.text_input("Company Name*")
+                contact_name = st.text_input("Contact Name")
+                contact_email = st.text_input("Contact Email")
+                contact_number = st.text_input("Contact Phone")
+                
+                if st.form_submit_button("Create Client", type="primary", use_container_width=True):
+                    if company:
+                        success, message = db_manager.create_client(
+                            user_id, company, contact_name, contact_email, contact_number
+                        )
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
                     else:
-                        st.error(message)
-                else:
-                    st.error("Company name is required")
-    
-    # Dashboard
-    st.markdown("### Dashboard")
-    try:
-        stats = db_manager.get_dashboard_stats(user_id)
-    except:
-        stats = {
-            'total_clients': 0,
-            'total_quotes': 0,
-            'recent_quotes': 0,
-            'cart_items': 0
-        }
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        metric_card("Total Clients", stats['total_clients'])
-        metric_card("Recent Quotes", stats['recent_quotes'])
-    with col2:
-        metric_card("Total Quotes", stats['total_quotes'])
-        metric_card("Cart Items", stats['cart_items'])
-    
-    # Recent Search History
-    try:
-        search_history = db_manager.get_search_history(user_id)
-        if search_history:
-            st.markdown("### Recent Searches")
-            for search_term in search_history[:5]:
-                if st.button(f"🔍 {search_term}", key=f"recent_{search_term}", use_container_width=True):
-                    st.session_state.search_term = search_term
-                    st.session_state.active_page = 'search'
-                    st.rerun()
-    except:
-        pass
+                        st.error("Company name is required")
+        
+        # Dashboard
+        st.markdown("### Dashboard")
+        try:
+            stats = db_manager.get_dashboard_stats(user_id)
+        except:
+            stats = {
+                'total_clients': 0,
+                'total_quotes': 0,
+                'recent_quotes': 0,
+                'cart_items': 0
+            }
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            metric_card("Total Clients", stats['total_clients'])
+            metric_card("Recent Quotes", stats['recent_quotes'])
+        with col2:
+            metric_card("Total Quotes", stats['total_quotes'])
+            metric_card("Cart Items", stats['cart_items'])
+        
+        # Recent Search History
+        try:
+            search_history = db_manager.get_search_history(user_id)
+            if search_history:
+                st.markdown("### Recent Searches")
+                for search_term in search_history[:5]:
+                    if st.button(f"🔍 {search_term}", key=f"recent_{search_term}", use_container_width=True):
+                        st.session_state.search_term = search_term
+                        st.session_state.active_page = 'search'
+                        st.rerun()
+        except:
+            pass
 
 def show_search_page(user_id, db_manager):
     """Display search/products page"""

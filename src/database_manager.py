@@ -19,6 +19,51 @@ class DatabaseManager:
         self.is_online = supabase_client is not None
         self.sqlite_path = offline_db_path
         self._init_cache()
+        
+        # Check and load products if needed
+        try:
+            if not self.check_products_exist():
+                print("No products found in database.")
+                excel_path = 'turbo_air_products.xlsx'
+                if os.path.exists(excel_path):
+                    print(f"Found {excel_path}, loading products...")
+                    from .database.create_db import load_products_from_excel
+                    conn = self.get_connection()
+                    load_products_from_excel(conn)
+                    conn.close()
+                    print("Products loaded successfully!")
+                    # Clear cache to force reload
+                    st.cache_data.clear()
+                else:
+                    print(f"Excel file '{excel_path}' not found in project root")
+        except Exception as e:
+            print(f"Error during product initialization: {e}")
+        
+    def check_products_exist(self) -> bool:
+        """Check if any products exist in the database"""
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM products")
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count > 0
+        except Exception as e:
+            print(f"Error checking products: {e}")
+            return False
+            
+        # Check if products need to be loaded
+        if not self.check_products_exist():
+            print("No products found in database.")
+            if os.path.exists('turbo_air_products.xlsx'):
+                print("Loading products from Excel file...")
+                success, message = self.load_products_from_excel()
+                if success:
+                    print(message)
+                else:
+                    print(f"Failed to load products: {message}")
+            else:
+                print("Excel file 'turbo_air_products.xlsx' not found.")
     
     def _init_cache(self):
         """Initialize in-memory cache"""

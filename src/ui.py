@@ -464,8 +464,30 @@ def mobile_header(title: str, show_back: bool = False):
     st.markdown(header_html, unsafe_allow_html=True)
 
 def mobile_search_bar(placeholder: str = "Search for products"):
-    """Render mobile search bar"""
-    return st.text_input("Search", placeholder=placeholder, key="search_input", label_visibility="collapsed")
+    """Render mobile search bar with live search"""
+    # Create a unique key for the search input
+    search_key = "search_input"
+    
+    # Style the search bar
+    st.markdown(f"""
+    <style>
+    div[data-testid="stTextInput"] > div > div > input[key="{search_key}"] {{
+        background-color: {COLORS['surface']};
+        border-radius: 10px;
+        border: none;
+        padding: 12px 16px;
+        font-size: 16px;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Search input with live updates
+    return st.text_input(
+        "Search", 
+        placeholder=placeholder, 
+        key=search_key, 
+        label_visibility="collapsed"
+    )
 
 def category_grid(categories: List[Dict[str, str]]):
     """Render category grid"""
