@@ -122,16 +122,30 @@ class AuthManager:
                 user = response.session.user
                 
                 # Get role from local database
-                conn = sqlite3.connect('turbo_air_db_online.sqlite')
+                conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
+                conn.execute("PRAGMA journal_mode=WAL")
                 cursor = conn.cursor()
+                
+                # First check Supabase user_profiles
+                role = 'distributor'  # default
+                try:
+                    sup_response = self.supabase.table('user_profiles').select('role').eq('id', user.id).single().execute()
+                    if sup_response.data and sup_response.data.get('role'):
+                        role = sup_response.data['role']
+                except:
+                    pass
+                
+                # Check local database
                 cursor.execute("SELECT role FROM user_profiles WHERE id = ?", (user.id,))
                 result = cursor.fetchone()
                 
                 if result:
-                    role = result[0]
+                    # Use admin role if either source says admin
+                    local_role = result[0]
+                    if local_role == 'admin' or role == 'admin':
+                        role = 'admin'
                 else:
                     # First time login - sync user
-                    role = 'distributor'
                     self._sync_user_to_local({'id': user.id, 'email': user.email}, role)
                 
                 conn.close()
@@ -196,34 +210,70 @@ class AuthManager:
     
     def _sync_user_to_local(self, user_data: Dict, role: str = 'distributor', company: str = '') -> bool:
         """Sync Supabase user to local database"""
-        try:
-            conn = sqlite3.connect('turbo_air_db_online.sqlite')
-            cursor = conn.cursor()
-            
-            # Check if user exists
-            cursor.execute("SELECT id FROM user_profiles WHERE id = ?", (user_data['id'],))
-            exists = cursor.fetchone() is not None
-            
-            if exists:
-                # Update existing user
-                cursor.execute("""
-                    UPDATE user_profiles 
-                    SET email = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (user_data['email'], user_data['id']))
-            else:
-                # Insert new user
-                cursor.execute("""
-                    INSERT INTO user_profiles (id, email, role, company, password_hash)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (user_data['id'], user_data['email'], role, company, ''))
-            
-            conn.commit()
-            conn.close()
-            return True
-        except Exception as e:
-            print(f"Error syncing user to local: {e}")
-            return False
+        max_retries = 3
+        retry_delay = 0.1
+        
+        for attempt in range(max_retries):
+            try:
+                conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
+                conn.execute("PRAGMA journal_mode=WAL")
+                cursor = conn.cursor()
+                
+                # Check if user exists by ID first
+                cursor.execute("SELECT id, role FROM user_profiles WHERE id = ?", (user_data['id'],))
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Update existing user but preserve admin role if they have it
+                    existing_role = existing[1]
+                    if existing_role == 'admin':
+                        role = 'admin'  # Don't downgrade admin users
+                        
+                    cursor.execute("""
+                        UPDATE user_profiles 
+                        SET email = ?, role = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (user_data['email'], role, user_data['id']))
+                else:
+                    # Check if email exists with different ID (clean up old records)
+                    cursor.execute("SELECT id FROM user_profiles WHERE email = ? AND id != ?", 
+                                 (user_data['email'], user_data['id']))
+                    old_user = cursor.fetchone()
+                    
+                    if old_user:
+                        # Delete old record
+                        cursor.execute("DELETE FROM user_profiles WHERE id = ?", (old_user[0],))
+                    
+                    # Check if this should be admin (first user)
+                    cursor.execute("SELECT COUNT(*) FROM user_profiles")
+                    count = cursor.fetchone()[0]
+                    
+                    if count == 0:
+                        role = 'admin'  # First user is admin
+                    
+                    # Insert new user
+                    cursor.execute("""
+                        INSERT INTO user_profiles (id, email, role, company, password_hash)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (user_data['id'], user_data['email'], role, company, ''))
+                
+                conn.commit()
+                conn.close()
+                return True
+                
+            except sqlite3.OperationalError as e:
+                if "locked" in str(e) and attempt < max_retries - 1:
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    print(f"Error syncing user to local: {e}")
+                    return False
+            except Exception as e:
+                print(f"Error syncing user to local: {e}")
+                return False
+        
+        return False
     
     def sign_in_with_email(self, email: str, password: str, remember_me: bool = False) -> Tuple[bool, str]:
         """Sign in with email and password"""
@@ -239,17 +289,31 @@ class AuthManager:
                     # Store session for persistence
                     st.session_state.supabase_session = response.session
                     
-                    # Get role from local database
-                    conn = sqlite3.connect('turbo_air_db_online.sqlite')
+                    # Get role from both Supabase and local database
+                    role = 'distributor'  # default
+                    
+                    # Check Supabase first
+                    try:
+                        sup_response = self.supabase.table('user_profiles').select('role').eq('id', response.user.id).single().execute()
+                        if sup_response.data and sup_response.data.get('role'):
+                            role = sup_response.data['role']
+                    except:
+                        pass
+                    
+                    # Check local database
+                    conn = sqlite3.connect('turbo_air_db_online.sqlite', timeout=20.0)
+                    conn.execute("PRAGMA journal_mode=WAL")
                     cursor = conn.cursor()
                     cursor.execute("SELECT role FROM user_profiles WHERE id = ?", (response.user.id,))
                     result = cursor.fetchone()
                     
                     if result:
-                        role = result[0]
+                        local_role = result[0]
+                        # Use admin if either source says admin
+                        if local_role == 'admin' or role == 'admin':
+                            role = 'admin'
                     else:
                         # First time login - sync user
-                        role = 'distributor'
                         self._sync_user_to_local({'id': response.user.id, 'email': response.user.email}, role)
                     
                     conn.close()
@@ -315,9 +379,9 @@ class AuthManager:
                     conn.close()
                     
                     if is_first_user:
-                        return True, "Admin account created successfully! Please check your email to confirm your account."
+                        return True, "Admin account created successfully! You can now sign in."
                     else:
-                        return True, "Successfully signed up! Please check your email to confirm your account."
+                        return True, "Successfully signed up! You can now sign in."
                 else:
                     return False, "Failed to create account"
                     
