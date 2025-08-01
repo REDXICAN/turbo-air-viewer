@@ -17,7 +17,7 @@ from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.persistence import PersistenceManager
-from src.ui import apply_mobile_css, bottom_navigation
+from src.ui import apply_mobile_css, bottom_navigation, floating_cart_button
 from src.pages import (
     show_home_page,
     show_search_page,
@@ -239,12 +239,18 @@ def main():
     
     # Check authentication
     if not auth_manager.is_authenticated():
+        # Add title
+        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        
         # Center the auth form on larger screens without extra padding
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             # Show auth form
             auth_manager.show_auth_form()
     else:
+        # Add title for all authenticated pages
+        st.markdown("<h1 style='text-align: center; margin-bottom: 1rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        
         # Update sync status
         try:
             sync_manager.update_sync_status()
@@ -263,10 +269,12 @@ def main():
             except:
                 st.session_state.cart_count = 0
         
+        # Clear product detail when navigating away
+        if st.session_state.active_page != 'products' and st.session_state.active_page != 'search':
+            st.session_state.show_product_detail = None
+        
         # Route to appropriate page
         active_page = st.session_state.active_page
-        
-        # Note: Removed the centered title "Turbo Air Catalog" as requested
         
         if active_page == 'home':
             show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
@@ -283,13 +291,15 @@ def main():
         elif active_page == 'quote_summary' and st.session_state.last_quote:
             show_quote_summary(st.session_state.last_quote)
         
-        # Product detail modal
-        if st.session_state.show_product_detail:
-            show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
+        # Product detail modal - removed, now handled in search page
         
         # Bottom navigation
         if not st.session_state.show_product_detail:
             bottom_navigation(st.session_state.active_page)
+        
+        # Floating cart button (except on cart page)
+        if active_page != 'cart' and st.session_state.cart_count > 0:
+            floating_cart_button(st.session_state.cart_count)
 
 if __name__ == "__main__":
     main()

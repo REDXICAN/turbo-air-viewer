@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Callable
 COLORS = {
     'primary': '#007AFF',
     'turbo_blue': '#20429c',
+    'turbo_red': '#FF3B30',
     'background': '#FFFFFF',
     'surface': '#F2F2F7',
     'card': '#FFFFFF',
@@ -26,37 +27,46 @@ COLORS = {
 
 # Turbo Air Official Categories
 TURBO_AIR_CATEGORIES = {
-    "REACH-IN REFRIGERATION": {
-        "icon": "❄️",
-        "subcategories": []
-    },
-    "FOOD PREP TABLES": {
-        "icon": "🥗",
-        "subcategories": []
-    },
-    "UNDERCOUNTER REFRIGERATION": {
-        "icon": "🧊",
-        "subcategories": []
-    },
-    "WORKTOP REFRIGERATION": {
-        "icon": "🔧",
-        "subcategories": []
-    },
     "GLASS DOOR MERCHANDISERS": {
         "icon": "🥤",
-        "subcategories": []
+        "subcategories": [
+            "Super Deluxe Series Glass Door Merchandisers",
+            "Super Deluxe Jumbo Series Glass Door Merchandisers",
+            "Standard Series Glass Door Merchandisers",
+            "Ice Merchandisers",
+            "E-line - Swing Doors Refrigerators",
+            "Top Open Island Freezers",
+            "Ice Cream Dipping Cabinets"
+        ]
     },
     "DISPLAY CASES": {
         "icon": "🍰",
-        "subcategories": []
+        "subcategories": [
+            "Open Display Merchandisers",
+            "Sandwich & Cheese Cases",
+            "Vertical Cases",
+            "Vertical Air Curtains",
+            "Island Display Cases",
+            "Bakery & Deli Display Cases",
+            "Sushi Cases"
+        ]
     },
     "UNDERBAR EQUIPMENT": {
         "icon": "🍺",
-        "subcategories": []
+        "subcategories": [
+            "Bottle Coolers",
+            "Glass / Mug Frosters",
+            "Beer Dispensers",
+            "Club Top Beer Dispensers",
+            "Back Bars",
+            "Narrow Back Bars"
+        ]
     },
     "MILK COOLERS": {
         "icon": "🥛",
-        "subcategories": []
+        "subcategories": [
+            "Milk Coolers"
+        ]
     }
 }
 
@@ -252,6 +262,52 @@ def apply_mobile_css():
         font-weight: 500;
     }}
     
+    /* Floating cart button */
+    .floating-cart {{
+        position: fixed;
+        bottom: 100px;
+        right: 20px;
+        width: 56px;
+        height: 56px;
+        background-color: {COLORS['turbo_red']};
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        cursor: pointer;
+        z-index: 999;
+        transition: all 0.2s ease;
+    }}
+    
+    .floating-cart:hover {{
+        transform: scale(1.05);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+    }}
+    
+    .floating-cart-icon {{
+        color: white;
+        font-size: 24px;
+        position: relative;
+    }}
+    
+    .floating-cart-badge {{
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background-color: {COLORS['turbo_blue']};
+        color: white;
+        font-size: 12px;
+        font-weight: 600;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+    }}
+    
     /* Metrics card */
     .metric-card {{
         background: {COLORS['surface']};
@@ -317,6 +373,12 @@ def apply_mobile_css():
         border: none;
         padding: 0;
         width: 100%;
+    }}
+    
+    /* Red add to cart button */
+    .stButton > button[kind="primary"] {{
+        background-color: {COLORS['turbo_red']} !important;
+        color: white !important;
     }}
     
     /* Fix login form spacing on desktop */
@@ -489,53 +551,61 @@ def category_grid(categories: List[Dict[str, str]]):
             icon = TURBO_AIR_CATEGORIES.get(category['name'], {}).get('icon', '📦')
             
             if st.button(
-                f"{icon}\n{category['name']}",
+                f"{icon}\n{category['name']}\n{category.get('count', 0)} items",
                 key=f"cat_{category['name']}",
                 use_container_width=True
             ):
                 st.session_state.selected_category = category['name']
                 st.session_state.active_page = 'products'
                 st.rerun()
-            
-            st.markdown(f"""
-            <div class="category-card">
-                <div class="icon">{icon}</div>
-                <h4>{category['name']}</h4>
-                <p style="color: white; font-size: 12px; margin: 0;">{category.get('count', 0)} items</p>
-            </div>
-            """, unsafe_allow_html=True)
 
 def quick_access_section():
-    """Render quick access section"""
-    st.markdown("### Quick Access")
-    
+    """Render quick access section - not used anymore"""
+    pass
+
+def quick_access_section_compact():
+    """Render compact quick access section - 2 rows of 4"""
     items = [
-        {"icon": "❄️", "label": "Reach-In\nRefrigeration", "category": "REACH-IN REFRIGERATION"},
-        {"icon": "🥗", "label": "Food Prep\nTables", "category": "FOOD PREP TABLES"},
-        {"icon": "🧊", "label": "Undercounter\nRefrigeration", "category": "UNDERCOUNTER REFRIGERATION"},
-        {"icon": "🔧", "label": "Worktop\nRefrigeration", "category": "WORKTOP REFRIGERATION"},
-        {"icon": "🥤", "label": "Glass Door\nMerchandisers", "category": "GLASS DOOR MERCHANDISERS"},
-        {"icon": "🍰", "label": "Display\nCases", "category": "DISPLAY CASES"},
-        {"icon": "🍺", "label": "Underbar\nEquipment", "category": "UNDERBAR EQUIPMENT"},
-        {"icon": "🥛", "label": "Milk\nCoolers", "category": "MILK COOLERS"}
+        {"icon": "🥤", "label": "Glass Door", "category": "GLASS DOOR MERCHANDISERS"},
+        {"icon": "🍰", "label": "Display", "category": "DISPLAY CASES"},
+        {"icon": "🍺", "label": "Underbar", "category": "UNDERBAR EQUIPMENT"},
+        {"icon": "🥛", "label": "Milk", "category": "MILK COOLERS"},
+        {"icon": "❄️", "label": "Reach-In", "category": "REACH-IN REFRIGERATION"},
+        {"icon": "🍕", "label": "Prep Tables", "category": "FOOD PREP TABLES"},
+        {"icon": "📦", "label": "Undercounter", "category": "UNDERCOUNTER REFRIGERATION"},
+        {"icon": "🔧", "label": "Worktop", "category": "WORKTOP REFRIGERATION"}
     ]
     
-    # Show in 2 rows of 4
-    for row in range(2):
-        cols = st.columns(4)
-        for i in range(4):
-            idx = row * 4 + i
-            if idx < len(items):
-                item = items[idx]
-                with cols[i]:
-                    if st.button(
-                        f"{item['icon']}\n{item['label']}",
-                        key=f"quick_{item['category']}",
-                        use_container_width=True
-                    ):
-                        st.session_state.selected_category = item['category']
-                        st.session_state.active_page = 'products'
-                        st.rerun()
+    # First row
+    cols1 = st.columns(4)
+    for i in range(4):
+        with cols1[i]:
+            item = items[i]
+            if st.button(
+                f"{item['icon']}\n{item['label']}",
+                key=f"quick_{item['category']}",
+                use_container_width=True,
+                help=item['category']
+            ):
+                st.session_state.selected_category = item['category']
+                st.session_state.active_page = 'products'
+                st.rerun()
+    
+    # Second row
+    cols2 = st.columns(4)
+    for i in range(4):
+        with cols2[i]:
+            if i + 4 < len(items):
+                item = items[i + 4]
+                if st.button(
+                    f"{item['icon']}\n{item['label']}",
+                    key=f"quick_{item['category']}",
+                    use_container_width=True,
+                    help=item['category']
+                ):
+                    st.session_state.selected_category = item['category']
+                    st.session_state.active_page = 'products'
+                    st.rerun()
 
 def subcategory_list(subcategories: List[str], parent_category: str):
     """Render subcategory list"""
@@ -585,6 +655,23 @@ def bottom_navigation(active_page: str):
                 st.session_state.active_page = item["page"]
                 st.rerun()
 
+def floating_cart_button(cart_count: int):
+    """Render floating cart button"""
+    cart_html = f"""
+    <div class="floating-cart">
+        <div class="floating-cart-icon">
+            🛒
+            <div class="floating-cart-badge">{cart_count}</div>
+        </div>
+    </div>
+    """
+    st.markdown(cart_html, unsafe_allow_html=True)
+    
+    # Create invisible button overlay
+    if st.button("", key="floating_cart_btn", help=f"Cart ({cart_count} items)"):
+        st.session_state.active_page = 'cart'
+        st.rerun()
+
 def product_list_item(product: Dict):
     """Render product list item"""
     # Get values with "-" for None/empty
@@ -603,19 +690,17 @@ def product_list_item(product: Dict):
     """
     return item_html
 
+def product_list_item_compact(product: Dict):
+    """Render compact product list item for 2-column layout"""
+    sku = product.get('sku', 'Unknown')
+    category = product.get('category', '-')
+    price = product.get('price', 0)
+    
+    return f"{sku}\n{category}\n${price:,.0f}"
+
 def filter_row():
-    """Render filter row"""
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        categories = ["All"] + list(TURBO_AIR_CATEGORIES.keys())
-        st.selectbox("Category", categories, key="filter_category")
-    
-    with col2:
-        st.selectbox("Price", ["All", "Under $3,000", "$3,000-$5,000", "$5,000-$10,000", "Over $10,000"], key="filter_price")
-    
-    with col3:
-        st.selectbox("Type", ["All", "Refrigerator", "Freezer", "Display", "Underbar"], key="filter_type")
+    """Render filter row - handled in pages.py now"""
+    pass
 
 def metric_card(label: str, value: int):
     """Render metric card"""

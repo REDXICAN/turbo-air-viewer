@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import Dict
 
 from .ui import (
-    mobile_search_bar, category_grid, quick_access_section,
-    filter_row, product_list_item, metric_card, sync_status_bar,
+    mobile_search_bar, category_grid, quick_access_section_compact,
+    filter_row, product_list_item_compact, metric_card, sync_status_bar,
     subcategory_list, summary_section, quantity_selector, empty_state,
     format_price, truncate_text, COLORS, TURBO_AIR_CATEGORIES
 )
@@ -19,10 +19,7 @@ from .export import export_quote_to_excel, export_quote_to_pdf
 from .email import show_email_quote_dialog
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
-    """Display home page with search at top"""
-    
-    # Search bar at the very top
-    search_term = mobile_search_bar("Search products...")
+    """Display home page without search and quick access"""
     
     # User info and sync status row
     col1, col2 = st.columns([3, 1])
@@ -41,60 +38,7 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         sync_manager.sync_all()
         st.rerun()
     
-    # Handle live search with thumbnails
-    if search_term and len(search_term) >= 2:
-        with st.spinner("Searching..."):
-            results_df = db_manager.search_products(search_term)
-            if not results_df.empty:
-                st.markdown(f"### Search Results ({len(results_df)} items)")
-                
-                # Display results in a grid with thumbnails
-                cols = st.columns(2)
-                for idx, (_, product) in enumerate(results_df.iterrows()):
-                    with cols[idx % 2]:
-                        # Container for product card
-                        with st.container():
-                            # Try to show thumbnail
-                            image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
-                            if os.path.exists(image_path):
-                                st.image(image_path, use_container_width=True)
-                            else:
-                                # Placeholder
-                                st.markdown(f"""
-                                <div style="height: 150px; background: #f0f0f0; 
-                                            border-radius: 8px; display: flex; 
-                                            align-items: center; justify-content: center;">
-                                    <span style="color: #999;">No Image</span>
-                                </div>
-                                """, unsafe_allow_html=True)
-                            
-                            st.markdown(f"**{product['sku']}**")
-                            st.caption(f"{product.get('product_type', '-')}")
-                            st.markdown(f"**${product.get('price', 0):,.2f}**")
-                            
-                            col_btn1, col_btn2 = st.columns(2)
-                            with col_btn1:
-                                if st.button("View", key=f"view_search_{product['id']}", use_container_width=True):
-                                    st.session_state.show_product_detail = product.to_dict()
-                                    st.rerun()
-                            with col_btn2:
-                                if st.button("Add to Cart", key=f"add_search_{product['id']}", use_container_width=True, type="primary"):
-                                    if st.session_state.selected_client:
-                                        success, message = db_manager.add_to_cart(
-                                            user_id, product['id'], st.session_state.selected_client
-                                        )
-                                        if success:
-                                            st.success("Added!")
-                                            st.session_state.cart_count += 1
-                                    else:
-                                        st.error("Select a client first")
-                
-                st.divider()
-                return  # Don't show categories when searching
-    
-    # Categories section (only show if not searching)
-    st.markdown("### Categories")
-    
+    # Categories section - cards only, no title
     main_categories = []
     for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
         try:
@@ -113,9 +57,6 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         category_grid(main_categories)
     else:
         st.error("Failed to load categories")
-    
-    # Quick Access
-    quick_access_section()
     
     # Clients section
     st.markdown("### Clients")
@@ -207,22 +148,41 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         pass
 
 def show_search_page(user_id, db_manager):
-    """Display search/products page"""
+    """Display search/products page with 2-column layout for category results"""
     if st.button("← Back", key="back_to_home"):
         st.session_state.active_page = 'home'
         st.session_state.selected_category = None
         st.session_state.selected_subcategory = None
+        st.session_state.show_product_detail = None
         st.rerun()
     
-    # Search bar
+    # Search title and bar
+    st.markdown("### Search")
     search_term = mobile_search_bar("Search by model or keyword")
+    
+    # Quick access - compact 2 rows of 4
+    quick_access_section_compact()
     
     # Filters
     st.markdown("### Filters")
-    filter_row()
+    filter_col1, filter_col2, filter_col3 = st.columns(3)
     
-    if search_term:
-        # Add to search history
+    with filter_col1:
+        categories = ["All"] + list(TURBO_AIR_CATEGORIES.keys())
+        filter_category = st.selectbox("Category", categories, key="filter_category")
+    
+    with filter_col2:
+        price_ranges = ["All", "Under $3,000", "$3,000-$5,000", "$5,000-$10,000", "Over $10,000"]
+        filter_price = st.selectbox("Price", price_ranges, key="filter_price")
+    
+    with filter_col3:
+        product_types = ["All", "Refrigerator", "Freezer", "Display", "Underbar", "Prep Table", "Heated"]
+        filter_type = st.selectbox("Type", product_types, key="filter_type")
+    
+    results_df = pd.DataFrame()
+    
+    if search_term and len(search_term) >= 1:  # Live search from first character
+        # Add to search history if length > 2
         if len(search_term) > 2:
             try:
                 db_manager.add_search_history(user_id, search_term)
@@ -262,6 +222,7 @@ def show_search_page(user_id, db_manager):
             if st.button("← Back to Categories", key="back_to_categories"):
                 st.session_state.selected_category = None
                 st.session_state.selected_subcategory = None
+                st.session_state.show_product_detail = None
                 st.rerun()
             
             st.markdown(f"### {st.session_state.selected_category}")
@@ -275,6 +236,7 @@ def show_search_page(user_id, db_manager):
                 else:
                     if st.button("← Back to Subcategories", key="back_to_subcategories"):
                         st.session_state.selected_subcategory = None
+                        st.session_state.show_product_detail = None
                         st.rerun()
                     
                     st.markdown(f"#### {st.session_state.selected_subcategory}")
@@ -292,32 +254,235 @@ def show_search_page(user_id, db_manager):
                 except:
                     results_df = pd.DataFrame()
     
-    # Display products
+    # Apply filters
+    if not results_df.empty:
+        # Category filter
+        if filter_category != "All":
+            results_df = results_df[results_df['category'] == filter_category]
+        
+        # Price filter
+        if filter_price != "All":
+            if filter_price == "Under $3,000":
+                results_df = results_df[results_df['price'] < 3000]
+            elif filter_price == "$3,000-$5,000":
+                results_df = results_df[(results_df['price'] >= 3000) & (results_df['price'] <= 5000)]
+            elif filter_price == "$5,000-$10,000":
+                results_df = results_df[(results_df['price'] > 5000) & (results_df['price'] <= 10000)]
+            elif filter_price == "Over $10,000":
+                results_df = results_df[results_df['price'] > 10000]
+        
+        # Type filter
+        if filter_type != "All":
+            type_mapping = {
+                "Refrigerator": ["refrigerator"],
+                "Freezer": ["freezer"],
+                "Display": ["display", "merchandiser"],
+                "Underbar": ["underbar", "undercounter"],
+                "Prep Table": ["prep", "sandwich", "salad", "pizza"],
+                "Heated": ["heated", "hot"]
+            }
+            
+            type_keywords = type_mapping.get(filter_type, [])
+            if type_keywords:
+                mask = results_df['product_type'].str.lower().str.contains('|'.join(type_keywords), na=False)
+                results_df = results_df[mask]
+    
+    # Display products in 2-column layout when category is selected
     if not results_df.empty:
         st.markdown(f"### Results ({len(results_df)} items)")
         
-        for _, product in results_df.iterrows():
-            st.markdown(product_list_item(product.to_dict()), unsafe_allow_html=True)
+        if st.session_state.selected_category and not search_term:
+            # 2-column layout for category browsing
+            col1, col2 = st.columns([0.15, 0.85])
             
-            col1, col2 = st.columns(2)
             with col1:
-                if st.button("View Details", key=f"view_{product['id']}", use_container_width=True):
-                    st.session_state.show_product_detail = product.to_dict()
-            with col2:
-                if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True, type="primary"):
-                    if st.session_state.selected_client:
-                        success, message = db_manager.add_to_cart(
-                            user_id, product['id'], st.session_state.selected_client
-                        )
-                        if success:
-                            st.success("Added to cart!")
-                            st.session_state.cart_count += 1
+                st.markdown("#### Products")
+                for idx, (_, product) in enumerate(results_df.iterrows()):
+                    # Get thumbnail
+                    thumbnail_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
+                    
+                    # Product button with thumbnail
+                    with st.container():
+                        if os.path.exists(thumbnail_path):
+                            st.image(thumbnail_path, use_container_width=True)
+                        
+                        if st.button(
+                            f"{product['sku']}\n{product.get('category', '')}\n${product['price']:,.0f}",
+                            key=f"prod_select_{product['id']}",
+                            use_container_width=True
+                        ):
+                            st.session_state.show_product_detail = product.to_dict()
                             st.rerun()
+            
+            with col2:
+                if st.session_state.show_product_detail:
+                    show_product_detail_inline(st.session_state.show_product_detail, user_id, db_manager)
+                else:
+                    st.info("Select a product from the left to view details")
+        else:
+            # Regular list view for search results
+            for _, product in results_df.iterrows():
+                col_img, col_info = st.columns([0.3, 0.7])
+                
+                with col_img:
+                    # Show thumbnail
+                    thumbnail_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
+                    if os.path.exists(thumbnail_path):
+                        st.image(thumbnail_path, use_container_width=True)
                     else:
-                        st.error("Please select a client first")
-            st.divider()
+                        st.markdown("""
+                        <div style="height: 100px; background: #f0f0f0; 
+                                    border-radius: 8px; display: flex; 
+                                    align-items: center; justify-content: center;">
+                            <span style="color: #999;">No Image</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                
+                with col_info:
+                    st.markdown(f"**{product['sku']}**")
+                    st.caption(f"{product.get('product_type', '-')} • {product.get('category', '-')}")
+                    st.markdown(f"**${product.get('price', 0):,.2f}**")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("View Details", key=f"view_{product['id']}", use_container_width=True):
+                            st.session_state.show_product_detail = product.to_dict()
+                            st.session_state.selected_category = product.get('category')
+                            st.rerun()
+                    with col2:
+                        if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True, type="primary"):
+                            if st.session_state.selected_client:
+                                success, message = db_manager.add_to_cart(
+                                    user_id, product['id'], st.session_state.selected_client
+                                )
+                                if success:
+                                    st.success("Added to cart!")
+                                    st.session_state.cart_count += 1
+                                    st.rerun()
+                            else:
+                                st.error("Please select a client first")
+                st.divider()
     elif search_term:
         st.info("No products found")
+
+def show_product_detail_inline(product: Dict, user_id: str, db_manager):
+    """Display product detail in the right column"""
+    # Product images
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
+        if os.path.exists(image_path):
+            st.image(image_path, caption="Page 1", use_container_width=True)
+        else:
+            st.markdown(f"""
+            <div style="height: 200px; background: {COLORS['surface']}; 
+                        border-radius: 12px; display: flex; align-items: center; 
+                        justify-content: center;">
+                <span style="color: {COLORS['text_secondary']};">No Image</span>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col2:
+        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.2.png"
+        if os.path.exists(image_path):
+            st.image(image_path, caption="Page 2", use_container_width=True)
+    
+    # Product info
+    st.markdown(f"### {product['sku']}")
+    st.markdown(f"**{product.get('product_type') or '-'}**")
+    st.markdown(f"### {format_price(product.get('price', 0))}")
+    
+    if product.get('description'):
+        st.markdown(product['description'])
+    
+    # Specifications
+    st.markdown("### Specifications")
+    
+    # Helper function to display value or "-"
+    def display_value(value):
+        return value if value else "-"
+    
+    specs_left = {
+        "Capacity": display_value(product.get('capacity')),
+        "Dimensions": display_value(product.get('dimensions')),
+        "Weight": display_value(product.get('weight')),
+        "Voltage": display_value(product.get('voltage')),
+        "Amperage": display_value(product.get('amperage'))
+    }
+    
+    specs_right = {
+        "Temperature Range": display_value(product.get('temperature_range')),
+        "Refrigerant": display_value(product.get('refrigerant')),
+        "Compressor": display_value(product.get('compressor')),
+        "Shelves": display_value(product.get('shelves')),
+        "Doors": display_value(product.get('doors'))
+    }
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        for key, value in specs_left.items():
+            st.caption(key)
+            st.markdown(f"**{value}**")
+    
+    with col2:
+        for key, value in specs_right.items():
+            st.caption(key)
+            st.markdown(f"**{value}**")
+    
+    if product.get('features'):
+        st.markdown("### Features")
+        st.markdown(product['features'])
+    
+    if product.get('certifications'):
+        st.markdown("### Certifications")
+        st.markdown(product['certifications'])
+    
+    # Add to Cart button - sticky at bottom center with red color
+    st.markdown("""
+    <style>
+    .add-to-cart-container {
+        position: fixed;
+        bottom: 80px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999;
+        width: 300px;
+    }
+    .add-to-cart-btn {
+        background-color: #FF3B30 !important;
+        color: white !important;
+        padding: 12px 24px;
+        border-radius: 25px;
+        border: none;
+        font-size: 16px;
+        font-weight: 600;
+        width: 100%;
+        cursor: pointer;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Create a placeholder for the button
+    placeholder = st.empty()
+    
+    # Add to cart functionality
+    if st.button("Add to Cart", key="detail_add_to_cart", use_container_width=True, type="primary"):
+        if st.session_state.selected_client:
+            success, message = db_manager.add_to_cart(
+                user_id, product['id'], st.session_state.selected_client
+            )
+            if success:
+                st.success("Added to cart!")
+                st.session_state.cart_count += 1
+                st.rerun()
+        else:
+            st.error("Please select a client first")
+            if st.button("Go to Home to Select Client", use_container_width=True):
+                st.session_state.show_product_detail = None
+                st.session_state.active_page = 'home'
+                st.rerun()
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
@@ -571,123 +736,8 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
         st.rerun()
 
 def show_product_detail(product: Dict, user_id: str, db_manager):
-    """Display product detail modal"""
-    if st.button("← Back to Products", key="back_from_detail"):
-        st.session_state.show_product_detail = None
-        st.rerun()
-    
-    # Product images
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
-        if os.path.exists(image_path):
-            st.image(image_path, caption="Page 1", use_container_width=True)
-        else:
-            st.markdown(f"""
-            <div style="height: 200px; background: {COLORS['surface']}; 
-                        border-radius: 12px; display: flex; align-items: center; 
-                        justify-content: center;">
-                <span style="color: {COLORS['text_secondary']};">No Image</span>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col2:
-        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.2.png"
-        if os.path.exists(image_path):
-            st.image(image_path, caption="Page 2", use_container_width=True)
-        else:
-            st.markdown(f"""
-            <div style="height: 200px; background: {COLORS['surface']}; 
-                        border-radius: 12px; display: flex; align-items: center; 
-                        justify-content: center;">
-                <span style="color: {COLORS['text_secondary']};">No Image</span>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Product info
-    st.markdown(f"### {product['sku']}")
-    st.markdown(f"**{product.get('product_type') or '-'}**")
-    st.markdown(f"### {format_price(product.get('price', 0))}")
-    
-    if product.get('description'):
-        st.markdown(product['description'])
-    
-    # Specifications
-    st.markdown("### Specifications")
-    
-    # Helper function to display value or "-"
-    def display_value(value):
-        return value if value else "-"
-    
-    specs_left = {
-        "Capacity": display_value(product.get('capacity')),
-        "Dimensions": display_value(product.get('dimensions')),
-        "Weight": display_value(product.get('weight')),
-        "Voltage": display_value(product.get('voltage')),
-        "Amperage": display_value(product.get('amperage'))
-    }
-    
-    specs_right = {
-        "Temperature Range": display_value(product.get('temperature_range')),
-        "Refrigerant": display_value(product.get('refrigerant')),
-        "Compressor": display_value(product.get('compressor')),
-        "Shelves": display_value(product.get('shelves')),
-        "Doors": display_value(product.get('doors'))
-    }
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        for key, value in specs_left.items():
-            st.caption(key)
-            st.markdown(f"**{value}**")
-    
-    with col2:
-        for key, value in specs_right.items():
-            st.caption(key)
-            st.markdown(f"**{value}**")
-    
-    if product.get('features'):
-        st.markdown("### Features")
-        st.markdown(product['features'])
-    
-    if product.get('certifications'):
-        st.markdown("### Certifications")
-        st.markdown(product['certifications'])
-    
-    # Datasheet section
-    st.markdown("### Datasheet")
-    datasheet_col1, datasheet_col2 = st.columns([1, 3])
-    with datasheet_col1:
-        st.markdown(f"""
-        <div style="width: 60px; height: 60px; background: {COLORS['primary']}; 
-                   border-radius: 12px; display: flex; align-items: center; 
-                   justify-content: center; color: white; font-size: 28px;">📄</div>
-        """, unsafe_allow_html=True)
-    with datasheet_col2:
-        st.markdown(f"**{product['sku']} Datasheet**")
-        st.caption("View detailed specifications and dimensions")
-    
-    st.markdown("### ")  # Spacer
-    
-    # Add to Cart button
-    if st.button("Add to Cart", key="detail_add_to_cart", use_container_width=True, type="primary"):
-        if st.session_state.selected_client:
-            success, message = db_manager.add_to_cart(
-                user_id, product['id'], st.session_state.selected_client
-            )
-            if success:
-                st.success("Added to cart!")
-                st.session_state.cart_count += 1
-                st.session_state.show_product_detail = None
-                st.rerun()
-        else:
-            st.error("Please select a client first")
-            if st.button("Go to Home to Select Client", use_container_width=True):
-                st.session_state.show_product_detail = None
-                st.session_state.active_page = 'home'
-                st.rerun()
+    """Display product detail modal - not used anymore, handled inline"""
+    pass
 
 def show_quote_summary(quote: Dict):
     """Display quote summary page"""
