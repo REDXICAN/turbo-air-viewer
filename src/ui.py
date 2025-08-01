@@ -26,46 +26,37 @@ COLORS = {
 
 # Turbo Air Official Categories
 TURBO_AIR_CATEGORIES = {
+    "REACH-IN REFRIGERATION": {
+        "icon": "❄️",
+        "subcategories": []
+    },
+    "FOOD PREP TABLES": {
+        "icon": "🥗",
+        "subcategories": []
+    },
+    "UNDERCOUNTER REFRIGERATION": {
+        "icon": "🧊",
+        "subcategories": []
+    },
+    "WORKTOP REFRIGERATION": {
+        "icon": "🔧",
+        "subcategories": []
+    },
     "GLASS DOOR MERCHANDISERS": {
         "icon": "🥤",
-        "subcategories": [
-            "Super Deluxe Series Glass Door Merchandisers",
-            "Super Deluxe Jumbo Series Glass Door Merchandisers",
-            "Standard Series Glass Door Merchandisers",
-            "Ice Merchandisers",
-            "E-line - Swing Doors Refrigerators",
-            "Top Open Island Freezers",
-            "Ice Cream Dipping Cabinets"
-        ]
+        "subcategories": []
     },
     "DISPLAY CASES": {
         "icon": "🍰",
-        "subcategories": [
-            "Open Display Merchandisers",
-            "Sandwich & Cheese Cases",
-            "Vertical Cases",
-            "Vertical Air Curtains",
-            "Island Display Cases",
-            "Bakery & Deli Display Cases",
-            "Sushi Cases"
-        ]
+        "subcategories": []
     },
     "UNDERBAR EQUIPMENT": {
         "icon": "🍺",
-        "subcategories": [
-            "Bottle Coolers",
-            "Glass / Mug Frosters",
-            "Beer Dispensers",
-            "Club Top Beer Dispensers",
-            "Back Bars",
-            "Narrow Back Bars"
-        ]
+        "subcategories": []
     },
     "MILK COOLERS": {
         "icon": "🥛",
-        "subcategories": [
-            "Milk Coolers"
-        ]
+        "subcategories": []
     }
 }
 
@@ -519,23 +510,32 @@ def quick_access_section():
     st.markdown("### Quick Access")
     
     items = [
+        {"icon": "❄️", "label": "Reach-In\nRefrigeration", "category": "REACH-IN REFRIGERATION"},
+        {"icon": "🥗", "label": "Food Prep\nTables", "category": "FOOD PREP TABLES"},
+        {"icon": "🧊", "label": "Undercounter\nRefrigeration", "category": "UNDERCOUNTER REFRIGERATION"},
+        {"icon": "🔧", "label": "Worktop\nRefrigeration", "category": "WORKTOP REFRIGERATION"},
         {"icon": "🥤", "label": "Glass Door\nMerchandisers", "category": "GLASS DOOR MERCHANDISERS"},
         {"icon": "🍰", "label": "Display\nCases", "category": "DISPLAY CASES"},
         {"icon": "🍺", "label": "Underbar\nEquipment", "category": "UNDERBAR EQUIPMENT"},
         {"icon": "🥛", "label": "Milk\nCoolers", "category": "MILK COOLERS"}
     ]
     
-    cols = st.columns(4)
-    for i, item in enumerate(items):
-        with cols[i]:
-            if st.button(
-                f"{item['icon']}\n{item['label']}",
-                key=f"quick_{item['category']}",
-                use_container_width=True
-            ):
-                st.session_state.selected_category = item['category']
-                st.session_state.active_page = 'products'
-                st.rerun()
+    # Show in 2 rows of 4
+    for row in range(2):
+        cols = st.columns(4)
+        for i in range(4):
+            idx = row * 4 + i
+            if idx < len(items):
+                item = items[idx]
+                with cols[i]:
+                    if st.button(
+                        f"{item['icon']}\n{item['label']}",
+                        key=f"quick_{item['category']}",
+                        use_container_width=True
+                    ):
+                        st.session_state.selected_category = item['category']
+                        st.session_state.active_page = 'products'
+                        st.rerun()
 
 def subcategory_list(subcategories: List[str], parent_category: str):
     """Render subcategory list"""
