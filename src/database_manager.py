@@ -10,6 +10,7 @@ import json
 import streamlit as st
 from typing import List, Dict, Optional, Tuple
 import uuid
+import os
 
 class DatabaseManager:
     def __init__(self, supabase_client=None, offline_db_path='turbo_air_db_online.sqlite'):
@@ -32,27 +33,53 @@ class DatabaseManager:
         """Get SQLite connection"""
         return sqlite3.connect(self.sqlite_path)
     
+    def check_products_exist(self) -> bool:
+        """Check if any products exist in the database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM products")
+        count = cursor.fetchone()[0]
+        conn.close()
+        return count > 0
+    
     @st.cache_data(ttl=300)
     def get_all_products(self) -> pd.DataFrame:
         """Get all products with caching"""
         if self.is_online:
             try:
                 response = self.supabase.table('products').select('*').execute()
-                df = pd.DataFrame(response.data)
-                # Update local cache
-                self._update_local_products(df)
-                return df
-            except:
-                pass
+                if response.data:
+                    df = pd.DataFrame(response.data)
+                    # Update local cache
+                    self._update_local_products(df)
+                    return df
+            except Exception as e:
+                print(f"Error fetching from Supabase: {e}")
         
         # Fallback to SQLite
         conn = self.get_connection()
         df = pd.read_sql_query("SELECT * FROM products", conn)
         conn.close()
+        
+        # If no products found, return empty DataFrame with proper columns
+        if df.empty:
+            df = pd.DataFrame(columns=[
+                'id', 'sku', 'category', 'subcategory', 'product_type', 'description',
+                'voltage', 'amperage', 'phase', 'frequency', 'plug_type',
+                'dimensions', 'dimensions_metric', 'weight', 'weight_metric',
+                'temperature_range', 'temperature_range_metric', 'refrigerant',
+                'compressor', 'capacity', 'doors', 'shelves', 'features',
+                'certifications', 'price', 'created_at', 'updated_at'
+            ])
+        
         return df
     
     def search_products(self, search_term: str) -> pd.DataFrame:
         """Search products by SKU, description, or type"""
+        # Return empty DataFrame if no products exist
+        if not self.check_products_exist():
+            return pd.DataFrame()
+        
         search_pattern = f"%{search_term}%"
         
         if self.is_online:
@@ -79,6 +106,10 @@ class DatabaseManager:
     @st.cache_data(ttl=300)
     def get_products_by_category(self, category: str, subcategory: Optional[str] = None) -> pd.DataFrame:
         """Get products by category with caching"""
+        # Return empty DataFrame if no products exist
+        if not self.check_products_exist():
+            return pd.DataFrame()
+        
         if self.is_online:
             try:
                 query = self.supabase.table('products').select('*').eq('category', category)
@@ -99,6 +130,30 @@ class DatabaseManager:
             df = pd.read_sql_query(query, conn, params=(category,))
         conn.close()
         return df
+    
+    def get_categories_with_counts(self) -> List[Dict[str, any]]:
+        """Get all categories with product counts"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Get unique categories with counts
+        cursor.execute("""
+            SELECT category, COUNT(*) as count 
+            FROM products 
+            WHERE category IS NOT NULL 
+            GROUP BY category 
+            ORDER BY category
+        """)
+        
+        categories = []
+        for row in cursor.fetchall():
+            categories.append({
+                'name': row[0],
+                'count': row[1]
+            })
+        
+        conn.close()
+        return categories
     
     def get_product_by_sku(self, sku: str) -> Optional[Dict]:
         """Get single product by SKU"""
@@ -678,15 +733,23 @@ class DatabaseManager:
         except Exception as e:
             return False, f"Sync error: {str(e)}"
     
-    def load_products_from_excel(self, file_path: str) -> Tuple[bool, str]:
+    def load_products_from_excel(self, file_path: str = 'turbo_air_products.xlsx') -> Tuple[bool, str]:
         """Load products from Excel file"""
         try:
+            # Check if file exists
+            if not os.path.exists(file_path):
+                return False, f"Excel file '{file_path}' not found. Please add it to the project directory."
+            
             # Import the loading function
             from .database.create_db import load_products_from_excel
             
             conn = self.get_connection()
             load_products_from_excel(conn)
             conn.close()
+            
+            # Clear the products cache
+            if 'get_all_products' in st.session_state:
+                del st.session_state['get_all_products']
             
             # If online, sync immediately
             if self.is_online:

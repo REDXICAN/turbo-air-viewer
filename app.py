@@ -36,9 +36,21 @@ st.set_page_config(
 # Remove top padding immediately after page config
 st.markdown("""
 <style>
+    /* Remove all default Streamlit padding */
     #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 0rem;}
     .main > div:first-child { padding-top: 0rem !important; }
     div[data-testid="stDecoration"] { display: none; }
+    .block-container { padding-top: 0rem !important; }
+    
+    /* Fix desktop form centering without extra padding */
+    @media (min-width: 768px) {
+        div[data-testid="column"] > div:first-child > div > div > div {
+            padding-top: 0 !important;
+        }
+        .stForm {
+            margin-top: 2rem !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -131,6 +143,19 @@ def initialize_services():
         st.error(f"Failed to initialize services: {str(e)}")
         st.stop()
 
+def check_excel_file():
+    """Check if Excel file exists and provide instructions if not"""
+    excel_path = 'turbo_air_products.xlsx'
+    if not os.path.exists(excel_path):
+        st.error("⚠️ Product data file not found!")
+        st.info("""
+        **To load products, you need to:**
+        1. Place `turbo_air_products.xlsx` in the project root directory (same folder as `app.py`)
+        2. Restart the application
+        """)
+        return False
+    return True
+
 def main():
     """Main application entry point"""
     # Initialize session state
@@ -145,14 +170,20 @@ def main():
     # Create database if it doesn't exist
     if not os.path.exists('turbo_air_db_online.sqlite'):
         try:
+            # Check if Excel file exists before creating database
+            excel_exists = check_excel_file()
+            
             st.info("Creating database for first time setup...")
             from src.database.create_db import create_local_database
             if create_local_database():
-                st.success("Database created successfully!")
+                if excel_exists:
+                    st.success("Database created and products loaded successfully!")
+                else:
+                    st.warning("Database created but no products loaded. Please add turbo_air_products.xlsx")
                 st.rerun()
         except Exception as e:
             st.error(f"Error creating database: {e}")
-            st.stop()
+            # Don't stop - allow app to continue with empty database
     
     # Initialize services
     auth_manager, db_manager, sync_manager = initialize_services()
@@ -164,17 +195,14 @@ def main():
     if not auth_manager.is_authenticated():
         # Show login page with proper header and centered content
         st.markdown("""
-        <div class="mobile-header">
+        <div class="mobile-header" style="margin-bottom: 0;">
             <div style="display: flex; align-items: center; justify-content: center;">
                 <h2 style="margin: 0; font-size: 20px; font-weight: 600;">Turbo Air</h2>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        # Add some spacing
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        # Center the auth form on larger screens
+        # Center the auth form on larger screens without extra padding
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             # Show auth form

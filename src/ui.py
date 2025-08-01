@@ -73,9 +73,13 @@ def apply_mobile_css():
     """Apply mobile-first CSS styling"""
     css = f"""
     <style>
-    /* Remove Streamlit's default top padding */
+    /* Remove Streamlit's default top padding - More aggressive approach */
     .stApp > header {{
-        display: none;
+        display: none !important;
+    }}
+    
+    .main {{
+        padding-top: 0 !important;
     }}
     
     .main > div:first-child {{
@@ -90,6 +94,15 @@ def apply_mobile_css():
         padding-top: 0 !important;
         padding-bottom: 0 !important;
         max-width: 100% !important;
+    }}
+    
+    /* Remove padding from all parent containers */
+    div[data-testid="stAppViewContainer"] > section {{
+        padding-top: 0 !important;
+    }}
+    
+    div[data-testid="stVerticalBlock"] > div:first-child {{
+        padding-top: 0 !important;
     }}
     
     /* Reset and base styles */
@@ -310,6 +323,40 @@ def apply_mobile_css():
         width: 100%;
     }}
     
+    /* Fix login form spacing on desktop */
+    @media (min-width: 768px) {{
+        /* Remove extra padding from column containers */
+        div[data-testid="column"] {{
+            padding-top: 0 !important;
+        }}
+        
+        div[data-testid="column"] > div {{
+            padding-top: 0 !important;
+        }}
+        
+        /* Add reasonable margin to form only */
+        .stForm {{
+            margin-top: 2rem !important;
+            padding: 2rem;
+            background: {COLORS['card']};
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }}
+        
+        /* Ensure header stays at top */
+        .mobile-header {{
+            position: fixed;
+            left: 0;
+            right: 0;
+            top: 0;
+        }}
+        
+        /* Add padding to body content to account for fixed header */
+        .mobile-container > div:nth-child(2) {{
+            padding-top: 60px;
+        }}
+    }}
+    
     /* Responsive adjustments */
     @media (min-width: 768px) {{
         .mobile-container {{
@@ -337,7 +384,8 @@ def apply_mobile_css():
         /* Adjust form width on desktop */
         [data-testid="stForm"] {{
             max-width: 600px;
-            margin: 0 auto;
+            margin-left: auto !important;
+            margin-right: auto !important;
         }}
     }}
     
@@ -358,6 +406,31 @@ def apply_mobile_css():
         .bottom-nav {{
             display: none;
         }}
+        
+        /* Remove body padding on desktop since no fixed header */
+        .mobile-container > div:nth-child(2) {{
+            padding-top: 0;
+        }}
+        
+        /* Make header position relative on desktop */
+        .mobile-header {{
+            position: relative;
+        }}
+    }}
+    
+    /* Additional fixes for Streamlit specific elements */
+    div[data-baseweb="base-input"] {{
+        margin-bottom: 1rem;
+    }}
+    
+    /* Remove any remaining top margins */
+    .element-container:first-child {{
+        margin-top: 0 !important;
+    }}
+    
+    /* Ensure no padding on the very top level containers */
+    .appview-container {{
+        padding-top: 0 !important;
     }}
     </style>
     """
