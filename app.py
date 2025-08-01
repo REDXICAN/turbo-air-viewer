@@ -15,7 +15,7 @@ from src.config import Config, init_session_state
 from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
-from src.ui import apply_mobile_css, mobile_header, bottom_navigation
+from src.ui import apply_mobile_css, bottom_navigation
 from src.pages import (
     show_home_page,
     show_search_page,
@@ -174,7 +174,12 @@ def main():
             excel_exists = check_excel_file()
             
             st.info("Creating database for first time setup...")
+            
+            # Import create_db module properly
+            import sys
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
             from src.database.create_db import create_local_database
+            
             if create_local_database():
                 if excel_exists:
                     st.success("Database created and products loaded successfully!")
@@ -188,20 +193,8 @@ def main():
     # Initialize services
     auth_manager, db_manager, sync_manager = initialize_services()
     
-    # Main app container with proper styling
-    st.markdown('<div class="mobile-container">', unsafe_allow_html=True)
-    
     # Check authentication
     if not auth_manager.is_authenticated():
-        # Show login page with proper header and centered content
-        st.markdown("""
-        <div class="mobile-header" style="margin-bottom: 0;">
-            <div style="display: flex; align-items: center; justify-content: center;">
-                <h2 style="margin: 0; font-size: 20px; font-weight: 600;">Turbo Air</h2>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
         # Center the auth form on larger screens without extra padding
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
@@ -226,11 +219,13 @@ def main():
             except:
                 st.session_state.cart_count = 0
         
-        # Main content with padding for bottom nav
-        st.markdown('<div class="main-content">', unsafe_allow_html=True)
-        
         # Route to appropriate page
         active_page = st.session_state.active_page
+        
+        # Add centered title for all authenticated pages
+        st.markdown("""
+        <h1 style="text-align: center; font-weight: bold; margin-bottom: 2rem;">Turbo Air</h1>
+        """, unsafe_allow_html=True)
         
         if active_page == 'home':
             show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
@@ -251,13 +246,9 @@ def main():
         if st.session_state.show_product_detail:
             show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
         
-        st.markdown('</div>', unsafe_allow_html=True)  # Close main-content
-        
         # Bottom navigation
         if not st.session_state.show_product_detail:
             bottom_navigation(st.session_state.active_page)
-    
-    st.markdown('</div>', unsafe_allow_html=True)  # Close mobile-container
 
 if __name__ == "__main__":
     main()

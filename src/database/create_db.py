@@ -12,6 +12,108 @@ from supabase import create_client, Client
 from typing import Optional
 import re
 
+# Supabase schema for table creation
+SUPABASE_SCHEMA = """
+-- Products table
+CREATE TABLE IF NOT EXISTS products (
+    id SERIAL PRIMARY KEY,
+    sku TEXT UNIQUE NOT NULL,
+    product_type TEXT,
+    description TEXT,
+    capacity TEXT,
+    doors TEXT,
+    amperage TEXT,
+    dimensions TEXT,
+    dimensions_metric TEXT,
+    weight TEXT,
+    weight_metric TEXT,
+    temperature_range TEXT,
+    temperature_range_metric TEXT,
+    voltage TEXT,
+    phase TEXT,
+    frequency TEXT,
+    plug_type TEXT,
+    refrigerant TEXT,
+    compressor TEXT,
+    shelves TEXT,
+    features TEXT,
+    certifications TEXT,
+    price DECIMAL(10,2),
+    category TEXT,
+    subcategory TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Other required tables
+CREATE TABLE IF NOT EXISTS clients (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    company TEXT NOT NULL,
+    contact_name TEXT,
+    contact_email TEXT,
+    contact_number TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quotes (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    client_id INTEGER REFERENCES clients(id),
+    quote_number TEXT UNIQUE NOT NULL,
+    total_amount DECIMAL(10,2),
+    status TEXT DEFAULT 'draft',
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS quote_items (
+    id SERIAL PRIMARY KEY,
+    quote_id INTEGER REFERENCES quotes(id),
+    product_id INTEGER REFERENCES products(id),
+    quantity INTEGER NOT NULL,
+    unit_price DECIMAL(10,2),
+    total_price DECIMAL(10,2),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS cart_items (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    client_id INTEGER REFERENCES clients(id),
+    product_id INTEGER REFERENCES products(id),
+    quantity INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS search_history (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    search_term TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE,
+    role TEXT DEFAULT 'distributor' CHECK (role IN ('admin', 'sales', 'distributor')),
+    company TEXT,
+    phone TEXT,
+    password_hash TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+CREATE INDEX IF NOT EXISTS idx_quotes_user_id ON quotes(user_id);
+CREATE INDEX IF NOT EXISTS idx_cart_items_user_id ON cart_items(user_id);
+"""
+
 def get_supabase_client() -> Optional[Client]:
     """Get Supabase client if credentials are available"""
     try:
@@ -201,9 +303,16 @@ def create_local_database():
     # Load initial product data if available
     if os.path.exists('turbo_air_products.xlsx'):
         try:
+            print("Found turbo_air_products.xlsx - loading products...")
             load_products_from_excel(conn)
         except Exception as e:
-            print(f"Could not load products from Excel: {e}")
+            print(f"Warning: Could not load products from Excel: {e}")
+            print("Database created without products. Please ensure Excel file is properly formatted.")
+    else:
+        print("Warning: turbo_air_products.xlsx not found.")
+        print("Database created without products. To load products:")
+        print("1. Add turbo_air_products.xlsx to the project directory")
+        print("2. Restart the application or use the 'Load Products' feature")
     
     conn.close()
     return True
@@ -230,8 +339,18 @@ def clean_price(price_value) -> Optional[float]:
 def load_products_from_excel(conn):
     """Load products from Excel file into database and Supabase"""
     try:
+        excel_path = 'turbo_air_products.xlsx'
+        
+        # Check if file exists
+        if not os.path.exists(excel_path):
+            raise FileNotFoundError(f"Excel file '{excel_path}' not found in project directory")
+        
         # Load product data with new column structure
-        products_df = pd.read_excel('turbo_air_products.xlsx', sheet_name=0)
+        print(f"Loading Excel file: {excel_path}")
+        products_df = pd.read_excel(excel_path, sheet_name=0)
+        
+        print(f"Found {len(products_df)} rows in Excel file")
+        print(f"Columns found: {list(products_df.columns)}")
         
         # Expected columns in order
         expected_columns = [
@@ -254,6 +373,7 @@ def load_products_from_excel(conn):
         # Insert products
         cursor = conn.cursor()
         products_inserted = 0
+        products_skipped = 0
         products_for_supabase = []
         
         for idx, row in products_df.iterrows():
@@ -262,6 +382,7 @@ def load_products_from_excel(conn):
                 sku = str(row.get('SKU', '')).strip() if pd.notna(row.get('SKU')) else None
                 
                 if not sku:
+                    products_skipped += 1
                     continue
                 
                 # Prepare product data
@@ -321,15 +442,26 @@ def load_products_from_excel(conn):
                 if supabase:
                     products_for_supabase.append(product_data)
                 
+            except sqlite3.IntegrityError as e:
+                if "UNIQUE constraint failed" in str(e):
+                    print(f"Skipping duplicate SKU: {sku}")
+                    products_skipped += 1
+                else:
+                    print(f"Error inserting product {sku}: {e}")
+                    products_skipped += 1
             except Exception as e:
-                print(f"Error inserting product {sku}: {e}")
+                print(f"Error inserting product at row {idx + 1}: {e}")
+                products_skipped += 1
         
         conn.commit()
         print(f"Successfully loaded {products_inserted} products into SQLite")
+        if products_skipped > 0:
+            print(f"Skipped {products_skipped} rows (empty SKUs or duplicates)")
         
         # Sync to Supabase if online
         if supabase and products_for_supabase:
             try:
+                print("Syncing products to Supabase...")
                 # Clear existing products in Supabase
                 supabase.table('products').delete().neq('sku', '').execute()
                 
@@ -341,7 +473,7 @@ def load_products_from_excel(conn):
                 
                 print(f"Successfully synced {len(products_for_supabase)} products to Supabase")
             except Exception as e:
-                print(f"Error syncing to Supabase: {e}")
+                print(f"Warning: Could not sync to Supabase (will sync later): {e}")
                 # Add to sync queue for later
                 cursor = conn.cursor()
                 import json
@@ -356,6 +488,7 @@ def load_products_from_excel(conn):
     except Exception as e:
         print(f"Error loading products: {e}")
         conn.rollback()
+        raise
 
 if __name__ == "__main__":
     create_local_database()

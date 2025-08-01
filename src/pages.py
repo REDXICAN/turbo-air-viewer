@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict
 
 from .ui import (
-    mobile_header, mobile_search_bar, category_grid, quick_access_section,
+    mobile_search_bar, category_grid, quick_access_section,
     filter_row, product_list_item, metric_card, sync_status_bar,
     subcategory_list, summary_section, quantity_selector, empty_state,
     format_price, truncate_text, COLORS, TURBO_AIR_CATEGORIES
@@ -19,7 +19,6 @@ from .email import show_email_quote_dialog
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     """Display home page"""
-    mobile_header("Turbo Air")
     
     # Welcome section
     col1, col2 = st.columns([3, 1])
@@ -164,8 +163,6 @@ def show_search_page(user_id, db_manager):
         st.session_state.selected_subcategory = None
         st.rerun()
     
-    mobile_header("Equipment Search", show_back=False)
-    
     # Search bar
     search_term = mobile_search_bar("Search by model or keyword")
     
@@ -276,8 +273,6 @@ def show_cart_page(user_id, db_manager):
     if st.button("← Back", key="back_from_cart"):
         st.session_state.active_page = 'home'
         st.rerun()
-        
-    mobile_header("Cart", show_back=False)
     
     if not st.session_state.selected_client:
         empty_state("🛒", "No Client Selected", "Please select a client to view cart", 
@@ -397,7 +392,6 @@ def show_cart_page(user_id, db_manager):
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
     """Display profile page"""
-    mobile_header("Profile")
     
     st.markdown("### Account Information")
     col1, col2 = st.columns(2)
@@ -479,8 +473,6 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     if st.button("← Back to Products", key="back_from_detail"):
         st.session_state.show_product_detail = None
         st.rerun()
-    
-    mobile_header(product['sku'], show_back=False)
     
     # Product images
     col1, col2 = st.columns(2)
@@ -600,8 +592,6 @@ def show_quote_summary(quote: Dict):
     if st.button("← Back", key="back_from_summary"):
         st.session_state.active_page = 'cart'
         st.rerun()
-        
-    mobile_header("Quote Summary", show_back=False)
     
     st.markdown("### Equipment List")
     for _, item in quote['items'].iterrows():

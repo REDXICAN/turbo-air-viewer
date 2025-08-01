@@ -315,6 +315,11 @@ def apply_mobile_css():
         padding-top: 0 !important;
     }}
     
+    /* Remove any empty container spacing */
+    .mobile-container:empty {{
+        display: none !important;
+    }}
+    
     /* Hide default Streamlit buttons styling */
     .stButton > button {{
         background: none;
@@ -431,6 +436,15 @@ def apply_mobile_css():
     /* Ensure no padding on the very top level containers */
     .appview-container {{
         padding-top: 0 !important;
+    }}
+    
+    /* Hide empty containers that might cause spacing */
+    .stMarkdown:has(.mobile-container:empty) {{
+        display: none !important;
+    }}
+    
+    .element-container:has(.mobile-container:empty) {{
+        display: none !important;
     }}
     </style>
     """
