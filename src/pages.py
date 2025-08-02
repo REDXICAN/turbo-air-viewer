@@ -83,7 +83,7 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
             pass
         
         if not has_content:
-            empty_state("🏠", "Welcome to Turbo Air", "Start by searching for products or creating a client")
+            empty_state("🏠", "Start Your Quote", "Search for products or create a client to begin")
 
 def show_search_page(user_id, db_manager):
     """Display search/products page with categories always visible"""

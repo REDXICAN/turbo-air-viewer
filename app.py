@@ -1,5 +1,5 @@
 """
-Turbo Air Catalog - Main Application
+Turbo Air - Main Application
 Fixed with proper imports and responsive design
 """
 
@@ -31,7 +31,7 @@ from src.pages import (
 
 # Page configuration - MUST be first Streamlit command
 st.set_page_config(
-    page_title="Turbo Air Catalog",
+    page_title="Turbo Air",
     page_icon="❄️",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -83,6 +83,24 @@ st.markdown("""
     @media (min-width: 768px) {
         div[data-testid="column"] > div:first-child > div > div > div {
             padding-top: 0 !important;
+        }
+    }
+    
+    /* Logo styling */
+    .stImage {
+        max-width: 300px;
+        margin: 0 auto;
+    }
+    
+    @media (min-width: 768px) {
+        .stImage {
+            max-width: 400px;
+        }
+    }
+    
+    @media (min-width: 1024px) {
+        .stImage {
+            max-width: 500px;
         }
     }
 </style>
@@ -277,12 +295,14 @@ def main():
     
     # Check authentication
     if not auth_manager.is_authenticated():
-        # Add title with responsive spacing
-        st.markdown("""
-        <h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>
-            Turbo Air Catalog
-        </h1>
-        """, unsafe_allow_html=True)
+        # Display logo with responsive sizing
+        logo_path = "Turboair_Logo_01.png"
+        if os.path.exists(logo_path):
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(logo_path, use_column_width=True)
+        else:
+            st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air</h1>", unsafe_allow_html=True)
         
         # Center the auth form on larger screens
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -290,17 +310,25 @@ def main():
             # Show auth form
             auth_manager.show_auth_form()
     else:
-        # Add title for all authenticated pages with responsive spacing
-        st.markdown("""
-        <h1 style='
-            text-align: center; 
-            margin-bottom: 0.5rem; 
-            margin-top: 0.5rem;
-            font-size: clamp(1.5rem, 4vw, 2.5rem);
-        '>
-            Turbo Air Catalog
-        </h1>
-        """, unsafe_allow_html=True)
+        # Display logo for authenticated pages with responsive sizing
+        logo_path = "Turboair_Logo_01.png"
+        if os.path.exists(logo_path):
+            # Create a centered container for the logo
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col2:
+                st.image(logo_path, use_column_width=True)
+                st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <h1 style='
+                text-align: center; 
+                margin-bottom: 0.5rem; 
+                margin-top: 0.5rem;
+                font-size: clamp(1.5rem, 4vw, 2.5rem);
+            '>
+                Turbo Air
+            </h1>
+            """, unsafe_allow_html=True)
         
         # Update sync status
         try:
