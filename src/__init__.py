@@ -1,6 +1,5 @@
 """
 Turbo Air Equipment Viewer - Core Modules
-Updated with new navigation structure
 """
 
 from .config import Config, init_session_state, AppError, DatabaseError, AuthError, SyncError
@@ -8,11 +7,12 @@ from .auth import AuthManager
 from .database_manager import DatabaseManager
 from .sync import SyncManager
 from .persistence import PersistenceManager
-from .ui_components import (
-    apply_mobile_css, app_header, search_bar_component, bottom_navigation,
-    category_grid, product_list_item, recent_searches_section, recent_quotes_section,
-    metrics_section, cart_item_component, cart_summary, quote_export_buttons,
-    empty_state, format_price, truncate_text, COLORS, TURBO_AIR_CATEGORIES
+from .ui import (
+    apply_mobile_css, mobile_header, mobile_search_bar, category_grid,
+    quick_access_section, bottom_navigation, product_list_item, filter_row,
+    metric_card, sync_status_bar, summary_section, subcategory_list,
+    quantity_selector, empty_state, format_price, truncate_text,
+    COLORS, TURBO_AIR_CATEGORIES
 )
 from .pages import (
     show_home_page, show_search_page, show_cart_page, show_profile_page,
@@ -33,10 +33,11 @@ __all__ = [
     'AuthManager', 'DatabaseManager', 'SyncManager', 'PersistenceManager',
     
     # UI Components
-    'apply_mobile_css', 'app_header', 'search_bar_component', 'bottom_navigation',
-    'category_grid', 'product_list_item', 'recent_searches_section', 'recent_quotes_section',
-    'metrics_section', 'cart_item_component', 'cart_summary', 'quote_export_buttons',
-    'empty_state', 'format_price', 'truncate_text', 'COLORS', 'TURBO_AIR_CATEGORIES',
+    'apply_mobile_css', 'mobile_header', 'mobile_search_bar', 'category_grid',
+    'quick_access_section', 'bottom_navigation', 'product_list_item', 'filter_row',
+    'metric_card', 'sync_status_bar', 'summary_section', 'subcategory_list',
+    'quantity_selector', 'empty_state', 'format_price', 'truncate_text',
+    'COLORS', 'TURBO_AIR_CATEGORIES',
     
     # Pages
     'show_home_page', 'show_search_page', 'show_cart_page', 'show_profile_page',
