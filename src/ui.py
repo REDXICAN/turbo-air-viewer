@@ -1121,3 +1121,35 @@ def truncate_text(text: str, max_length: int = 50) -> str:
     if not text:
         return ""
     return text[:max_length] + "..." if len(text) > max_length else text
+
+def bottom_navigation(active_page: str = 'home'):
+    """Display bottom navigation menu - compatibility function"""
+    # This function is referenced in __init__.py but not used in the current implementation
+    # The navigation is handled directly in app.py's show_navigation() function
+    # Keeping this for backward compatibility
+    pass
+
+# Ensure all functions are available for import
+__all__ = [
+    'get_image_base64',
+    'apply_mobile_css',
+    'app_header',
+    'search_bar_component',
+    'category_grid',
+    'product_list_item_compact',
+    'product_details_expanded',
+    'product_list_item',
+    'recent_searches_section',
+    'recent_quotes_section',
+    'metrics_section',
+    'cart_item_component',
+    'cart_summary',
+    'floating_cart_button',
+    'quote_export_buttons',
+    'empty_state',
+    'format_price',
+    'truncate_text',
+    'bottom_navigation',
+    'COLORS',
+    'TURBO_AIR_CATEGORIES'
+]
