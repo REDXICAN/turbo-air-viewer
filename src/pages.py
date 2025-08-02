@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Updated with ultra-compact product display with images
+Fixed with proper responsive design support
 """
 
 import streamlit as st
@@ -16,42 +16,74 @@ from .ui import (
     cart_summary, quote_export_buttons, empty_state, format_price,
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
 )
-from .export import export_quote_to_excel, export_quote_to_pdf
-from .email import show_email_quote_dialog, get_email_service
+
+# Check if these modules exist before importing
+try:
+    from .export import export_quote_to_excel, export_quote_to_pdf, generate_excel_quote, generate_pdf_quote
+except ImportError:
+    # Create dummy functions if export module doesn't exist
+    def export_quote_to_excel(*args, **kwargs):
+        return None
+    def export_quote_to_pdf(*args, **kwargs):
+        return None
+    def generate_excel_quote(*args, **kwargs):
+        import io
+        return io.BytesIO()
+    def generate_pdf_quote(*args, **kwargs):
+        import io
+        return io.BytesIO()
+
+try:
+    from .email import show_email_quote_dialog, get_email_service
+except ImportError:
+    # Create dummy functions if email module doesn't exist
+    def show_email_quote_dialog(*args, **kwargs):
+        st.warning("Email functionality not available")
+    def get_email_service():
+        return None
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     """Display home page with recent activity and metrics"""
     
-    # Recent searches
-    try:
-        searches = db_manager.get_search_history(user_id)
-        if searches:
-            recent_searches_section(searches)
-    except:
-        pass
-    
-    # Recent quotes
-    try:
-        quotes_df = db_manager.get_user_quotes(user_id, limit=5)
-        if not quotes_df.empty:
-            recent_quotes_section(quotes_df.to_dict('records'))
-    except:
-        pass
-    
-    # Metrics
-    try:
-        stats = db_manager.get_dashboard_stats(user_id)
-        metrics_section(stats)
-    except:
-        pass
-    
-    # If no content, show empty state
-    if not any([
-        db_manager.get_search_history(user_id),
-        not db_manager.get_user_quotes(user_id, limit=5).empty,
-        db_manager.get_dashboard_stats(user_id).get('total_clients', 0) > 0
-    ]):
-        empty_state("🏠", "Welcome to Turbo Air", "Start by searching for products or creating a client")
+    # Create responsive layout
+    container = st.container()
+    with container:
+        # Recent searches
+        try:
+            searches = db_manager.get_search_history(user_id)
+            if searches:
+                recent_searches_section(searches)
+        except:
+            pass
+        
+        # Recent quotes
+        try:
+            quotes_df = db_manager.get_user_quotes(user_id, limit=5)
+            if not quotes_df.empty:
+                recent_quotes_section(quotes_df.to_dict('records'))
+        except:
+            pass
+        
+        # Metrics
+        try:
+            stats = db_manager.get_dashboard_stats(user_id)
+            metrics_section(stats)
+        except:
+            pass
+        
+        # If no content, show empty state
+        has_content = False
+        try:
+            has_content = (
+                bool(db_manager.get_search_history(user_id)) or
+                not db_manager.get_user_quotes(user_id, limit=5).empty or
+                db_manager.get_dashboard_stats(user_id).get('total_clients', 0) > 0
+            )
+        except:
+            pass
+        
+        if not has_content:
+            empty_state("🏠", "Welcome to Turbo Air", "Start by searching for products or creating a client")
 
 def show_search_page(user_id, db_manager):
     """Display search/products page with categories always visible"""
@@ -65,7 +97,7 @@ def show_search_page(user_id, db_manager):
     for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
         try:
             products_df = db_manager.get_products_by_category(cat_name)
-            count = len(products_df) if products_df is not None else 0
+            count = len(products_df) if products_df is not None and not products_df.empty else 0
         except:
             count = 0
         
@@ -107,19 +139,22 @@ def show_search_page(user_id, db_manager):
     
     else:
         # Show recent searches when no active search
-        searches = db_manager.get_search_history(user_id)
-        if searches:
-            st.markdown("### Recent Searches")
-            for search in searches[:5]:
-                if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
-                    st.session_state.search_term = search
-                    st.rerun()
+        try:
+            searches = db_manager.get_search_history(user_id)
+            if searches:
+                st.markdown("### Recent Searches")
+                for search in searches[:5]:
+                    if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
+                        st.session_state.search_term = search
+                        st.rerun()
+        except:
+            pass
     
-    # Display results in ultra-compact format with images
+    # Display results in compact format with images
     if not results_df.empty:
         st.markdown(f"### Results ({len(results_df)} items)")
         
-        # Create Excel-like list header
+        # Create list header
         st.markdown("""
         <div class="product-list-header">
             <div>Image</div>
@@ -129,7 +164,7 @@ def show_search_page(user_id, db_manager):
         </div>
         """, unsafe_allow_html=True)
         
-        # Display products in ultra-compact format with images
+        # Display products
         for idx, product in results_df.iterrows():
             # Display the product row with image
             st.markdown(product_list_item_compact(product.to_dict()), unsafe_allow_html=True)
@@ -299,23 +334,26 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
                     
                     # Show client quotes
                     st.markdown("#### Quotes")
-                    quotes_df = db_manager.get_client_quotes(client['id'])
-                    
-                    if quotes_df.empty:
-                        st.caption("No quotes for this client yet")
-                    else:
-                        for _, quote in quotes_df.iterrows():
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            with col1:
-                                st.markdown(f"**{quote['quote_number']}**")
-                                st.caption(pd.to_datetime(quote['created_at']).strftime('%Y-%m-%d'))
-                            with col2:
-                                st.markdown(f"${quote['total_amount']:,.2f}")
-                            with col3:
-                                if st.button("View", key=f"view_quote_{quote['id']}", use_container_width=True):
-                                    # Load quote details for viewing
-                                    st.session_state.view_quote_id = quote['id']
-                                    st.info("Quote viewing coming soon!")
+                    try:
+                        quotes_df = db_manager.get_client_quotes(client['id'])
+                        
+                        if quotes_df.empty:
+                            st.caption("No quotes for this client yet")
+                        else:
+                            for _, quote in quotes_df.iterrows():
+                                col1, col2, col3 = st.columns([2, 1, 1])
+                                with col1:
+                                    st.markdown(f"**{quote['quote_number']}**")
+                                    st.caption(pd.to_datetime(quote['created_at']).strftime('%Y-%m-%d'))
+                                with col2:
+                                    st.markdown(f"${quote['total_amount']:,.2f}")
+                                with col3:
+                                    if st.button("View", key=f"view_quote_{quote['id']}", use_container_width=True):
+                                        # Load quote details for viewing
+                                        st.session_state.view_quote_id = quote['id']
+                                        st.info("Quote viewing coming soon!")
+                    except:
+                        st.caption("Error loading quotes")
     
     except Exception as e:
         st.error(f"Error loading clients: {str(e)}")
@@ -457,7 +495,6 @@ def show_quote_summary(quote: Dict):
     with col1:
         if st.button("📊 Export Excel", use_container_width=True):
             try:
-                from .export import generate_excel_quote
                 excel_buffer = generate_excel_quote(
                     quote['quote_data'], 
                     quote['items'], 
@@ -476,7 +513,6 @@ def show_quote_summary(quote: Dict):
     with col2:
         if st.button("📄 Export PDF", use_container_width=True):
             try:
-                from .export import generate_pdf_quote
                 pdf_buffer = generate_pdf_quote(
                     quote['quote_data'], 
                     quote['items'], 
@@ -494,16 +530,19 @@ def show_quote_summary(quote: Dict):
     
     with col3:
         if st.button("📧 Email Quote", use_container_width=True):
-            email_service = get_email_service()
-            if email_service and email_service.configured:
-                show_email_quote_dialog(
-                    quote['quote_data'],
-                    quote['items'],
-                    quote['client_data']
-                )
-            else:
-                st.warning("Email service not configured")
-                st.info("To enable email, configure Gmail credentials in your secrets")
+            try:
+                email_service = get_email_service()
+                if email_service and hasattr(email_service, 'configured') and email_service.configured:
+                    show_email_quote_dialog(
+                        quote['quote_data'],
+                        quote['items'],
+                        quote['client_data']
+                    )
+                else:
+                    st.warning("Email service not configured")
+                    st.info("To enable email, configure Gmail credentials in your secrets")
+            except:
+                st.warning("Email functionality not available")
     
     # Action buttons
     st.markdown("### ")
@@ -512,19 +551,26 @@ def show_quote_summary(quote: Dict):
     with col1:
         if st.button("Create New Quote", use_container_width=True):
             # Clear cart and go to search
-            db_manager = st.session_state.db_manager
-            user_id = st.session_state.user['id']
-            db_manager.clear_cart(user_id, st.session_state.selected_client)
-            st.session_state.cart_count = 0
-            st.session_state.active_page = 'search'
-            st.rerun()
+            try:
+                db_manager = st.session_state.db_manager
+                user_id = st.session_state.user['id']
+                db_manager.clear_cart(user_id, st.session_state.selected_client)
+                st.session_state.cart_count = 0
+                st.session_state.active_page = 'search'
+                st.rerun()
+            except:
+                st.session_state.active_page = 'search'
+                st.rerun()
     
     with col2:
         if st.button("Back to Home", use_container_width=True, type="primary"):
             # Clear cart
-            db_manager = st.session_state.db_manager
-            user_id = st.session_state.user['id']
-            db_manager.clear_cart(user_id, st.session_state.selected_client)
-            st.session_state.cart_count = 0
+            try:
+                db_manager = st.session_state.db_manager
+                user_id = st.session_state.user['id']
+                db_manager.clear_cart(user_id, st.session_state.selected_client)
+                st.session_state.cart_count = 0
+            except:
+                pass
             st.session_state.active_page = 'home'
             st.rerun()

@@ -1,6 +1,6 @@
 """
 UI Components for Turbo Air Equipment Viewer
-Fixed with compact list view and proper navigation
+Fixed with responsive design for desktop, tablet, and mobile
 """
 
 import streamlit as st
@@ -80,7 +80,7 @@ def get_image_base64(image_path):
     return None
 
 def apply_mobile_css():
-    """Apply mobile-first CSS styling with compact list view"""
+    """Apply responsive CSS styling for all device sizes"""
     css = f"""
     <style>
     /* Reset and base styles */
@@ -104,7 +104,7 @@ def apply_mobile_css():
     /* Remove default Streamlit padding */
     .main {{
         padding: 0 !important;
-        margin-bottom: 40px; /* Further reduced space for bottom nav */
+        margin-bottom: 60px; /* Space for bottom nav on mobile/tablet */
     }}
     
     .block-container {{
@@ -114,7 +114,7 @@ def apply_mobile_css():
     
     /* Search section with padding */
     .search-section {{
-        padding: 12px 16px; /* Added horizontal padding */
+        padding: 12px 16px;
         background: {COLORS['background']};
         border-bottom: 1px solid {COLORS['divider']};
     }}
@@ -153,6 +153,7 @@ def apply_mobile_css():
     .category-card:hover {{
         background: {COLORS['surface']};
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
     }}
     
     .category-icon {{
@@ -172,13 +173,13 @@ def apply_mobile_css():
         margin-top: 4px;
     }}
     
-    /* Ultra-compact product list styling - True Excel-like with images */
+    /* Product list styling */
     .product-list-header {{
         display: grid;
         grid-template-columns: 45px 110px 1fr 90px;
         gap: 8px;
         align-items: center;
-        padding: 6px 8px;
+        padding: 8px 12px;
         background: #f0f0f0;
         border-bottom: 2px solid {COLORS['divider']};
         font-weight: bold;
@@ -193,10 +194,11 @@ def apply_mobile_css():
         grid-template-columns: 45px 110px 1fr 90px;
         gap: 8px;
         align-items: center;
-        padding: 4px 8px;
+        padding: 8px 12px;
         border-bottom: 1px solid {COLORS['divider']};
         background: {COLORS['card']};
-        min-height: 36px;
+        min-height: 48px;
+        transition: background 0.2s ease;
     }}
     
     .product-row:hover {{
@@ -205,14 +207,14 @@ def apply_mobile_css():
     
     .product-image-compact {{
         width: 40px;
-        height: 32px;
+        height: 40px;
         background: {COLORS['surface']};
-        border-radius: 3px;
+        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        font-size: 9px;
+        font-size: 10px;
         color: {COLORS['text_secondary']};
     }}
     
@@ -225,12 +227,12 @@ def apply_mobile_css():
     .product-sku {{
         font-weight: 600;
         color: {COLORS['text_primary']};
-        font-size: 12px;
+        font-size: 13px;
     }}
     
     .product-desc {{
         color: {COLORS['text_secondary']};
-        font-size: 12px;
+        font-size: 13px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -240,10 +242,10 @@ def apply_mobile_css():
         font-weight: 600;
         color: {COLORS['text_primary']};
         text-align: right;
-        font-size: 12px;
+        font-size: 13px;
     }}
     
-    /* Bottom navigation - ultra compact */
+    /* Bottom navigation - responsive */
     .bottom-nav {{
         position: fixed;
         bottom: 0;
@@ -253,9 +255,10 @@ def apply_mobile_css():
         border-top: 1px solid {COLORS['divider']};
         display: flex;
         justify-content: space-around;
-        padding: 2px 0;
+        padding: 8px 0;
         z-index: 1000;
-        height: 40px; /* Further reduced height */
+        height: 56px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
     }}
     
     .nav-item {{
@@ -264,7 +267,7 @@ def apply_mobile_css():
         align-items: center;
         justify-content: center;
         flex: 1;
-        padding: 1px;
+        padding: 4px;
         color: {COLORS['text_tertiary']};
         cursor: pointer;
         text-decoration: none;
@@ -276,12 +279,12 @@ def apply_mobile_css():
     }}
     
     .nav-icon {{
-        font-size: 18px; /* Further reduced */
-        margin-bottom: 1px;
+        font-size: 22px;
+        margin-bottom: 2px;
     }}
     
     .nav-label {{
-        font-size: 9px; /* Further reduced */
+        font-size: 11px;
         font-weight: 500;
     }}
     
@@ -303,10 +306,12 @@ def apply_mobile_css():
         border-radius: 10px;
         margin-bottom: 8px;
         cursor: pointer;
+        transition: all 0.2s ease;
     }}
     
     .recent-item:hover {{
         background: {COLORS['card']};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     }}
     
     /* Metric cards */
@@ -322,6 +327,12 @@ def apply_mobile_css():
         border-radius: 12px;
         padding: 20px;
         text-align: center;
+        transition: all 0.2s ease;
+    }}
+    
+    .metric-card:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
     }}
     
     .metric-value {{
@@ -385,6 +396,12 @@ def apply_mobile_css():
         display: flex;
         align-items: center;
         justify-content: center;
+        transition: all 0.2s ease;
+    }}
+    
+    .quantity-btn:hover {{
+        background: {COLORS['primary']};
+        color: white;
     }}
     
     .quantity-value {{
@@ -428,6 +445,13 @@ def apply_mobile_css():
         font-weight: 600;
         cursor: pointer;
         margin: 16px;
+        transition: all 0.2s ease;
+    }}
+    
+    .primary-button:hover {{
+        background: #0066E0;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,122,255,0.3);
     }}
     
     .export-buttons {{
@@ -446,6 +470,12 @@ def apply_mobile_css():
         font-weight: 500;
         cursor: pointer;
         text-align: center;
+        transition: all 0.2s ease;
+    }}
+    
+    .export-button:hover {{
+        background: {COLORS['card']};
+        transform: translateY(-1px);
     }}
     
     .export-button.primary {{
@@ -454,10 +484,14 @@ def apply_mobile_css():
         border: none;
     }}
     
+    .export-button.primary:hover {{
+        background: #0066E0;
+    }}
+    
     /* Floating cart button */
     .floating-cart {{
         position: fixed;
-        bottom: 50px; /* Adjusted for smaller nav */
+        bottom: 70px;
         right: 20px;
         background: {COLORS['primary']};
         color: white;
@@ -467,9 +501,15 @@ def apply_mobile_css():
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         cursor: pointer;
         z-index: 999;
+        transition: all 0.2s ease;
+    }}
+    
+    .floating-cart:hover {{
+        transform: scale(1.1);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
     }}
     
     .cart-badge {{
@@ -492,15 +532,16 @@ def apply_mobile_css():
     .action-buttons-row {{
         display: flex;
         gap: 8px;
-        padding: 4px 8px;
+        padding: 8px 12px;
         background: {COLORS['card']};
     }}
     
     .action-button {{
         flex: 1;
-        font-size: 11px;
-        padding: 4px 8px;
-        border-radius: 4px;
+        font-size: 12px;
+        padding: 6px 12px;
+        border-radius: 6px;
+        transition: all 0.2s ease;
     }}
     
     /* Hide Streamlit specific elements */
@@ -515,24 +556,161 @@ def apply_mobile_css():
         display: none;
     }}
     
-    /* Responsive design */
-    @media (min-width: 768px) {{
+    /* Tablet Responsive (768px - 1024px) */
+    @media (min-width: 768px) and (max-width: 1024px) {{
+        .category-row {{
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }}
+        
+        .content-area {{
+            max-width: 100%;
+            padding: 24px;
+        }}
+        
+        .metrics-grid {{
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }}
+        
+        .product-row, .product-list-header {{
+            grid-template-columns: 60px 140px 1fr 110px;
+            padding: 12px 16px;
+        }}
+        
+        .product-image-compact {{
+            width: 50px;
+            height: 50px;
+        }}
+        
+        .bottom-nav {{
+            height: 64px;
+            padding: 10px 0;
+        }}
+        
+        .nav-icon {{
+            font-size: 24px;
+        }}
+        
+        .nav-label {{
+            font-size: 12px;
+        }}
+        
+        .search-section {{
+            padding: 16px 24px;
+        }}
+        
+        .search-title {{
+            font-size: 20px;
+        }}
+    }}
+    
+    /* Desktop Responsive (1024px+) */
+    @media (min-width: 1024px) {{
         .category-row {{
             grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
         }}
         
         .content-area {{
             max-width: 1200px;
             margin: 0 auto;
+            padding: 32px;
         }}
         
         .metrics-grid {{
             grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
         }}
         
         .product-row, .product-list-header {{
-            grid-template-columns: 50px 140px 1fr 100px;
+            grid-template-columns: 80px 180px 1fr 150px;
+            padding: 16px 24px;
         }}
+        
+        .product-image-compact {{
+            width: 60px;
+            height: 60px;
+        }}
+        
+        .product-sku {{
+            font-size: 14px;
+        }}
+        
+        .product-desc {{
+            font-size: 14px;
+        }}
+        
+        .product-price-compact {{
+            font-size: 14px;
+        }}
+        
+        /* Hide bottom nav on desktop */
+        .bottom-nav {{
+            display: none;
+        }}
+        
+        /* Show desktop navigation */
+        .main {{
+            margin-bottom: 0;
+        }}
+        
+        .search-section {{
+            padding: 20px 32px;
+            background: {COLORS['surface']};
+            margin-bottom: 20px;
+        }}
+        
+        .search-title {{
+            font-size: 24px;
+            margin-bottom: 16px;
+        }}
+        
+        .category-card {{
+            padding: 24px;
+        }}
+        
+        .category-icon {{
+            font-size: 40px;
+            margin-bottom: 12px;
+        }}
+        
+        .category-name {{
+            font-size: 16px;
+        }}
+        
+        .category-count {{
+            font-size: 14px;
+        }}
+        
+        .floating-cart {{
+            bottom: 30px;
+            right: 30px;
+            width: 64px;
+            height: 64px;
+        }}
+        
+        .action-buttons-row {{
+            gap: 12px;
+            padding: 12px 24px;
+        }}
+        
+        .action-button {{
+            font-size: 14px;
+            padding: 8px 16px;
+        }}
+    }}
+    
+    /* Fix for Streamlit container width */
+    section.main > div {{
+        max-width: 100% !important;
+    }}
+    
+    /* Ensure forms work properly */
+    [data-testid="stForm"] {{
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
     }}
     </style>
     """
@@ -557,7 +735,7 @@ def search_bar_component(placeholder: str = "Search for products"):
     return search_term
 
 def bottom_navigation():
-    """Display bottom navigation bar with ultra-compact height"""
+    """Display bottom navigation bar (hidden on desktop)"""
     active_page = st.session_state.get('active_page', 'home')
     
     nav_items = [
@@ -601,7 +779,9 @@ def bottom_navigation():
 
 def category_grid(categories: List[Dict[str, any]]):
     """Display category grid for search page"""
-    cols = st.columns(2)
+    # Responsive columns based on screen size
+    cols = st.columns(2)  # Default mobile layout
+    
     for i, (cat_name, cat_info) in enumerate(TURBO_AIR_CATEGORIES.items()):
         with cols[i % 2]:
             # Get product count
@@ -616,7 +796,7 @@ def category_grid(categories: List[Dict[str, any]]):
                 st.rerun()
 
 def product_list_item_compact(product: Dict) -> str:
-    """Render ultra-compact product list item with working images"""
+    """Render compact product list item with working images"""
     sku = product.get('sku', 'Unknown')
     description = product.get('description') or product.get('product_type', '')
     price = product.get('price', 0)

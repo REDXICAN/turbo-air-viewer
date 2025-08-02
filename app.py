@@ -1,7 +1,6 @@
 """
 Turbo Air Catalog - Main Application
-Mobile-First Equipment Catalog and Quote Generation System
-Updated with fixed navigation and image display
+Fixed with proper imports and responsive design
 """
 
 import streamlit as st
@@ -18,18 +17,8 @@ from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.persistence import PersistenceManager
 
-# Import UI components - check if they exist first
-try:
-    from src.ui import apply_mobile_css, bottom_navigation, floating_cart_button
-except ImportError as e:
-    print(f"UI import error: {e}")
-    # Fallback imports
-    from src.ui import apply_mobile_css
-    # Define missing functions as stubs if needed
-    def bottom_navigation():
-        pass
-    def floating_cart_button(count):
-        pass
+# Import UI components with proper error handling
+from src.ui import apply_mobile_css, bottom_navigation, floating_cart_button
 
 from src.pages import (
     show_home_page,
@@ -48,7 +37,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Remove top padding and fix bottom spacing
+# Apply responsive CSS
 st.markdown("""
 <style>
     /* Remove all default Streamlit padding */
@@ -61,16 +50,20 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* Ensure content doesn't get hidden behind bottom nav */
-    .main {
-        padding-bottom: 40px !important; /* Match the bottom nav height */
+    /* Ensure content doesn't get hidden behind bottom nav on mobile/tablet */
+    @media (max-width: 1024px) {
+        .main {
+            padding-bottom: 60px !important;
+        }
     }
     
-    /* Fix desktop form centering without extra padding */
-    @media (min-width: 768px) {
-        div[data-testid="column"] > div:first-child > div > div > div {
-            padding-top: 0 !important;
+    /* Desktop styling */
+    @media (min-width: 1024px) {
+        .main {
+            padding-bottom: 0 !important;
         }
+        
+        /* Center auth form on desktop */
         .stForm {
             margin-top: 2rem !important;
         }
@@ -84,6 +77,13 @@ st.markdown("""
     /* Fix any scrollbar issues */
     .main {
         overflow-x: hidden;
+    }
+    
+    /* Ensure responsive columns work properly */
+    @media (min-width: 768px) {
+        div[data-testid="column"] > div:first-child > div > div > div {
+            padding-top: 0 !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -229,12 +229,18 @@ def periodic_backup(persistence_manager, auth_manager):
             except:
                 pass
 
+def get_device_type():
+    """Determine device type based on viewport (for desktop navigation)"""
+    # This is a simple check, in a real app you'd use JavaScript
+    # For now, we'll assume desktop if running locally
+    return "desktop" if not st.session_state.get('is_mobile', False) else "mobile"
+
 def main():
     """Main application entry point"""
     # Initialize session state
     init_session_state()
     
-    # Apply mobile CSS
+    # Apply responsive CSS
     apply_mobile_css()
     
     # Check and migrate database if needed
@@ -271,17 +277,30 @@ def main():
     
     # Check authentication
     if not auth_manager.is_authenticated():
-        # Add title with proper spacing
-        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        # Add title with responsive spacing
+        st.markdown("""
+        <h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>
+            Turbo Air Catalog
+        </h1>
+        """, unsafe_allow_html=True)
         
-        # Center the auth form on larger screens without extra padding
+        # Center the auth form on larger screens
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             # Show auth form
             auth_manager.show_auth_form()
     else:
-        # Add title for all authenticated pages with less spacing
-        st.markdown("<h1 style='text-align: center; margin-bottom: 0.5rem; margin-top: 0.5rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        # Add title for all authenticated pages with responsive spacing
+        st.markdown("""
+        <h1 style='
+            text-align: center; 
+            margin-bottom: 0.5rem; 
+            margin-top: 0.5rem;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+        '>
+            Turbo Air Catalog
+        </h1>
+        """, unsafe_allow_html=True)
         
         # Update sync status
         try:
@@ -292,6 +311,9 @@ def main():
         # Get current user
         user = auth_manager.get_current_user()
         user_id = user['id'] if user else 'offline_user'
+        
+        # Store user in session state for other pages
+        st.session_state.user = user
         
         # Update cart count
         if st.session_state.selected_client:
@@ -311,26 +333,30 @@ def main():
         if st.session_state.active_page != 'search':
             st.session_state.show_product_detail = None
         
-        # Route to appropriate page
-        active_page = st.session_state.active_page
-        
-        if active_page == 'home':
-            show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
-        
-        elif active_page == 'search':
-            show_search_page(user_id, db_manager)
-        
-        elif active_page == 'cart':
-            show_cart_page(user_id, db_manager)
-        
-        elif active_page == 'profile':
-            show_profile_page(user, auth_manager, sync_manager, db_manager)
-        
-        elif active_page == 'quote_summary' and st.session_state.last_quote:
-            show_quote_summary(st.session_state.last_quote)
+        # Create content container with responsive padding
+        container = st.container()
+        with container:
+            # Route to appropriate page
+            active_page = st.session_state.active_page
+            
+            if active_page == 'home':
+                show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
+            
+            elif active_page == 'search':
+                show_search_page(user_id, db_manager)
+            
+            elif active_page == 'cart':
+                show_cart_page(user_id, db_manager)
+            
+            elif active_page == 'profile':
+                show_profile_page(user, auth_manager, sync_manager, db_manager)
+            
+            elif active_page == 'quote_summary' and st.session_state.last_quote:
+                show_quote_summary(st.session_state.last_quote)
         
         # Bottom navigation (not on product detail or quote summary)
-        if active_page != 'quote_summary':
+        # Only show on mobile and tablet devices
+        if active_page not in ['quote_summary', 'product_detail']:
             bottom_navigation()
         
         # Floating cart button (only on search page when cart has items)
