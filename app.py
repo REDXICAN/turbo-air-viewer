@@ -329,7 +329,7 @@ def main():
         if os.path.exists(logo_path):
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
-                st.image(logo_path, use_column_width=True)
+                st.image(logo_path, use_container_width=True)
         else:
             st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air</h1>", unsafe_allow_html=True)
         
@@ -345,7 +345,7 @@ def main():
             # Create a centered container for the logo
             col1, col2, col3 = st.columns([1, 3, 1])
             with col2:
-                st.image(logo_path, use_column_width=True)
+                st.image(logo_path, use_container_width=True)
                 st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
         else:
             st.markdown("""
