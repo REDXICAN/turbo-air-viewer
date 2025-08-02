@@ -104,7 +104,7 @@ def apply_mobile_css():
     /* Remove default Streamlit padding */
     .main {{
         padding: 0 !important;
-        margin-bottom: 50px; /* Reduced space for bottom nav */
+        margin-bottom: 40px; /* Further reduced space for bottom nav */
     }}
     
     .block-container {{
@@ -114,22 +114,22 @@ def apply_mobile_css():
     
     /* Search section with padding */
     .search-section {{
-        padding: 16px;
+        padding: 12px 16px; /* Added horizontal padding */
         background: {COLORS['background']};
         border-bottom: 1px solid {COLORS['divider']};
     }}
     
     .search-title {{
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 600;
         color: {COLORS['text_primary']};
-        margin-bottom: 8px;
+        margin-bottom: 10px;
     }}
     
     /* Content area */
     .content-area {{
         padding: 16px;
-        min-height: calc(100vh - 150px);
+        min-height: calc(100vh - 120px);
     }}
     
     /* Category cards for search */
@@ -172,21 +172,31 @@ def apply_mobile_css():
         margin-top: 4px;
     }}
     
-    /* Compact product list styling - Excel-like */
-    .product-list-compact {{
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
+    /* Ultra-compact product list styling - True Excel-like with images */
+    .product-list-header {{
+        display: grid;
+        grid-template-columns: 45px 110px 1fr 90px;
+        gap: 8px;
+        align-items: center;
+        padding: 6px 8px;
+        background: #f0f0f0;
+        border-bottom: 2px solid {COLORS['divider']};
+        font-weight: bold;
+        font-size: 13px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
     }}
     
     .product-row {{
         display: grid;
-        grid-template-columns: 60px 120px 1fr 100px;
-        gap: 10px;
+        grid-template-columns: 45px 110px 1fr 90px;
+        gap: 8px;
         align-items: center;
-        padding: 8px;
+        padding: 4px 8px;
         border-bottom: 1px solid {COLORS['divider']};
         background: {COLORS['card']};
+        min-height: 36px;
     }}
     
     .product-row:hover {{
@@ -194,15 +204,15 @@ def apply_mobile_css():
     }}
     
     .product-image-compact {{
-        width: 50px;
-        height: 50px;
+        width: 40px;
+        height: 32px;
         background: {COLORS['surface']};
-        border-radius: 4px;
+        border-radius: 3px;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        font-size: 10px;
+        font-size: 9px;
         color: {COLORS['text_secondary']};
     }}
     
@@ -215,11 +225,12 @@ def apply_mobile_css():
     .product-sku {{
         font-weight: 600;
         color: {COLORS['text_primary']};
+        font-size: 12px;
     }}
     
     .product-desc {{
         color: {COLORS['text_secondary']};
-        font-size: 13px;
+        font-size: 12px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -229,9 +240,10 @@ def apply_mobile_css():
         font-weight: 600;
         color: {COLORS['text_primary']};
         text-align: right;
+        font-size: 12px;
     }}
     
-    /* Bottom navigation - reduced height */
+    /* Bottom navigation - ultra compact */
     .bottom-nav {{
         position: fixed;
         bottom: 0;
@@ -241,9 +253,9 @@ def apply_mobile_css():
         border-top: 1px solid {COLORS['divider']};
         display: flex;
         justify-content: space-around;
-        padding: 4px 0; /* Reduced padding */
+        padding: 2px 0;
         z-index: 1000;
-        height: 50px; /* Fixed height */
+        height: 40px; /* Further reduced height */
     }}
     
     .nav-item {{
@@ -252,7 +264,7 @@ def apply_mobile_css():
         align-items: center;
         justify-content: center;
         flex: 1;
-        padding: 2px;
+        padding: 1px;
         color: {COLORS['text_tertiary']};
         cursor: pointer;
         text-decoration: none;
@@ -264,12 +276,12 @@ def apply_mobile_css():
     }}
     
     .nav-icon {{
-        font-size: 20px; /* Reduced from 24px */
-        margin-bottom: 2px;
+        font-size: 18px; /* Further reduced */
+        margin-bottom: 1px;
     }}
     
     .nav-label {{
-        font-size: 10px; /* Reduced from 11px */
+        font-size: 9px; /* Further reduced */
         font-weight: 500;
     }}
     
@@ -445,7 +457,7 @@ def apply_mobile_css():
     /* Floating cart button */
     .floating-cart {{
         position: fixed;
-        bottom: 60px; /* Adjusted for smaller nav */
+        bottom: 50px; /* Adjusted for smaller nav */
         right: 20px;
         background: {COLORS['primary']};
         color: white;
@@ -476,6 +488,21 @@ def apply_mobile_css():
         font-weight: bold;
     }}
     
+    /* Action buttons row */
+    .action-buttons-row {{
+        display: flex;
+        gap: 8px;
+        padding: 4px 8px;
+        background: {COLORS['card']};
+    }}
+    
+    .action-button {{
+        flex: 1;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }}
+    
     /* Hide Streamlit specific elements */
     .stButton > button {{
         width: 100%;
@@ -503,8 +530,8 @@ def apply_mobile_css():
             grid-template-columns: repeat(4, 1fr);
         }}
         
-        .product-row {{
-            grid-template-columns: 60px 150px 1fr 120px;
+        .product-row, .product-list-header {{
+            grid-template-columns: 50px 140px 1fr 100px;
         }}
     }}
     </style>
@@ -516,7 +543,7 @@ def app_header():
     pass
 
 def search_bar_component(placeholder: str = "Search for products"):
-    """Display search bar component with title"""
+    """Display search bar component with title and padding"""
     st.markdown('<div class="search-section">', unsafe_allow_html=True)
     st.markdown('<div class="search-title">Search</div>', unsafe_allow_html=True)
     search_key = f"search_{st.session_state.get('active_page', 'home')}"
@@ -530,7 +557,7 @@ def search_bar_component(placeholder: str = "Search for products"):
     return search_term
 
 def bottom_navigation():
-    """Display bottom navigation bar with reduced height"""
+    """Display bottom navigation bar with ultra-compact height"""
     active_page = st.session_state.get('active_page', 'home')
     
     nav_items = [
@@ -589,29 +616,37 @@ def category_grid(categories: List[Dict[str, any]]):
                 st.rerun()
 
 def product_list_item_compact(product: Dict) -> str:
-    """Render compact product list item - Excel-like"""
+    """Render ultra-compact product list item with working images"""
     sku = product.get('sku', 'Unknown')
     description = product.get('description') or product.get('product_type', '')
     price = product.get('price', 0)
     
-    # Check for product image
-    image_path = f"pdf_screenshots/{sku}/{sku} P.1.png"
-    image_html = ""
+    # Get image path - check multiple possible locations
+    image_html = '<div class="product-image-compact">📷</div>'
     
-    # Try to load image as base64
-    image_base64 = get_image_base64(image_path)
-    if image_base64:
-        image_html = f'<img src="data:image/png;base64,{image_base64}" alt="{sku}">'
-    else:
-        image_html = f'<div>No Image</div>'
+    # Try different image paths
+    possible_paths = [
+        f"pdf_screenshots/{sku}/{sku} P.1.png",
+        f"pdf_screenshots/{sku}/{sku}_P.1.png",
+        f"pdf_screenshots/{sku}/{sku}.png",
+        f"pdf_screenshots/{sku}/page_1.png"
+    ]
+    
+    for image_path in possible_paths:
+        image_base64 = get_image_base64(image_path)
+        if image_base64:
+            image_html = f'''
+            <div class="product-image-compact">
+                <img src="data:image/png;base64,{image_base64}" alt="{sku}">
+            </div>
+            '''
+            break
     
     return f"""
     <div class="product-row">
-        <div class="product-image-compact">
-            {image_html}
-        </div>
+        {image_html}
         <div class="product-sku">{sku}</div>
-        <div class="product-desc">{truncate_text(description, 60)}</div>
+        <div class="product-desc">{truncate_text(description, 50)}</div>
         <div class="product-price-compact">${price:,.2f}</div>
     </div>
     """

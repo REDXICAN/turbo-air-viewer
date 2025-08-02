@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Updated with compact product display
+Updated with ultra-compact product display with images
 """
 
 import streamlit as st
@@ -115,32 +115,34 @@ def show_search_page(user_id, db_manager):
                     st.session_state.search_term = search
                     st.rerun()
     
-    # Display results in compact format
+    # Display results in ultra-compact format with images
     if not results_df.empty:
         st.markdown(f"### Results ({len(results_df)} items)")
         
-        # Create compact list header
+        # Create Excel-like list header
         st.markdown("""
-        <div class="product-row" style="font-weight: bold; background: #f0f0f0;">
-            <div style="width: 60px;">Image</div>
-            <div style="width: 120px;">SKU</div>
-            <div style="flex: 1;">Description</div>
-            <div style="width: 100px; text-align: right;">Price</div>
+        <div class="product-list-header">
+            <div>Image</div>
+            <div>SKU</div>
+            <div>Description</div>
+            <div style="text-align: right;">Price</div>
         </div>
         """, unsafe_allow_html=True)
         
-        # Display products in compact format
-        for _, product in results_df.iterrows():
+        # Display products in ultra-compact format with images
+        for idx, product in results_df.iterrows():
+            # Display the product row with image
             st.markdown(product_list_item_compact(product.to_dict()), unsafe_allow_html=True)
             
-            # Action buttons in a subtle row
-            col1, col2, col3 = st.columns([2, 1, 1])
-            with col2:
-                if st.button("Details", key=f"view_{product['id']}", use_container_width=True):
+            # Action buttons in a compact row
+            st.markdown('<div class="action-buttons-row">', unsafe_allow_html=True)
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if st.button("View Details", key=f"view_{product['id']}", use_container_width=True, type="secondary"):
                     st.session_state.show_product_detail = product.to_dict()
                     st.rerun()
-            with col3:
-                if st.button("Add", key=f"add_{product['id']}", use_container_width=True, type="primary"):
+            with col2:
+                if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True, type="primary"):
                     if st.session_state.get('selected_client'):
                         success, message = db_manager.add_to_cart(
                             user_id, product['id'], st.session_state.selected_client
@@ -150,6 +152,7 @@ def show_search_page(user_id, db_manager):
                             st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
                     else:
                         st.error("Please select a client first")
+            st.markdown('</div>', unsafe_allow_html=True)
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
@@ -346,17 +349,29 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     col1, col2 = st.columns([1, 2])
     
     with col1:
-        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
-        image_base64 = get_image_base64(image_path)
+        # Try multiple possible image paths
+        sku = product['sku']
+        possible_paths = [
+            f"pdf_screenshots/{sku}/{sku} P.1.png",
+            f"pdf_screenshots/{sku}/{sku}_P.1.png",
+            f"pdf_screenshots/{sku}/{sku}.png",
+            f"pdf_screenshots/{sku}/page_1.png"
+        ]
         
-        if image_base64:
-            st.markdown(f"""
-            <div style="width: 100%; height: 200px; overflow: hidden; border-radius: 8px;">
-                <img src="data:image/png;base64,{image_base64}" 
-                     style="width: 100%; height: 100%; object-fit: cover;">
-            </div>
-            """, unsafe_allow_html=True)
-        else:
+        image_found = False
+        for image_path in possible_paths:
+            image_base64 = get_image_base64(image_path)
+            if image_base64:
+                st.markdown(f"""
+                <div style="width: 100%; height: 200px; overflow: hidden; border-radius: 8px;">
+                    <img src="data:image/png;base64,{image_base64}" 
+                         style="width: 100%; height: 100%; object-fit: cover;">
+                </div>
+                """, unsafe_allow_html=True)
+                image_found = True
+                break
+        
+        if not image_found:
             empty_state("📷", "No Image", "Product image not available")
     
     with col2:

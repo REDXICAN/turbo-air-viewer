@@ -1,7 +1,7 @@
 """
 Turbo Air Catalog - Main Application
 Mobile-First Equipment Catalog and Quote Generation System
-Updated with new navigation flow
+Updated with fixed navigation and image display
 """
 
 import streamlit as st
@@ -48,14 +48,23 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Remove top padding immediately after page config
+# Remove top padding and fix bottom spacing
 st.markdown("""
 <style>
     /* Remove all default Streamlit padding */
     #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 0rem;}
     .main > div:first-child { padding-top: 0rem !important; }
     div[data-testid="stDecoration"] { display: none; }
-    .block-container { padding-top: 0rem !important; }
+    .block-container { 
+        padding-top: 0rem !important; 
+        padding-bottom: 0rem !important;
+        max-width: 100% !important;
+    }
+    
+    /* Ensure content doesn't get hidden behind bottom nav */
+    .main {
+        padding-bottom: 40px !important; /* Match the bottom nav height */
+    }
     
     /* Fix desktop form centering without extra padding */
     @media (min-width: 768px) {
@@ -65,6 +74,16 @@ st.markdown("""
         .stForm {
             margin-top: 2rem !important;
         }
+    }
+    
+    /* Remove extra spacing from buttons */
+    .stButton > button {
+        margin: 0 !important;
+    }
+    
+    /* Fix any scrollbar issues */
+    .main {
+        overflow-x: hidden;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -252,8 +271,8 @@ def main():
     
     # Check authentication
     if not auth_manager.is_authenticated():
-        # Add title
-        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        # Add title with proper spacing
+        st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
         
         # Center the auth form on larger screens without extra padding
         col1, col2, col3 = st.columns([1, 2, 1])
@@ -261,8 +280,8 @@ def main():
             # Show auth form
             auth_manager.show_auth_form()
     else:
-        # Add title for all authenticated pages
-        st.markdown("<h1 style='text-align: center; margin-bottom: 1rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
+        # Add title for all authenticated pages with less spacing
+        st.markdown("<h1 style='text-align: center; margin-bottom: 0.5rem; margin-top: 0.5rem;'>Turbo Air Catalog</h1>", unsafe_allow_html=True)
         
         # Update sync status
         try:
