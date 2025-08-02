@@ -1,7 +1,7 @@
 """
 Turbo Air Catalog - Main Application
 Mobile-First Equipment Catalog and Quote Generation System
-Fixed: Removed welcome text, added persistence, improved product loading
+Updated with new navigation flow
 """
 
 import streamlit as st
@@ -269,8 +269,14 @@ def main():
             except:
                 st.session_state.cart_count = 0
         
+        # Handle product detail view
+        if st.session_state.get('show_product_detail'):
+            show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
+            # Don't show bottom navigation on product detail
+            return
+        
         # Clear product detail when navigating away
-        if st.session_state.active_page != 'products' and st.session_state.active_page != 'search':
+        if st.session_state.active_page != 'search':
             st.session_state.show_product_detail = None
         
         # Route to appropriate page
@@ -279,7 +285,7 @@ def main():
         if active_page == 'home':
             show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
         
-        elif active_page in ['search', 'products']:
+        elif active_page == 'search':
             show_search_page(user_id, db_manager)
         
         elif active_page == 'cart':
@@ -291,14 +297,12 @@ def main():
         elif active_page == 'quote_summary' and st.session_state.last_quote:
             show_quote_summary(st.session_state.last_quote)
         
-        # Product detail modal - removed, now handled in search page
+        # Bottom navigation (not on product detail or quote summary)
+        if active_page != 'quote_summary':
+            bottom_navigation()
         
-        # Bottom navigation
-        if not st.session_state.show_product_detail:
-            bottom_navigation(st.session_state.active_page)
-        
-        # Floating cart button (except on cart page)
-        if active_page != 'cart' and st.session_state.cart_count > 0:
+        # Floating cart button (only on search page when cart has items)
+        if active_page == 'search' and st.session_state.cart_count > 0:
             floating_cart_button(st.session_state.cart_count)
 
 if __name__ == "__main__":

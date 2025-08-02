@@ -1,6 +1,7 @@
 """
 Email Service for Turbo Air Equipment Viewer
 Handles sending quotes via Gmail SMTP
+Updated for new UI integration
 """
 
 import streamlit as st
@@ -182,54 +183,61 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     if not email_service or not email_service.configured:
         st.warning("Email service is not configured. Quote cannot be sent via email.")
         st.info("To enable email functionality, configure Gmail credentials in your secrets.")
-        return
+        return False
     
     from .export import prepare_email_attachments
     
-    with st.form("email_quote_form"):
-        st.subheader("Email Quote")
-        
-        # Pre-fill with client email if available
-        default_email = client_data.get('contact_email', '')
-        recipient_email = st.text_input("Recipient Email", value=default_email)
-        
-        # Additional recipients
-        cc_emails = st.text_input("CC (separate multiple emails with commas)", "")
-        
-        # Custom message
-        custom_message = st.text_area(
-            "Add a personal message (optional)",
-            placeholder="Add any additional notes or messages here..."
-        )
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            send_button = st.form_submit_button("Send Email", type="primary", use_container_width=True)
-        with col2:
-            cancel_button = st.form_submit_button("Cancel", use_container_width=True)
-        
-        if send_button and recipient_email:
-            with st.spinner("Sending email..."):
-                # Prepare attachments
-                attachments = prepare_email_attachments(quote_data, items_df, client_data)
-                
-                # Add custom message to client data if provided
-                if custom_message:
-                    client_data['custom_message'] = custom_message
-                
-                # Send email
-                success = email_service.send_quote_email(
-                    recipient_email=recipient_email,
-                    quote_data=quote_data,
-                    client_data=client_data,
-                    attachments=attachments
-                )
-                
-                if success:
-                    st.success(f"Quote emailed successfully to {recipient_email}!")
-                    return True
-                else:
-                    st.error("Failed to send email. Please try again.")
-                    return False
-        
-        return cancel_button
+    # Create email dialog in an expander
+    with st.expander("📧 Email Quote", expanded=True):
+        with st.form("email_quote_form"):
+            st.subheader("Send Quote via Email")
+            
+            # Pre-fill with client email if available
+            default_email = client_data.get('contact_email', '')
+            recipient_email = st.text_input("Recipient Email", value=default_email)
+            
+            # Additional recipients
+            cc_emails = st.text_input("CC (optional, separate with commas)", "")
+            
+            # Custom message
+            custom_message = st.text_area(
+                "Add a personal message (optional)",
+                placeholder="Add any additional notes or messages here...",
+                height=100
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                send_button = st.form_submit_button("Send Email", type="primary", use_container_width=True)
+            with col2:
+                cancel_button = st.form_submit_button("Cancel", use_container_width=True)
+            
+            if send_button and recipient_email:
+                with st.spinner("Sending email..."):
+                    # Prepare attachments
+                    attachments = prepare_email_attachments(quote_data, items_df, client_data)
+                    
+                    # Add custom message to client data if provided
+                    if custom_message:
+                        client_data['custom_message'] = custom_message
+                    
+                    # Send email
+                    success = email_service.send_quote_email(
+                        recipient_email=recipient_email,
+                        quote_data=quote_data,
+                        client_data=client_data,
+                        attachments=attachments
+                    )
+                    
+                    if success:
+                        st.success(f"Quote emailed successfully to {recipient_email}!")
+                        st.balloons()
+                        return True
+                    else:
+                        st.error("Failed to send email. Please try again.")
+                        return False
+            
+            elif send_button and not recipient_email:
+                st.error("Please enter a recipient email address")
+            
+            return cancel_button

@@ -441,6 +441,40 @@ def apply_mobile_css():
         border: none;
     }}
     
+    /* Floating cart button */
+    .floating-cart {{
+        position: fixed;
+        bottom: 80px;
+        right: 20px;
+        background: {COLORS['primary']};
+        color: white;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        cursor: pointer;
+        z-index: 999;
+    }}
+    
+    .cart-badge {{
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        background: {COLORS['error']};
+        color: white;
+        min-width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: bold;
+    }}
+    
     /* Hide Streamlit specific elements */
     .stButton > button {{
         width: 100%;
@@ -473,12 +507,8 @@ def apply_mobile_css():
     st.markdown(css, unsafe_allow_html=True)
 
 def app_header():
-    """Display app header with title"""
-    st.markdown("""
-    <div class="app-header">
-        <h1 class="app-title">Turbo Air</h1>
-    </div>
-    """, unsafe_allow_html=True)
+    """Display app header with title - removed from individual pages"""
+    pass
 
 def search_bar_component(placeholder: str = "Search for products"):
     """Display search bar component"""
@@ -529,12 +559,13 @@ def bottom_navigation():
                 disabled=(item["page"] == active_page)
             ):
                 st.session_state.active_page = item["page"]
+                # Clear category selection when navigating away from search
+                if item["page"] != "search":
+                    st.session_state.selected_category = None
                 st.rerun()
 
 def category_grid(categories: List[Dict[str, any]]):
     """Display category grid for search page"""
-    st.markdown('<div class="category-row">', unsafe_allow_html=True)
-    
     cols = st.columns(2)
     for i, (cat_name, cat_info) in enumerate(TURBO_AIR_CATEGORIES.items()):
         with cols[i % 2]:
@@ -547,10 +578,7 @@ def category_grid(categories: List[Dict[str, any]]):
                 use_container_width=True
             ):
                 st.session_state.selected_category = cat_name
-                st.session_state.show_category_products = True
                 st.rerun()
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 def product_list_item(product: Dict) -> str:
     """Render product list item with image"""
@@ -574,7 +602,7 @@ def product_list_item(product: Dict) -> str:
         </div>
         <div class="product-info">
             <div class="product-name">{sku}</div>
-            <div class="product-model">Model: {product_type}</div>
+            <div class="product-model">{truncate_text(product_type, 50)}</div>
         </div>
         <div class="product-price">${price:,.2f}</div>
     </div>
@@ -632,7 +660,7 @@ def metrics_section(metrics: Dict):
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-def cart_item_component(item: Dict):
+def cart_item_component(item: Dict, db_manager=None):
     """Display cart item with quantity controls"""
     col1, col2, col3 = st.columns([3, 2, 1])
     
@@ -640,7 +668,7 @@ def cart_item_component(item: Dict):
         st.markdown(f"""
         <div class="cart-item-info">
             <div class="cart-item-name">{item['sku']}</div>
-            <div class="cart-item-model">Model: {item.get('product_type', 'N/A')}</div>
+            <div class="cart-item-model">{truncate_text(item.get('product_type', 'N/A'), 30)}</div>
         </div>
         """, unsafe_allow_html=True)
     
@@ -648,14 +676,16 @@ def cart_item_component(item: Dict):
         col_minus, col_qty, col_plus = st.columns([1, 1, 1])
         with col_minus:
             if st.button("−", key=f"minus_{item['id']}"):
-                # Update quantity logic
-                pass
+                if db_manager and item['quantity'] > 1:
+                    db_manager.update_cart_quantity(item['id'], item['quantity'] - 1)
+                    st.rerun()
         with col_qty:
             st.markdown(f"<div class='quantity-value'>{item['quantity']}</div>", unsafe_allow_html=True)
         with col_plus:
             if st.button("+", key=f"plus_{item['id']}"):
-                # Update quantity logic
-                pass
+                if db_manager:
+                    db_manager.update_cart_quantity(item['id'], item['quantity'] + 1)
+                    st.rerun()
     
     with col3:
         st.markdown(f"<div class='product-price'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
@@ -683,6 +713,21 @@ def cart_summary(subtotal: float, tax_rate: float = 0.08):
     """, unsafe_allow_html=True)
     
     return total
+
+def floating_cart_button(cart_count: int):
+    """Display floating cart button with count"""
+    cart_html = f"""
+    <div class="floating-cart">
+        🛒
+        <div class="cart-badge">{cart_count}</div>
+    </div>
+    """
+    st.markdown(cart_html, unsafe_allow_html=True)
+    
+    # Add click handler
+    if st.button("", key="floating_cart_btn", help="Go to cart"):
+        st.session_state.active_page = 'cart'
+        st.rerun()
 
 def quote_export_buttons():
     """Display quote export buttons"""
