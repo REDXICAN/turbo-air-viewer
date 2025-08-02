@@ -1,6 +1,6 @@
 """
 Turbo Air Equipment Viewer - Core Modules
-Updated imports for new navigation structure
+Updated imports for compact list view
 """
 
 from .config import Config, init_session_state, AppError, DatabaseError, AuthError, SyncError
@@ -10,9 +10,10 @@ from .sync import SyncManager
 from .persistence import PersistenceManager
 from .ui import (
     apply_mobile_css, app_header, search_bar_component, bottom_navigation,
-    category_grid, product_list_item, recent_searches_section, recent_quotes_section,
-    metrics_section, cart_item_component, cart_summary, quote_export_buttons,
-    empty_state, format_price, truncate_text, floating_cart_button,
+    category_grid, product_list_item, product_list_item_compact, recent_searches_section, 
+    recent_quotes_section, metrics_section, cart_item_component, cart_summary, 
+    quote_export_buttons, empty_state, format_price, truncate_text, 
+    floating_cart_button, get_image_base64,
     COLORS, TURBO_AIR_CATEGORIES
 )
 from .pages import (
@@ -36,10 +37,11 @@ __all__ = [
     
     # UI Components
     'apply_mobile_css', 'app_header', 'search_bar_component', 'bottom_navigation',
-    'category_grid', 'product_list_item', 'recent_searches_section', 'recent_quotes_section',
+    'category_grid', 'product_list_item', 'product_list_item_compact', 
+    'recent_searches_section', 'recent_quotes_section',
     'metrics_section', 'cart_item_component', 'cart_summary', 'quote_export_buttons',
     'empty_state', 'format_price', 'truncate_text', 'floating_cart_button',
-    'COLORS', 'TURBO_AIR_CATEGORIES',
+    'get_image_base64', 'COLORS', 'TURBO_AIR_CATEGORIES',
     
     # Pages
     'show_home_page', 'show_search_page', 'show_cart_page', 'show_profile_page',

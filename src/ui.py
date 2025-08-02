@@ -1,11 +1,12 @@
 """
 UI Components for Turbo Air Equipment Viewer
-Redesigned with bottom navigation and new layout
+Fixed with compact list view and proper navigation
 """
 
 import streamlit as st
 import os
 from typing import Dict, List, Optional, Callable
+import base64
 
 # Color palette
 COLORS = {
@@ -68,8 +69,18 @@ TURBO_AIR_CATEGORIES = {
     }
 }
 
+def get_image_base64(image_path):
+    """Convert image to base64 for inline display"""
+    try:
+        if os.path.exists(image_path):
+            with open(image_path, "rb") as f:
+                return base64.b64encode(f.read()).decode()
+    except:
+        pass
+    return None
+
 def apply_mobile_css():
-    """Apply mobile-first CSS styling with bottom navigation"""
+    """Apply mobile-first CSS styling with compact list view"""
     css = f"""
     <style>
     /* Reset and base styles */
@@ -93,7 +104,7 @@ def apply_mobile_css():
     /* Remove default Streamlit padding */
     .main {{
         padding: 0 !important;
-        margin-bottom: 60px; /* Space for bottom nav */
+        margin-bottom: 50px; /* Reduced space for bottom nav */
     }}
     
     .block-container {{
@@ -101,44 +112,24 @@ def apply_mobile_css():
         max-width: 100% !important;
     }}
     
-    /* Top header with title */
-    .app-header {{
-        background: {COLORS['background']};
+    /* Search section with padding */
+    .search-section {{
         padding: 16px;
-        text-align: center;
+        background: {COLORS['background']};
         border-bottom: 1px solid {COLORS['divider']};
-        position: sticky;
-        top: 0;
-        z-index: 100;
     }}
     
-    .app-title {{
-        font-size: 20px;
+    .search-title {{
+        font-size: 16px;
         font-weight: 600;
         color: {COLORS['text_primary']};
-        margin: 0;
-    }}
-    
-    /* Search bar styling */
-    .search-container {{
-        padding: 12px 16px;
-        background: {COLORS['background']};
-    }}
-    
-    .search-input {{
-        width: 100%;
-        padding: 10px 16px;
-        background: {COLORS['surface']};
-        border: none;
-        border-radius: 10px;
-        font-size: 16px;
-        outline: none;
+        margin-bottom: 8px;
     }}
     
     /* Content area */
     .content-area {{
         padding: 16px;
-        min-height: calc(100vh - 200px);
+        min-height: calc(100vh - 150px);
     }}
     
     /* Category cards for search */
@@ -181,57 +172,66 @@ def apply_mobile_css():
         margin-top: 4px;
     }}
     
-    /* Product list styling */
-    .product-card {{
-        display: flex;
-        align-items: center;
-        padding: 12px;
-        background: {COLORS['card']};
-        border-bottom: 1px solid {COLORS['divider']};
-        cursor: pointer;
+    /* Compact product list styling - Excel-like */
+    .product-list-compact {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
     }}
     
-    .product-image {{
-        width: 80px;
-        height: 80px;
+    .product-row {{
+        display: grid;
+        grid-template-columns: 60px 120px 1fr 100px;
+        gap: 10px;
+        align-items: center;
+        padding: 8px;
+        border-bottom: 1px solid {COLORS['divider']};
+        background: {COLORS['card']};
+    }}
+    
+    .product-row:hover {{
         background: {COLORS['surface']};
-        border-radius: 8px;
-        margin-right: 12px;
+    }}
+    
+    .product-image-compact {{
+        width: 50px;
+        height: 50px;
+        background: {COLORS['surface']};
+        border-radius: 4px;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
+        font-size: 10px;
+        color: {COLORS['text_secondary']};
     }}
     
-    .product-image img {{
+    .product-image-compact img {{
         width: 100%;
         height: 100%;
         object-fit: cover;
     }}
     
-    .product-info {{
-        flex: 1;
-    }}
-    
-    .product-name {{
-        font-size: 16px;
-        font-weight: 500;
-        color: {COLORS['text_primary']};
-        margin-bottom: 4px;
-    }}
-    
-    .product-model {{
-        font-size: 14px;
-        color: {COLORS['text_secondary']};
-    }}
-    
-    .product-price {{
-        font-size: 18px;
+    .product-sku {{
         font-weight: 600;
         color: {COLORS['text_primary']};
     }}
     
-    /* Bottom navigation */
+    .product-desc {{
+        color: {COLORS['text_secondary']};
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }}
+    
+    .product-price-compact {{
+        font-weight: 600;
+        color: {COLORS['text_primary']};
+        text-align: right;
+    }}
+    
+    /* Bottom navigation - reduced height */
     .bottom-nav {{
         position: fixed;
         bottom: 0;
@@ -241,8 +241,9 @@ def apply_mobile_css():
         border-top: 1px solid {COLORS['divider']};
         display: flex;
         justify-content: space-around;
-        padding: 8px 0;
+        padding: 4px 0; /* Reduced padding */
         z-index: 1000;
+        height: 50px; /* Fixed height */
     }}
     
     .nav-item {{
@@ -251,7 +252,7 @@ def apply_mobile_css():
         align-items: center;
         justify-content: center;
         flex: 1;
-        padding: 4px;
+        padding: 2px;
         color: {COLORS['text_tertiary']};
         cursor: pointer;
         text-decoration: none;
@@ -263,12 +264,12 @@ def apply_mobile_css():
     }}
     
     .nav-icon {{
-        font-size: 24px;
-        margin-bottom: 4px;
+        font-size: 20px; /* Reduced from 24px */
+        margin-bottom: 2px;
     }}
     
     .nav-label {{
-        font-size: 11px;
+        font-size: 10px; /* Reduced from 11px */
         font-weight: 500;
     }}
     
@@ -444,7 +445,7 @@ def apply_mobile_css():
     /* Floating cart button */
     .floating-cart {{
         position: fixed;
-        bottom: 80px;
+        bottom: 60px; /* Adjusted for smaller nav */
         right: 20px;
         background: {COLORS['primary']};
         color: white;
@@ -494,12 +495,16 @@ def apply_mobile_css():
         }}
         
         .content-area {{
-            max-width: 768px;
+            max-width: 1200px;
             margin: 0 auto;
         }}
         
         .metrics-grid {{
             grid-template-columns: repeat(4, 1fr);
+        }}
+        
+        .product-row {{
+            grid-template-columns: 60px 150px 1fr 120px;
         }}
     }}
     </style>
@@ -511,7 +516,9 @@ def app_header():
     pass
 
 def search_bar_component(placeholder: str = "Search for products"):
-    """Display search bar component"""
+    """Display search bar component with title"""
+    st.markdown('<div class="search-section">', unsafe_allow_html=True)
+    st.markdown('<div class="search-title">Search</div>', unsafe_allow_html=True)
     search_key = f"search_{st.session_state.get('active_page', 'home')}"
     search_term = st.text_input(
         "Search",
@@ -519,10 +526,11 @@ def search_bar_component(placeholder: str = "Search for products"):
         key=search_key,
         label_visibility="collapsed"
     )
+    st.markdown('</div>', unsafe_allow_html=True)
     return search_term
 
 def bottom_navigation():
-    """Display bottom navigation bar"""
+    """Display bottom navigation bar with reduced height"""
     active_page = st.session_state.get('active_page', 'home')
     
     nav_items = [
@@ -580,33 +588,38 @@ def category_grid(categories: List[Dict[str, any]]):
                 st.session_state.selected_category = cat_name
                 st.rerun()
 
-def product_list_item(product: Dict) -> str:
-    """Render product list item with image"""
+def product_list_item_compact(product: Dict) -> str:
+    """Render compact product list item - Excel-like"""
     sku = product.get('sku', 'Unknown')
-    product_type = product.get('product_type') or product.get('description', '')
+    description = product.get('description') or product.get('product_type', '')
     price = product.get('price', 0)
     
     # Check for product image
     image_path = f"pdf_screenshots/{sku}/{sku} P.1.png"
     image_html = ""
     
-    if os.path.exists(image_path):
-        image_html = f'<img src="{image_path}" alt="{sku}">'
+    # Try to load image as base64
+    image_base64 = get_image_base64(image_path)
+    if image_base64:
+        image_html = f'<img src="data:image/png;base64,{image_base64}" alt="{sku}">'
     else:
-        image_html = f'<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: {COLORS["text_secondary"]}; font-size: 12px;">No Image</div>'
+        image_html = f'<div>No Image</div>'
     
     return f"""
-    <div class="product-card">
-        <div class="product-image">
+    <div class="product-row">
+        <div class="product-image-compact">
             {image_html}
         </div>
-        <div class="product-info">
-            <div class="product-name">{sku}</div>
-            <div class="product-model">{truncate_text(product_type, 50)}</div>
-        </div>
-        <div class="product-price">${price:,.2f}</div>
+        <div class="product-sku">{sku}</div>
+        <div class="product-desc">{truncate_text(description, 60)}</div>
+        <div class="product-price-compact">${price:,.2f}</div>
     </div>
     """
+
+def product_list_item(product: Dict) -> str:
+    """Render product list item with image"""
+    # Redirect to compact version
+    return product_list_item_compact(product)
 
 def recent_searches_section(searches: List[str]):
     """Display recent searches section"""
@@ -688,7 +701,7 @@ def cart_item_component(item: Dict, db_manager=None):
                     st.rerun()
     
     with col3:
-        st.markdown(f"<div class='product-price'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='product-price-compact'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
 
 def cart_summary(subtotal: float, tax_rate: float = 0.08):
     """Display cart summary"""
@@ -717,15 +730,16 @@ def cart_summary(subtotal: float, tax_rate: float = 0.08):
 def floating_cart_button(cart_count: int):
     """Display floating cart button with count"""
     cart_html = f"""
-    <div class="floating-cart">
+    <div class="floating-cart" onclick="document.getElementById('floating_cart_btn').click()">
         🛒
         <div class="cart-badge">{cart_count}</div>
     </div>
     """
     st.markdown(cart_html, unsafe_allow_html=True)
     
-    # Add click handler
-    if st.button("", key="floating_cart_btn", help="Go to cart"):
+    # Hidden button for click handling
+    if st.button("", key="floating_cart_btn", help="Go to cart", disabled=False, 
+                 type="secondary", use_container_width=False):
         st.session_state.active_page = 'cart'
         st.rerun()
 

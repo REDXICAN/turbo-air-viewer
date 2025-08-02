@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Updated for new UI with bottom navigation
+Updated with compact product display
 """
 
 import streamlit as st
@@ -11,34 +11,56 @@ from typing import Dict
 
 from .ui import (
     app_header, search_bar_component, category_grid,
-    bottom_navigation, product_list_item, recent_searches_section,
+    bottom_navigation, product_list_item_compact, recent_searches_section,
     recent_quotes_section, metrics_section, cart_item_component,
     cart_summary, quote_export_buttons, empty_state, format_price,
-    truncate_text, COLORS, TURBO_AIR_CATEGORIES
+    truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
 )
 from .export import export_quote_to_excel, export_quote_to_pdf
-from .email import show_email_quote_dialog
+from .email import show_email_quote_dialog, get_email_service
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
-    """Display home page with search and categories"""
+    """Display home page with recent activity and metrics"""
     
-    # App header
-    app_header()
+    # Recent searches
+    try:
+        searches = db_manager.get_search_history(user_id)
+        if searches:
+            recent_searches_section(searches)
+    except:
+        pass
     
-    # Search bar
-    search_term = search_bar_component("Search for products")
+    # Recent quotes
+    try:
+        quotes_df = db_manager.get_user_quotes(user_id, limit=5)
+        if not quotes_df.empty:
+            recent_quotes_section(quotes_df.to_dict('records'))
+    except:
+        pass
     
-    # Handle search
-    if search_term and len(search_term) >= 2:
-        # Save search term and redirect to search page
-        st.session_state.search_term = search_term
-        st.session_state.active_page = 'search'
-        st.rerun()
+    # Metrics
+    try:
+        stats = db_manager.get_dashboard_stats(user_id)
+        metrics_section(stats)
+    except:
+        pass
     
-    # Categories section
+    # If no content, show empty state
+    if not any([
+        db_manager.get_search_history(user_id),
+        not db_manager.get_user_quotes(user_id, limit=5).empty,
+        db_manager.get_dashboard_stats(user_id).get('total_clients', 0) > 0
+    ]):
+        empty_state("🏠", "Welcome to Turbo Air", "Start by searching for products or creating a client")
+
+def show_search_page(user_id, db_manager):
+    """Display search/products page with categories always visible"""
+    
+    # Search bar with title and padding
+    search_term = search_bar_component("Search by SKU, category or description")
+    
+    # Always show categories
     st.markdown("### Categories")
-    
-    # Get categories with counts
     categories = []
     for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
         try:
@@ -56,77 +78,18 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     if categories:
         category_grid(categories)
     
-    # Quick Access buttons
-    st.markdown("### Quick Access")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("❄️ Refrigerators", use_container_width=True):
-            st.session_state.selected_category = "REACH-IN REFRIGERATION"
-            st.session_state.active_page = 'search'
-            st.rerun()
-    
-    with col2:
-        if st.button("❄️ Freezers", use_container_width=True):
-            st.session_state.selected_category = "REACH-IN REFRIGERATION"
-            st.session_state.active_page = 'search'
-            st.rerun()
-    
-    col3, col4 = st.columns(2)
-    with col3:
-        if st.button("🍕 Pizza Prep", use_container_width=True):
-            st.session_state.selected_category = "FOOD PREP TABLES"
-            st.session_state.active_page = 'search'
-            st.rerun()
-    
-    with col4:
-        if st.button("🍔 Prep Tables", use_container_width=True):
-            st.session_state.selected_category = "FOOD PREP TABLES"
-            st.session_state.active_page = 'search'
-            st.rerun()
-    
-    # Recent searches
-    try:
-        searches = db_manager.get_search_history(user_id)
-        recent_searches_section(searches)
-    except:
-        pass
-    
-    # Recent quotes
-    try:
-        quotes_df = db_manager.get_client_quotes(st.session_state.get('selected_client'))
-        if not quotes_df.empty:
-            recent_quotes_section(quotes_df.to_dict('records'))
-    except:
-        pass
-    
-    # Metrics
-    try:
-        stats = db_manager.get_dashboard_stats(user_id)
-        metrics_section(stats)
-    except:
-        pass
-
-def show_search_page(user_id, db_manager):
-    """Display search/products page"""
-    
-    # App header
-    app_header()
-    
-    # Search bar
-    search_term = search_bar_component("Search by model or keyword")
-    
+    # Handle search or category selection
     results_df = pd.DataFrame()
     
-    if search_term:
+    if search_term and len(search_term) >= 2:
         # Save to search history
-        if len(search_term) > 2:
-            try:
-                db_manager.add_search_history(user_id, search_term)
-            except:
-                pass
+        try:
+            db_manager.add_search_history(user_id, search_term)
+        except:
+            pass
         
         # Search products
+        st.markdown("### Search Results")
         try:
             results_df = db_manager.search_products(search_term)
         except:
@@ -135,7 +98,6 @@ def show_search_page(user_id, db_manager):
     elif st.session_state.get('selected_category'):
         # Show category products
         category = st.session_state.selected_category
-        
         st.markdown(f"### {category}")
         
         try:
@@ -144,40 +106,41 @@ def show_search_page(user_id, db_manager):
             st.error("Error loading category products")
     
     else:
-        # Show all categories
-        st.markdown("### Browse by Category")
-        
-        categories = []
-        for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
-            try:
-                products_df = db_manager.get_products_by_category(cat_name)
-                count = len(products_df) if products_df is not None else 0
-            except:
-                count = 0
-            
-            categories.append({
-                "name": cat_name,
-                "count": count,
-                "icon": cat_info["icon"]
-            })
-        
-        if categories:
-            category_grid(categories)
+        # Show recent searches when no active search
+        searches = db_manager.get_search_history(user_id)
+        if searches:
+            st.markdown("### Recent Searches")
+            for search in searches[:5]:
+                if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
+                    st.session_state.search_term = search
+                    st.rerun()
     
-    # Display results
+    # Display results in compact format
     if not results_df.empty:
         st.markdown(f"### Results ({len(results_df)} items)")
         
+        # Create compact list header
+        st.markdown("""
+        <div class="product-row" style="font-weight: bold; background: #f0f0f0;">
+            <div style="width: 60px;">Image</div>
+            <div style="width: 120px;">SKU</div>
+            <div style="flex: 1;">Description</div>
+            <div style="width: 100px; text-align: right;">Price</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Display products in compact format
         for _, product in results_df.iterrows():
-            st.markdown(product_list_item(product.to_dict()), unsafe_allow_html=True)
+            st.markdown(product_list_item_compact(product.to_dict()), unsafe_allow_html=True)
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("View Details", key=f"view_{product['id']}", use_container_width=True):
+            # Action buttons in a subtle row
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col2:
+                if st.button("Details", key=f"view_{product['id']}", use_container_width=True):
                     st.session_state.show_product_detail = product.to_dict()
                     st.rerun()
-            with col2:
-                if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True, type="primary"):
+            with col3:
+                if st.button("Add", key=f"add_{product['id']}", use_container_width=True, type="primary"):
                     if st.session_state.get('selected_client'):
                         success, message = db_manager.add_to_cart(
                             user_id, product['id'], st.session_state.selected_client
@@ -187,18 +150,17 @@ def show_search_page(user_id, db_manager):
                             st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
                     else:
                         st.error("Please select a client first")
-            st.divider()
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
-    
-    # App header
-    app_header()
     
     st.markdown("### Cart")
     
     if not st.session_state.get('selected_client'):
         empty_state("🛒", "No Client Selected", "Please select a client to view cart")
+        if st.button("Go to Profile", use_container_width=True):
+            st.session_state.active_page = 'profile'
+            st.rerun()
         return
     
     try:
@@ -208,6 +170,9 @@ def show_cart_page(user_id, db_manager):
     
     if cart_items_df.empty:
         empty_state("🛒", "Cart is Empty", "Add products to your cart to create a quote")
+        if st.button("Browse Products", use_container_width=True):
+            st.session_state.active_page = 'search'
+            st.rerun()
         return
     
     # Display cart items
@@ -257,34 +222,111 @@ def show_cart_page(user_id, db_manager):
                 st.error(f"Error generating quote: {str(e)}")
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
-    """Display profile page"""
-    
-    # App header
-    app_header()
+    """Display profile page with client management"""
     
     st.markdown("### Profile")
     
-    # User info
-    st.markdown(f"**Email:** {user.get('email', 'N/A')}")
-    st.markdown(f"**Role:** {auth_manager.get_user_role().title()}")
-    
-    # Connection status
-    if auth_manager.is_online:
-        st.success("🟢 Connected to Supabase")
-    else:
-        st.warning("🔴 Running in offline mode")
-    
-    # Admin functions
-    if auth_manager.is_admin():
-        st.markdown("#### Admin Functions")
+    # User info section
+    with st.expander("User Information", expanded=True):
+        st.markdown(f"**Email:** {user.get('email', 'N/A')}")
+        st.markdown(f"**Role:** {auth_manager.get_user_role().title()}")
         
-        if st.button("🔄 Sync Database", use_container_width=True):
-            with st.spinner("Syncing..."):
-                result = sync_manager.sync_all()
-                if result['success']:
-                    st.success(result['message'])
+        # Connection status
+        if auth_manager.is_online:
+            st.success("🟢 Connected to Supabase")
+        else:
+            st.warning("🔴 Running in offline mode")
+    
+    # Client Management Section
+    st.markdown("### Client Management")
+    
+    # Add new client form
+    with st.expander("Add New Client"):
+        with st.form("add_client_form"):
+            company = st.text_input("Company Name*", key="new_company")
+            contact_name = st.text_input("Contact Name", key="new_contact_name")
+            contact_email = st.text_input("Contact Email", key="new_contact_email")
+            contact_number = st.text_input("Contact Phone", key="new_contact_number")
+            
+            if st.form_submit_button("Add Client", use_container_width=True):
+                if company:
+                    success, message = db_manager.create_client(
+                        user['id'], company, contact_name, contact_email, contact_number
+                    )
+                    if success:
+                        st.success(message)
+                        st.rerun()
+                    else:
+                        st.error(message)
                 else:
-                    st.error(result['message'])
+                    st.error("Company name is required")
+    
+    # Client list with quotes
+    st.markdown("### My Clients")
+    
+    try:
+        clients_df = db_manager.get_user_clients(user['id'])
+        
+        if clients_df.empty:
+            empty_state("👥", "No Clients Yet", "Add your first client above")
+        else:
+            # Show current selected client
+            if st.session_state.get('selected_client'):
+                selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
+                if not selected_client.empty:
+                    st.info(f"Selected Client: **{selected_client.iloc[0]['company']}**")
+            
+            # List all clients
+            for _, client in clients_df.iterrows():
+                with st.expander(f"**{client['company']}**"):
+                    # Client details
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Contact:** {client.get('contact_name', 'N/A')}")
+                        st.markdown(f"**Email:** {client.get('contact_email', 'N/A')}")
+                    with col2:
+                        st.markdown(f"**Phone:** {client.get('contact_number', 'N/A')}")
+                        st.markdown(f"**Added:** {pd.to_datetime(client['created_at']).strftime('%Y-%m-%d')}")
+                    
+                    # Select client button
+                    if st.button(f"Select Client", key=f"select_{client['id']}", use_container_width=True):
+                        st.session_state.selected_client = client['id']
+                        st.success(f"Selected {client['company']}")
+                        st.rerun()
+                    
+                    # Show client quotes
+                    st.markdown("#### Quotes")
+                    quotes_df = db_manager.get_client_quotes(client['id'])
+                    
+                    if quotes_df.empty:
+                        st.caption("No quotes for this client yet")
+                    else:
+                        for _, quote in quotes_df.iterrows():
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                st.markdown(f"**{quote['quote_number']}**")
+                                st.caption(pd.to_datetime(quote['created_at']).strftime('%Y-%m-%d'))
+                            with col2:
+                                st.markdown(f"${quote['total_amount']:,.2f}")
+                            with col3:
+                                if st.button("View", key=f"view_quote_{quote['id']}", use_container_width=True):
+                                    # Load quote details for viewing
+                                    st.session_state.view_quote_id = quote['id']
+                                    st.info("Quote viewing coming soon!")
+    
+    except Exception as e:
+        st.error(f"Error loading clients: {str(e)}")
+    
+    # Admin functions (if applicable)
+    if auth_manager.is_admin():
+        with st.expander("Admin Functions"):
+            if st.button("🔄 Sync Database", use_container_width=True):
+                with st.spinner("Syncing..."):
+                    result = sync_manager.sync_all()
+                    if result['success']:
+                        st.success(result['message'])
+                    else:
+                        st.error(result['message'])
     
     # Sign out
     st.markdown("### ")
@@ -295,33 +337,43 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
 def show_product_detail(product: Dict, user_id: str, db_manager):
     """Display product detail modal"""
     
-    # App header
-    app_header()
-    
     # Back button
     if st.button("← Back", key="back_from_detail"):
         st.session_state.show_product_detail = None
         st.rerun()
     
     # Product image
-    image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
-    if os.path.exists(image_path):
-        st.image(image_path, use_container_width=True)
-    else:
-        empty_state("📷", "No Image", "Product image not available")
+    col1, col2 = st.columns([1, 2])
     
-    # Product info
-    st.markdown(f"### {product['sku']}")
-    st.markdown(f"**{product.get('product_type', 'N/A')}**")
-    st.markdown(f"### {format_price(product.get('price', 0))}")
+    with col1:
+        image_path = f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png"
+        image_base64 = get_image_base64(image_path)
+        
+        if image_base64:
+            st.markdown(f"""
+            <div style="width: 100%; height: 200px; overflow: hidden; border-radius: 8px;">
+                <img src="data:image/png;base64,{image_base64}" 
+                     style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            empty_state("📷", "No Image", "Product image not available")
     
-    if product.get('description'):
-        st.markdown(product['description'])
+    with col2:
+        # Product info
+        st.markdown(f"### {product['sku']}")
+        st.markdown(f"**{product.get('product_type', 'N/A')}**")
+        st.markdown(f"### {format_price(product.get('price', 0))}")
+        
+        if product.get('description'):
+            st.markdown(product['description'])
     
     # Specifications
     st.markdown("### Specifications")
     
     specs = {
+        "Category": product.get('category', '-'),
+        "Subcategory": product.get('subcategory', '-'),
         "Capacity": product.get('capacity', '-'),
         "Dimensions": product.get('dimensions', '-'),
         "Weight": product.get('weight', '-'),
@@ -331,7 +383,8 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     }
     
     for key, value in specs.items():
-        st.markdown(f"**{key}:** {value}")
+        if value and value != '-':
+            st.markdown(f"**{key}:** {value}")
     
     # Add to Cart button
     if st.button("Add to Cart", use_container_width=True, type="primary"):
@@ -342,81 +395,121 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
             if success:
                 st.success("Added to cart!")
                 st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
-                st.session_state.show_product_detail = None
-                st.rerun()
+                # Don't close detail view, let user continue browsing
+            else:
+                st.error(message)
         else:
             st.error("Please select a client first")
 
 def show_quote_summary(quote: Dict):
-    """Display quote summary page"""
-    
-    # App header
-    app_header()
+    """Display quote summary page with export options"""
     
     st.markdown("### Quote Summary")
+    
+    # Quote details
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**Quote Number:** {quote['quote_number']}")
+        st.markdown(f"**Date:** {datetime.now().strftime('%B %d, %Y')}")
+    with col2:
+        st.markdown(f"**Client:** {quote['client_data'].get('company', 'N/A')}")
+        st.markdown(f"**Total:** ${quote['total_amount']:,.2f}")
+    
+    st.divider()
     
     # Equipment list
     st.markdown("### Equipment List")
     for _, item in quote['items'].iterrows():
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
             st.markdown(f"**{item['sku']}**")
-            st.caption(f"Model: {item.get('product_type', 'N/A')}")
+            if item.get('product_type'):
+                st.caption(f"Model: {item['product_type']}")
         with col2:
-            st.text(f"Qty: {item['quantity']}")
+            st.markdown(f"Qty: {item['quantity']}")
         with col3:
-            st.text(format_price(item['price'] * item['quantity']))
+            st.markdown(format_price(item['price'] * item['quantity']))
     
-    # Pricing details
-    st.markdown("### Pricing Details")
+    # Pricing summary
+    st.divider()
     cart_summary(quote['total_amount'] / 1.08)  # Assuming 8% tax
     
-    # Export buttons
-    col1, col2 = st.columns(2)
+    # Export options
+    st.markdown("### Export Options")
+    
+    col1, col2, col3 = st.columns(3)
+    
     with col1:
-        if st.button("Export as Excel", use_container_width=True):
+        if st.button("📊 Export Excel", use_container_width=True):
             try:
-                excel_file = export_quote_to_excel(
+                from .export import generate_excel_quote
+                excel_buffer = generate_excel_quote(
                     quote['quote_data'], 
                     quote['items'], 
                     quote['client_data']
                 )
-                with open(excel_file, 'rb') as f:
-                    st.download_button(
-                        "📊 Download Excel",
-                        f.read(),
-                        file_name=excel_file,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
-                    )
+                st.download_button(
+                    "Download Excel",
+                    excel_buffer.getvalue(),
+                    file_name=f"Quote_{quote['quote_number']}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
             except Exception as e:
                 st.error(f"Export error: {e}")
     
     with col2:
-        if st.button("Export as PDF", use_container_width=True, type="primary"):
+        if st.button("📄 Export PDF", use_container_width=True):
             try:
-                pdf_file = export_quote_to_pdf(
+                from .export import generate_pdf_quote
+                pdf_buffer = generate_pdf_quote(
                     quote['quote_data'], 
                     quote['items'], 
                     quote['client_data']
                 )
-                with open(pdf_file, 'rb') as f:
-                    st.download_button(
-                        "📄 Download PDF",
-                        f.read(),
-                        file_name=pdf_file,
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
+                st.download_button(
+                    "Download PDF",
+                    pdf_buffer.getvalue(),
+                    file_name=f"Quote_{quote['quote_number']}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
             except Exception as e:
                 st.error(f"Export error: {e}")
     
-    # Back to home
-    if st.button("Back to Home", use_container_width=True):
-        # Clear cart
-        db_manager = st.session_state.db_manager
-        user_id = st.session_state.user['id']
-        db_manager.clear_cart(user_id, st.session_state.selected_client)
-        
-        st.session_state.active_page = 'home'
-        st.rerun()
+    with col3:
+        if st.button("📧 Email Quote", use_container_width=True):
+            email_service = get_email_service()
+            if email_service and email_service.configured:
+                show_email_quote_dialog(
+                    quote['quote_data'],
+                    quote['items'],
+                    quote['client_data']
+                )
+            else:
+                st.warning("Email service not configured")
+                st.info("To enable email, configure Gmail credentials in your secrets")
+    
+    # Action buttons
+    st.markdown("### ")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Create New Quote", use_container_width=True):
+            # Clear cart and go to search
+            db_manager = st.session_state.db_manager
+            user_id = st.session_state.user['id']
+            db_manager.clear_cart(user_id, st.session_state.selected_client)
+            st.session_state.cart_count = 0
+            st.session_state.active_page = 'search'
+            st.rerun()
+    
+    with col2:
+        if st.button("Back to Home", use_container_width=True, type="primary"):
+            # Clear cart
+            db_manager = st.session_state.db_manager
+            user_id = st.session_state.user['id']
+            db_manager.clear_cart(user_id, st.session_state.selected_client)
+            st.session_state.cart_count = 0
+            st.session_state.active_page = 'home'
+            st.rerun()
