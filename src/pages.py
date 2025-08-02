@@ -11,7 +11,7 @@ from typing import Dict
 
 from .ui import (
     app_header, search_bar_component, category_grid,
-    bottom_navigation, product_list_item_compact, recent_searches_section,
+    product_list_item_compact, recent_searches_section,
     recent_quotes_section, metrics_section, cart_item_component,
     cart_summary, quote_export_buttons, empty_state, format_price,
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
@@ -48,6 +48,14 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     # Create responsive layout
     container = st.container()
     with container:
+        # Show metrics first to give immediate value
+        try:
+            stats = db_manager.get_dashboard_stats(user_id)
+            if stats and (stats.get('total_clients', 0) > 0 or stats.get('total_quotes', 0) > 0):
+                metrics_section(stats)
+        except:
+            pass
+        
         # Recent searches
         try:
             searches = db_manager.get_search_history(user_id)
@@ -64,14 +72,7 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         except:
             pass
         
-        # Metrics
-        try:
-            stats = db_manager.get_dashboard_stats(user_id)
-            metrics_section(stats)
-        except:
-            pass
-        
-        # If no content, show empty state
+        # If no content, show empty state with action buttons
         has_content = False
         try:
             has_content = (
@@ -84,6 +85,17 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         
         if not has_content:
             empty_state("🏠", "Start Your Quote", "Search for products or create a client to begin")
+            
+            # Add quick action buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔍 Browse Products", use_container_width=True, type="primary"):
+                    st.session_state.active_page = 'search'
+                    st.rerun()
+            with col2:
+                if st.button("👤 Add Client", use_container_width=True):
+                    st.session_state.active_page = 'profile'
+                    st.rerun()
 
 def show_search_page(user_id, db_manager):
     """Display search/products page with categories always visible"""
