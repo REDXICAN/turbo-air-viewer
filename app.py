@@ -50,23 +50,9 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* Ensure content doesn't get hidden behind bottom nav on mobile/tablet */
-    @media (max-width: 1024px) {
-        .main {
-            padding-bottom: 60px !important;
-        }
-    }
-    
-    /* Desktop styling */
-    @media (min-width: 1024px) {
-        .main {
-            padding-bottom: 0 !important;
-        }
-        
-        /* Center auth form on desktop */
-        .stForm {
-            margin-top: 2rem !important;
-        }
+    /* Ensure content doesn't get hidden behind console */
+    .main {
+        padding-bottom: 40px !important;
     }
     
     /* Remove extra spacing from buttons */
@@ -77,13 +63,6 @@ st.markdown("""
     /* Fix any scrollbar issues */
     .main {
         overflow-x: hidden;
-    }
-    
-    /* Ensure responsive columns work properly */
-    @media (min-width: 768px) {
-        div[data-testid="column"] > div:first-child > div > div > div {
-            padding-top: 0 !important;
-        }
     }
     
     /* Logo styling */
@@ -101,6 +80,41 @@ st.markdown("""
     @media (min-width: 1024px) {
         .stImage {
             max-width: 500px;
+        }
+    }
+    
+    /* Console display */
+    .console-display {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 30px;
+        background: #1a1a1a;
+        color: #00ff00;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 5px 10px;
+        display: flex;
+        align-items: center;
+        z-index: 9999;
+        border-top: 1px solid #333;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    
+    @media (min-width: 768px) {
+        .console-display {
+            font-size: 13px;
+            padding: 5px 15px;
+        }
+    }
+    
+    @media (min-width: 1024px) {
+        .console-display {
+            font-size: 14px;
+            padding: 5px 20px;
         }
     }
 </style>
@@ -247,11 +261,26 @@ def periodic_backup(persistence_manager, auth_manager):
             except:
                 pass
 
-def get_device_type():
-    """Determine device type based on viewport (for desktop navigation)"""
-    # This is a simple check, in a real app you'd use JavaScript
-    # For now, we'll assume desktop if running locally
-    return "desktop" if not st.session_state.get('is_mobile', False) else "mobile"
+def show_console():
+    """Display console at the bottom of the page"""
+    from datetime import datetime
+    current_time = datetime.now().strftime("%H:%M:%S")
+    
+    message = f"[{current_time}] "
+    
+    if hasattr(st.session_state, 'auth_manager') and st.session_state.auth_manager.is_authenticated():
+        user = st.session_state.auth_manager.get_current_user()
+        if user:
+            message += f"User: {user.get('email', 'Unknown')} | "
+        message += f"Page: {st.session_state.active_page} | "
+        if st.session_state.auth_manager.is_online:
+            message += "Status: Online"
+        else:
+            message += "Status: Offline"
+    else:
+        message += "Awaiting authentication..."
+    
+    st.markdown(f'<div class="console-display">{message}</div>', unsafe_allow_html=True)
 
 def main():
     """Main application entry point"""
@@ -304,7 +333,7 @@ def main():
         else:
             st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air</h1>", unsafe_allow_html=True)
         
-        # Center the auth form on larger screens
+        # Show auth form centered
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             # Show auth form
@@ -355,6 +384,7 @@ def main():
         if st.session_state.get('show_product_detail'):
             show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
             # Don't show bottom navigation on product detail
+            show_console()
             return
         
         # Clear product detail when navigating away
@@ -390,6 +420,9 @@ def main():
         # Floating cart button (only on search page when cart has items)
         if active_page == 'search' and st.session_state.cart_count > 0:
             floating_cart_button(st.session_state.cart_count)
+    
+    # Always show console at the bottom
+    show_console()
 
 if __name__ == "__main__":
     main()

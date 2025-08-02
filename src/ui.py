@@ -104,6 +104,7 @@ def apply_mobile_css():
     /* Remove default Streamlit padding */
     .main {{
         padding: 0 !important;
+        margin-bottom: 90px; /* Space for bottom nav + console */
     }}
     
     .block-container {{
@@ -249,6 +250,49 @@ def apply_mobile_css():
     /* Recent items styling */
     .recent-section {{
         margin-bottom: 24px;
+    }}
+    
+    /* Bottom navigation - responsive */
+    .bottom-nav {{
+        position: fixed;
+        bottom: 30px; /* Adjusted for console */
+        left: 0;
+        right: 0;
+        background: {COLORS['background']};
+        border-top: 1px solid {COLORS['divider']};
+        display: flex;
+        justify-content: space-around;
+        padding: 8px 0;
+        z-index: 1000;
+        height: 56px;
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    }}
+    
+    .nav-item {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex: 1;
+        padding: 4px;
+        color: {COLORS['text_tertiary']};
+        cursor: pointer;
+        text-decoration: none;
+        transition: color 0.2s ease;
+    }}
+    
+    .nav-item.active {{
+        color: {COLORS['primary']};
+    }}
+    
+    .nav-icon {{
+        font-size: 22px;
+        margin-bottom: 2px;
+    }}
+    
+    .nav-label {{
+        font-size: 11px;
+        font-weight: 500;
     }}
     
     .section-title {{
@@ -449,7 +493,7 @@ def apply_mobile_css():
     /* Floating cart button */
     .floating-cart {{
         position: fixed;
-        bottom: 50px; /* Adjusted for console display */
+        bottom: 100px; /* Adjusted for bottom nav + console */
         right: 20px;
         background: {COLORS['primary']};
         color: white;
@@ -502,9 +546,12 @@ def apply_mobile_css():
         transition: all 0.2s ease;
     }}
     
-    /* Hide Streamlit specific elements but keep nav buttons visible */
+    /* Hide Streamlit specific elements */
     .stButton > button {{
         width: 100%;
+        background: none;
+        border: none;
+        padding: 0;
     }}
     
     div[data-testid="stSidebar"] {{
@@ -547,11 +594,22 @@ def apply_mobile_css():
         }}
         
         .floating-cart {{
-            bottom: 50px; /* Adjusted for console display */
+            bottom: 100px; /* Adjusted for bottom nav + console */
+        }}
+        
+        .bottom-nav {{
+            height: 64px;
+            padding: 10px 0;
+        }}
+        
+        .nav-icon {{
+            font-size: 24px;
+        }}
+        
+        .nav-label {{
+            font-size: 12px;
         }}
     }}
-    }}
-    
     /* Desktop Responsive (1024px+) */
     @media (min-width: 1024px) {{
         .category-row {{
@@ -592,9 +650,14 @@ def apply_mobile_css():
             font-size: 14px;
         }}
         
+        /* Hide bottom nav on desktop */
+        .bottom-nav {{
+            display: none;
+        }}
+        
         /* Show desktop navigation */
         .main {{
-            margin-bottom: 0;
+            margin-bottom: 30px; /* Only console on desktop */
         }}
         
         .search-section {{
@@ -626,7 +689,7 @@ def apply_mobile_css():
         }}
         
         .floating-cart {{
-            bottom: 60px; /* Adjusted for console display */
+            bottom: 50px; /* Only console on desktop */
             right: 30px;
             width: 64px;
             height: 64px;
@@ -675,6 +738,49 @@ def search_bar_component(placeholder: str = "Search for products"):
     )
     st.markdown('</div>', unsafe_allow_html=True)
     return search_term
+
+def bottom_navigation():
+    """Display bottom navigation bar"""
+    active_page = st.session_state.get('active_page', 'home')
+    
+    nav_items = [
+        {"icon": "🏠", "label": "Home", "page": "home"},
+        {"icon": "🔍", "label": "Search", "page": "search"},
+        {"icon": "🛒", "label": "Cart", "page": "cart"},
+        {"icon": "👤", "label": "Profile", "page": "profile"}
+    ]
+    
+    # Create the navigation HTML
+    nav_html = '<div class="bottom-nav">'
+    for item in nav_items:
+        active_class = "active" if item["page"] == active_page else ""
+        nav_html += f'''
+        <div class="nav-item {active_class}" id="nav_{item['page']}">
+            <div class="nav-icon">{item["icon"]}</div>
+            <div class="nav-label">{item["label"]}</div>
+        </div>
+        '''
+    nav_html += '</div>'
+    
+    st.markdown(nav_html, unsafe_allow_html=True)
+    
+    # Handle navigation clicks
+    col1, col2, col3, col4 = st.columns(4)
+    cols = [col1, col2, col3, col4]
+    
+    for i, item in enumerate(nav_items):
+        with cols[i]:
+            if st.button(
+                "",
+                key=f"nav_btn_{item['page']}",
+                use_container_width=True,
+                disabled=(item["page"] == active_page)
+            ):
+                st.session_state.active_page = item["page"]
+                # Clear category selection when navigating away from search
+                if item["page"] != "search":
+                    st.session_state.selected_category = None
+                st.rerun()
 
 def category_grid(categories: List[Dict[str, any]]):
     """Display category grid for search page"""

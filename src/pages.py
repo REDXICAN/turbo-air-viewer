@@ -11,7 +11,7 @@ from typing import Dict
 
 from .ui import (
     app_header, search_bar_component, category_grid,
-    product_list_item_compact, recent_searches_section,
+    bottom_navigation, product_list_item_compact, recent_searches_section,
     recent_quotes_section, metrics_section, cart_item_component,
     cart_summary, quote_export_buttons, empty_state, format_price,
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
