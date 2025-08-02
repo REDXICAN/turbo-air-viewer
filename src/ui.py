@@ -1,6 +1,6 @@
 """
 UI Components for Turbo Air Equipment Viewer
-Mobile-First iOS-style design
+Redesigned with bottom navigation and new layout
 """
 
 import streamlit as st
@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Callable
 COLORS = {
     'primary': '#007AFF',
     'turbo_blue': '#20429c',
-    'turbo_red': '#FF3B30',
     'background': '#FFFFFF',
     'surface': '#F2F2F7',
     'card': '#FFFFFF',
@@ -25,91 +24,64 @@ COLORS = {
     'divider': '#E5E5EA'
 }
 
-# Turbo Air Official Categories
+# New Turbo Air Categories Structure
 TURBO_AIR_CATEGORIES = {
+    "REACH-IN REFRIGERATION": {
+        "icon": "❄️",
+        "series": ["PRO", "TSF", "M3R", "M3F", "M3H"],
+        "types": ["Refrigerators", "Freezers", "Dual Temperature"]
+    },
+    "FOOD PREP TABLES": {
+        "icon": "🥗",
+        "series": ["PST", "TST", "MST", "TPR"],
+        "types": ["Sandwich/Salad Prep", "Pizza Prep"]
+    },
+    "UNDERCOUNTER REFRIGERATION": {
+        "icon": "📦",
+        "series": ["MUR", "PUR", "EUR"],
+        "types": ["Refrigerators", "Freezers"]
+    },
+    "WORKTOP REFRIGERATION": {
+        "icon": "🔧",
+        "series": ["TWR", "PWR"],
+        "types": ["Refrigerators", "Freezers"]
+    },
     "GLASS DOOR MERCHANDISERS": {
         "icon": "🥤",
-        "subcategories": [
-            "Super Deluxe Series Glass Door Merchandisers",
-            "Super Deluxe Jumbo Series Glass Door Merchandisers",
-            "Standard Series Glass Door Merchandisers",
-            "Ice Merchandisers",
-            "E-line - Swing Doors Refrigerators",
-            "Top Open Island Freezers",
-            "Ice Cream Dipping Cabinets"
-        ]
+        "series": ["TGM", "TGF"],
+        "types": ["Refrigerators", "Freezers"]
     },
     "DISPLAY CASES": {
         "icon": "🍰",
-        "subcategories": [
-            "Open Display Merchandisers",
-            "Sandwich & Cheese Cases",
-            "Vertical Cases",
-            "Vertical Air Curtains",
-            "Island Display Cases",
-            "Bakery & Deli Display Cases",
-            "Sushi Cases"
-        ]
+        "series": ["Various"],
+        "types": ["Open Display", "Deli Cases", "Bakery Cases"]
     },
     "UNDERBAR EQUIPMENT": {
         "icon": "🍺",
-        "subcategories": [
-            "Bottle Coolers",
-            "Glass / Mug Frosters",
-            "Beer Dispensers",
-            "Club Top Beer Dispensers",
-            "Back Bars",
-            "Narrow Back Bars"
-        ]
+        "series": ["Various"],
+        "types": ["Bottle Coolers", "Beer Dispensers", "Back Bars"]
     },
     "MILK COOLERS": {
         "icon": "🥛",
-        "subcategories": [
-            "Milk Coolers"
-        ]
+        "series": ["TMC", "TMW"],
+        "types": ["Milk Coolers"]
     }
 }
 
 def apply_mobile_css():
-    """Apply mobile-first CSS styling"""
+    """Apply mobile-first CSS styling with bottom navigation"""
     css = f"""
     <style>
-    /* Remove Streamlit's default top padding - More aggressive approach */
-    .stApp > header {{
-        display: none !important;
-    }}
-    
-    .main {{
-        padding-top: 0 !important;
-    }}
-    
-    .main > div:first-child {{
-        padding-top: 0 !important;
-    }}
-    
-    #root > div:nth-child(1) > div > div > div > div > section > div {{
-        padding-top: 0 !important;
-    }}
-    
-    .block-container {{
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-        max-width: 100% !important;
-    }}
-    
-    /* Remove padding from all parent containers */
-    div[data-testid="stAppViewContainer"] > section {{
-        padding-top: 0 !important;
-    }}
-    
-    div[data-testid="stVerticalBlock"] > div:first-child {{
-        padding-top: 0 !important;
-    }}
-    
     /* Reset and base styles */
+    * {{
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }}
+    
     .stApp {{
         background-color: {COLORS['background']};
-        max-width: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }}
     
     /* Hide Streamlit elements */
@@ -118,85 +90,123 @@ def apply_mobile_css():
     header {{visibility: hidden;}}
     .stDeployButton {{display: none;}}
     
-    /* Mobile-first responsive design */
-    @media (max-width: 768px) {{
-        .stApp > div > div {{
-            padding: 0 !important;
-        }}
-        
-        .main > div {{
-            padding: 0 !important;
-        }}
+    /* Remove default Streamlit padding */
+    .main {{
+        padding: 0 !important;
+        margin-bottom: 60px; /* Space for bottom nav */
     }}
     
-    /* Typography */
-    h1, h2, h3, h4, h5, h6 {{
-        font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-        font-weight: 600;
-        color: {COLORS['text_primary']};
+    .block-container {{
+        padding: 0 !important;
+        max-width: 100% !important;
     }}
     
-    /* Header styles */
-    .mobile-header {{
-        background: {COLORS['card']};
-        padding: 12px 16px;
+    /* Top header with title */
+    .app-header {{
+        background: {COLORS['background']};
+        padding: 16px;
+        text-align: center;
         border-bottom: 1px solid {COLORS['divider']};
         position: sticky;
         top: 0;
         z-index: 100;
-        margin-top: 0;
     }}
     
-    /* Search bar */
+    .app-title {{
+        font-size: 20px;
+        font-weight: 600;
+        color: {COLORS['text_primary']};
+        margin: 0;
+    }}
+    
+    /* Search bar styling */
     .search-container {{
-        background: {COLORS['surface']};
-        border-radius: 10px;
-        padding: 8px 12px;
-        margin: 12px 16px;
+        padding: 12px 16px;
+        background: {COLORS['background']};
     }}
     
-    /* Category card */
+    .search-input {{
+        width: 100%;
+        padding: 10px 16px;
+        background: {COLORS['surface']};
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        outline: none;
+    }}
+    
+    /* Content area */
+    .content-area {{
+        padding: 16px;
+        min-height: calc(100vh - 200px);
+    }}
+    
+    /* Category cards for search */
+    .category-row {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+    }}
+    
     .category-card {{
-        background: {COLORS['turbo_blue']};
+        background: {COLORS['card']};
+        border: 1px solid {COLORS['divider']};
         border-radius: 12px;
         padding: 16px;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        transition: all 0.2s ease;
         cursor: pointer;
-        height: 140px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
+        transition: all 0.2s ease;
     }}
     
     .category-card:hover {{
+        background: {COLORS['surface']};
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }}
     
-    .category-card .icon {{
-        font-size: 36px;
+    .category-icon {{
+        font-size: 32px;
         margin-bottom: 8px;
     }}
     
-    .category-card h4 {{
-        margin: 0;
-        font-size: 13px;
+    .category-name {{
+        font-size: 14px;
         font-weight: 500;
-        color: white;
-        line-height: 1.2;
+        color: {COLORS['text_primary']};
     }}
     
-    /* Product list item */
-    .product-item {{
-        background: {COLORS['card']};
-        padding: 12px 16px;
-        border-bottom: 1px solid {COLORS['divider']};
+    .category-count {{
+        font-size: 12px;
+        color: {COLORS['text_secondary']};
+        margin-top: 4px;
+    }}
+    
+    /* Product list styling */
+    .product-card {{
         display: flex;
         align-items: center;
-        gap: 12px;
+        padding: 12px;
+        background: {COLORS['card']};
+        border-bottom: 1px solid {COLORS['divider']};
+        cursor: pointer;
+    }}
+    
+    .product-image {{
+        width: 80px;
+        height: 80px;
+        background: {COLORS['surface']};
+        border-radius: 8px;
+        margin-right: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }}
+    
+    .product-image img {{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }}
     
     .product-info {{
@@ -204,20 +214,19 @@ def apply_mobile_css():
     }}
     
     .product-name {{
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 500;
         color: {COLORS['text_primary']};
-        margin: 0;
+        margin-bottom: 4px;
     }}
     
     .product-model {{
-        font-size: 12px;
+        font-size: 14px;
         color: {COLORS['text_secondary']};
-        margin: 0;
     }}
     
     .product-price {{
-        font-size: 16px;
+        font-size: 18px;
         font-weight: 600;
         color: {COLORS['text_primary']};
     }}
@@ -228,7 +237,7 @@ def apply_mobile_css():
         bottom: 0;
         left: 0;
         right: 0;
-        background: {COLORS['card']};
+        background: {COLORS['background']};
         border-top: 1px solid {COLORS['divider']};
         display: flex;
         justify-content: space-around;
@@ -245,6 +254,7 @@ def apply_mobile_css():
         padding: 4px;
         color: {COLORS['text_tertiary']};
         cursor: pointer;
+        text-decoration: none;
         transition: color 0.2s ease;
     }}
     
@@ -253,74 +263,58 @@ def apply_mobile_css():
     }}
     
     .nav-icon {{
-        font-size: 22px;
-        margin-bottom: 2px;
+        font-size: 24px;
+        margin-bottom: 4px;
     }}
     
     .nav-label {{
-        font-size: 10px;
+        font-size: 11px;
         font-weight: 500;
     }}
     
-    /* Floating cart button */
-    .floating-cart {{
-        position: fixed;
-        bottom: 100px;
-        right: 20px;
-        width: 56px;
-        height: 56px;
-        background-color: {COLORS['turbo_red']};
-        border-radius: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        cursor: pointer;
-        z-index: 999;
-        transition: all 0.2s ease;
+    /* Recent items styling */
+    .recent-section {{
+        margin-bottom: 24px;
     }}
     
-    .floating-cart:hover {{
-        transform: scale(1.05);
-        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
-    }}
-    
-    .floating-cart-icon {{
-        color: white;
-        font-size: 24px;
-        position: relative;
-    }}
-    
-    .floating-cart-badge {{
-        position: absolute;
-        top: -8px;
-        right: -8px;
-        background-color: {COLORS['turbo_blue']};
-        color: white;
-        font-size: 12px;
+    .section-title {{
+        font-size: 18px;
         font-weight: 600;
-        min-width: 20px;
-        height: 20px;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0 6px;
+        color: {COLORS['text_primary']};
+        margin-bottom: 12px;
     }}
     
-    /* Metrics card */
+    .recent-item {{
+        padding: 12px;
+        background: {COLORS['surface']};
+        border-radius: 10px;
+        margin-bottom: 8px;
+        cursor: pointer;
+    }}
+    
+    .recent-item:hover {{
+        background: {COLORS['card']};
+    }}
+    
+    /* Metric cards */
+    .metrics-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+    }}
+    
     .metric-card {{
         background: {COLORS['surface']};
         border-radius: 12px;
-        padding: 16px;
+        padding: 20px;
         text-align: center;
     }}
     
     .metric-value {{
         font-size: 32px;
-        font-weight: 600;
+        font-weight: 700;
         color: {COLORS['text_primary']};
-        margin: 0;
     }}
     
     .metric-label {{
@@ -329,299 +323,178 @@ def apply_mobile_css():
         margin-top: 4px;
     }}
     
-    /* Sync status */
-    .sync-status {{
+    /* Cart styling */
+    .cart-item {{
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 8px 16px;
+        padding: 16px;
+        background: {COLORS['card']};
+        border-bottom: 1px solid {COLORS['divider']};
+    }}
+    
+    .cart-item-image {{
+        width: 60px;
+        height: 60px;
         background: {COLORS['surface']};
         border-radius: 8px;
+        margin-right: 12px;
+    }}
+    
+    .cart-item-info {{
+        flex: 1;
+    }}
+    
+    .cart-item-name {{
+        font-size: 16px;
+        font-weight: 500;
+        color: {COLORS['text_primary']};
+    }}
+    
+    .cart-item-model {{
         font-size: 14px;
+        color: {COLORS['text_secondary']};
     }}
     
-    .sync-indicator {{
-        width: 8px;
-        height: 8px;
+    .quantity-controls {{
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }}
+    
+    .quantity-btn {{
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
-        background: {COLORS['error']};
+        background: {COLORS['surface']};
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }}
     
-    .sync-indicator.online {{
-        background: {COLORS['success']};
+    .quantity-value {{
+        font-size: 18px;
+        font-weight: 500;
+        min-width: 30px;
+        text-align: center;
     }}
     
-    /* Add padding for bottom nav */
-    .main-content {{
-        padding-bottom: 80px;
+    /* Summary section */
+    .summary-section {{
+        padding: 20px;
+        background: {COLORS['surface']};
+        border-radius: 12px;
+        margin: 16px;
     }}
     
-    /* Mobile container should start at top */
-    .mobile-container {{
-        margin-top: 0 !important;
-        padding-top: 0 !important;
+    .summary-row {{
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        font-size: 16px;
     }}
     
-    /* Remove any empty container spacing */
-    .mobile-container:empty {{
-        display: none !important;
+    .summary-row.total {{
+        font-weight: 600;
+        font-size: 18px;
+        padding-top: 12px;
+        border-top: 1px solid {COLORS['divider']};
     }}
     
-    /* Hide default Streamlit buttons styling */
+    /* Buttons */
+    .primary-button {{
+        width: 100%;
+        padding: 16px;
+        background: {COLORS['primary']};
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin: 16px;
+    }}
+    
+    .export-buttons {{
+        display: flex;
+        gap: 12px;
+        padding: 16px;
+    }}
+    
+    .export-button {{
+        flex: 1;
+        padding: 12px;
+        background: {COLORS['surface']};
+        border: 1px solid {COLORS['divider']};
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        text-align: center;
+    }}
+    
+    .export-button.primary {{
+        background: {COLORS['primary']};
+        color: white;
+        border: none;
+    }}
+    
+    /* Hide Streamlit specific elements */
     .stButton > button {{
+        width: 100%;
         background: none;
         border: none;
         padding: 0;
-        width: 100%;
     }}
     
-    /* Red add to cart button */
-    .stButton > button[kind="primary"] {{
-        background-color: {COLORS['turbo_red']} !important;
-        color: white !important;
+    div[data-testid="stSidebar"] {{
+        display: none;
     }}
     
-    /* Fix login form spacing on desktop */
+    /* Responsive design */
     @media (min-width: 768px) {{
-        /* Remove extra padding from column containers */
-        div[data-testid="column"] {{
-            padding-top: 0 !important;
+        .category-row {{
+            grid-template-columns: repeat(4, 1fr);
         }}
         
-        div[data-testid="column"] > div {{
-            padding-top: 0 !important;
-        }}
-        
-        /* Add reasonable margin to form only */
-        .stForm {{
-            margin-top: 2rem !important;
-            padding: 2rem;
-            background: {COLORS['card']};
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }}
-        
-        /* Ensure header stays at top */
-        .mobile-header {{
-            position: fixed;
-            left: 0;
-            right: 0;
-            top: 0;
-        }}
-        
-        /* Add padding to body content to account for fixed header */
-        .mobile-container > div:nth-child(2) {{
-            padding-top: 60px;
-        }}
-    }}
-    
-    /* Responsive adjustments */
-    @media (min-width: 768px) {{
-        .mobile-container {{
-            max-width: 100%;
-            margin: 0 auto;
-            min-height: 100vh;
-            background: {COLORS['background']};
-        }}
-        
-        .category-card {{
-            height: 160px;
-        }}
-        
-        .search-container {{
-            max-width: 500px;
-            margin: 12px auto;
-        }}
-        
-        /* Center content on larger screens */
-        .stButton > button {{
-            max-width: 400px;
+        .content-area {{
+            max-width: 768px;
             margin: 0 auto;
         }}
         
-        /* Adjust form width on desktop */
-        [data-testid="stForm"] {{
-            max-width: 600px;
-            margin-left: auto !important;
-            margin-right: auto !important;
+        .metrics-grid {{
+            grid-template-columns: repeat(4, 1fr);
         }}
-    }}
-    
-    @media (min-width: 1024px) {{
-        .mobile-container {{
-            max-width: 100%;
-            margin: 0 auto;
-        }}
-        
-        .main-content {{
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            padding-bottom: 100px;
-        }}
-        
-        /* Hide bottom nav on desktop */
-        .bottom-nav {{
-            display: none;
-        }}
-        
-        /* Remove body padding on desktop since no fixed header */
-        .mobile-container > div:nth-child(2) {{
-            padding-top: 0;
-        }}
-        
-        /* Make header position relative on desktop */
-        .mobile-header {{
-            position: relative;
-        }}
-    }}
-    
-    /* Additional fixes for Streamlit specific elements */
-    div[data-baseweb="base-input"] {{
-        margin-bottom: 1rem;
-    }}
-    
-    /* Remove any remaining top margins */
-    .element-container:first-child {{
-        margin-top: 0 !important;
-    }}
-    
-    /* Ensure no padding on the very top level containers */
-    .appview-container {{
-        padding-top: 0 !important;
-    }}
-    
-    /* Hide empty containers that might cause spacing */
-    .stMarkdown:has(.mobile-container:empty) {{
-        display: none !important;
-    }}
-    
-    .element-container:has(.mobile-container:empty) {{
-        display: none !important;
     }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
 
-def mobile_header(title: str, show_back: bool = False):
-    """Render mobile header"""
-    header_html = f"""
-    <div class="mobile-header">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            {'<span style="font-size: 20px; cursor: pointer;">←</span>' if show_back else ''}
-            <h2 style="margin: 0; font-size: 20px; font-weight: 600;">{title}</h2>
-            <div style="width: 24px;"></div>
-        </div>
+def app_header():
+    """Display app header with title"""
+    st.markdown("""
+    <div class="app-header">
+        <h1 class="app-title">Turbo Air</h1>
     </div>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-
-def mobile_search_bar(placeholder: str = "Search for products"):
-    """Render mobile search bar with live search"""
-    # Create a unique key for the search input
-    search_key = "search_input"
-    
-    # Style the search bar
-    st.markdown(f"""
-    <style>
-    div[data-testid="stTextInput"] > div > div > input[key="{search_key}"] {{
-        background-color: {COLORS['surface']};
-        border-radius: 10px;
-        border: none;
-        padding: 12px 16px;
-        font-size: 16px;
-    }}
-    </style>
     """, unsafe_allow_html=True)
-    
-    # Search input with live updates
-    return st.text_input(
-        "Search", 
-        placeholder=placeholder, 
-        key=search_key, 
-        label_visibility="collapsed",
-        help="Start typing to search products"
+
+def search_bar_component(placeholder: str = "Search for products"):
+    """Display search bar component"""
+    search_key = f"search_{st.session_state.get('active_page', 'home')}"
+    search_term = st.text_input(
+        "Search",
+        placeholder=placeholder,
+        key=search_key,
+        label_visibility="collapsed"
     )
+    return search_term
 
-def category_grid(categories: List[Dict[str, str]]):
-    """Render category grid"""
-    cols = st.columns(2)
-    for i, category in enumerate(categories):
-        with cols[i % 2]:
-            icon = TURBO_AIR_CATEGORIES.get(category['name'], {}).get('icon', '📦')
-            
-            if st.button(
-                f"{icon}\n{category['name']}\n{category.get('count', 0)} items",
-                key=f"cat_{category['name']}",
-                use_container_width=True
-            ):
-                st.session_state.selected_category = category['name']
-                st.session_state.active_page = 'products'
-                st.rerun()
-
-def quick_access_section():
-    """Render quick access section - not used anymore"""
-    pass
-
-def quick_access_section_compact():
-    """Render compact quick access section - 2 rows of 4"""
-    items = [
-        {"icon": "🥤", "label": "Glass Door", "category": "GLASS DOOR MERCHANDISERS"},
-        {"icon": "🍰", "label": "Display", "category": "DISPLAY CASES"},
-        {"icon": "🍺", "label": "Underbar", "category": "UNDERBAR EQUIPMENT"},
-        {"icon": "🥛", "label": "Milk", "category": "MILK COOLERS"},
-        {"icon": "❄️", "label": "Reach-In", "category": "REACH-IN REFRIGERATION"},
-        {"icon": "🍕", "label": "Prep Tables", "category": "FOOD PREP TABLES"},
-        {"icon": "📦", "label": "Undercounter", "category": "UNDERCOUNTER REFRIGERATION"},
-        {"icon": "🔧", "label": "Worktop", "category": "WORKTOP REFRIGERATION"}
-    ]
+def bottom_navigation():
+    """Display bottom navigation bar"""
+    active_page = st.session_state.get('active_page', 'home')
     
-    # First row
-    cols1 = st.columns(4)
-    for i in range(4):
-        with cols1[i]:
-            item = items[i]
-            if st.button(
-                f"{item['icon']}\n{item['label']}",
-                key=f"quick_{item['category']}",
-                use_container_width=True,
-                help=item['category']
-            ):
-                st.session_state.selected_category = item['category']
-                st.session_state.active_page = 'products'
-                st.rerun()
-    
-    # Second row
-    cols2 = st.columns(4)
-    for i in range(4):
-        with cols2[i]:
-            if i + 4 < len(items):
-                item = items[i + 4]
-                if st.button(
-                    f"{item['icon']}\n{item['label']}",
-                    key=f"quick_{item['category']}",
-                    use_container_width=True,
-                    help=item['category']
-                ):
-                    st.session_state.selected_category = item['category']
-                    st.session_state.active_page = 'products'
-                    st.rerun()
-
-def subcategory_list(subcategories: List[str], parent_category: str):
-    """Render subcategory list"""
-    st.markdown(f"### Select {parent_category} Type")
-    
-    for subcat in subcategories:
-        if st.button(
-            subcat,
-            key=f"subcat_{subcat}",
-            use_container_width=True
-        ):
-            st.session_state.selected_subcategory = subcat
-            st.rerun()
-
-def bottom_navigation(active_page: str):
-    """Render bottom navigation bar"""
     nav_items = [
         {"icon": "🏠", "label": "Home", "page": "home"},
         {"icon": "🔍", "label": "Search", "page": "search"},
@@ -629,11 +502,12 @@ def bottom_navigation(active_page: str):
         {"icon": "👤", "label": "Profile", "page": "profile"}
     ]
     
+    # Create the navigation HTML
     nav_html = '<div class="bottom-nav">'
     for item in nav_items:
         active_class = "active" if item["page"] == active_page else ""
         nav_html += f'''
-        <div class="nav-item {active_class}">
+        <div class="nav-item {active_class}" id="nav_{item['page']}">
             <div class="nav-icon">{item["icon"]}</div>
             <div class="nav-label">{item["label"]}</div>
         </div>
@@ -642,116 +516,166 @@ def bottom_navigation(active_page: str):
     
     st.markdown(nav_html, unsafe_allow_html=True)
     
-    # Handle navigation with hidden buttons
-    cols = st.columns(4)
+    # Handle navigation clicks
+    col1, col2, col3, col4 = st.columns(4)
+    cols = [col1, col2, col3, col4]
+    
     for i, item in enumerate(nav_items):
         with cols[i]:
             if st.button(
                 "",
-                key=f"nav_{item['page']}",
+                key=f"nav_btn_{item['page']}",
                 use_container_width=True,
                 disabled=(item["page"] == active_page)
             ):
                 st.session_state.active_page = item["page"]
                 st.rerun()
 
-def floating_cart_button(cart_count: int):
-    """Render floating cart button"""
-    cart_html = f"""
-    <div class="floating-cart">
-        <div class="floating-cart-icon">
-            🛒
-            <div class="floating-cart-badge">{cart_count}</div>
-        </div>
-    </div>
-    """
-    st.markdown(cart_html, unsafe_allow_html=True)
+def category_grid(categories: List[Dict[str, any]]):
+    """Display category grid for search page"""
+    st.markdown('<div class="category-row">', unsafe_allow_html=True)
     
-    # Create invisible button overlay
-    if st.button("", key="floating_cart_btn", help=f"Cart ({cart_count} items)"):
-        st.session_state.active_page = 'cart'
-        st.rerun()
+    cols = st.columns(2)
+    for i, (cat_name, cat_info) in enumerate(TURBO_AIR_CATEGORIES.items()):
+        with cols[i % 2]:
+            # Get product count
+            count = next((c['count'] for c in categories if c['name'] == cat_name), 0)
+            
+            if st.button(
+                f"{cat_info['icon']}\n{cat_name}\n({count} items)",
+                key=f"cat_{cat_name}",
+                use_container_width=True
+            ):
+                st.session_state.selected_category = cat_name
+                st.session_state.show_category_products = True
+                st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-def product_list_item(product: Dict):
-    """Render product list item"""
-    # Get values with "-" for None/empty
+def product_list_item(product: Dict) -> str:
+    """Render product list item with image"""
     sku = product.get('sku', 'Unknown')
-    product_type = product.get('product_type') or '-'
+    product_type = product.get('product_type') or product.get('description', '')
     price = product.get('price', 0)
     
-    item_html = f"""
-    <div class="product-item">
-        <div class="product-info" style="margin-left: 0;">
-            <p class="product-name">{sku}</p>
-            <p class="product-model">{product_type}</p>
+    # Check for product image
+    image_path = f"pdf_screenshots/{sku}/{sku} P.1.png"
+    image_html = ""
+    
+    if os.path.exists(image_path):
+        image_html = f'<img src="{image_path}" alt="{sku}">'
+    else:
+        image_html = f'<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: {COLORS["text_secondary"]}; font-size: 12px;">No Image</div>'
+    
+    return f"""
+    <div class="product-card">
+        <div class="product-image">
+            {image_html}
+        </div>
+        <div class="product-info">
+            <div class="product-name">{sku}</div>
+            <div class="product-model">Model: {product_type}</div>
         </div>
         <div class="product-price">${price:,.2f}</div>
     </div>
     """
-    return item_html
 
-def product_list_item_compact(product: Dict):
-    """Render compact product list item for 2-column layout"""
-    sku = product.get('sku', 'Unknown')
-    category = product.get('category', '-')
-    price = product.get('price', 0)
+def recent_searches_section(searches: List[str]):
+    """Display recent searches section"""
+    if searches:
+        st.markdown('<div class="recent-section">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-title">Recent Searches</h3>', unsafe_allow_html=True)
+        
+        for search in searches[:5]:
+            if st.button(f"🔍 {search}", key=f"recent_{search}", use_container_width=True):
+                st.session_state.search_term = search
+                st.session_state.active_page = 'search'
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+def recent_quotes_section(quotes: List[Dict]):
+    """Display recent quotes section"""
+    if quotes:
+        st.markdown('<div class="recent-section">', unsafe_allow_html=True)
+        st.markdown('<h3 class="section-title">Recent Quotes</h3>', unsafe_allow_html=True)
+        
+        for quote in quotes[:5]:
+            quote_info = f"#{quote['quote_number']} - ${quote['total_amount']:,.2f}"
+            if st.button(quote_info, key=f"quote_{quote['id']}", use_container_width=True):
+                st.session_state.selected_quote = quote['id']
+                st.session_state.active_page = 'profile'
+                st.rerun()
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+
+def metrics_section(metrics: Dict):
+    """Display metrics grid"""
+    st.markdown('<div class="metrics-grid">', unsafe_allow_html=True)
     
-    return f"{sku}\n{category}\n${price:,.0f}"
-
-def filter_row():
-    """Render filter row - handled in pages.py now"""
-    pass
-
-def metric_card(label: str, value: int):
-    """Render metric card"""
-    st.markdown(f"""
-    <div class="metric-card">
-        <div class="metric-value">{value}</div>
-        <div class="metric-label">{label}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-def sync_status_bar(is_online: bool, is_synced: bool):
-    """Render sync status bar"""
-    status_text = "All synced" if is_synced else "Sync needed"
-    indicator_class = "online" if is_online else ""
-    
-    col1, col2 = st.columns([3, 1])
-    
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
-        <div class="sync-status">
-            <div class="sync-indicator {indicator_class}"></div>
-            <span>{"Online" if is_online else "Offline"}</span>
-            <span style="margin-left: auto; color: {COLORS['text_secondary']};">{status_text}</span>
+        <div class="metric-card">
+            <div class="metric-value">{metrics.get('total_clients', 0)}</div>
+            <div class="metric-label">Total Clients</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        if st.button("Sync Now", key="sync_now", use_container_width=True):
-            return True
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{metrics.get('total_quotes', 0)}</div>
+            <div class="metric-label">Total Quotes</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    return False
+    st.markdown('</div>', unsafe_allow_html=True)
 
-def summary_section(subtotal: float, tax_rate: float = 0.075):
-    """Render cart/quote summary section"""
+def cart_item_component(item: Dict):
+    """Display cart item with quantity controls"""
+    col1, col2, col3 = st.columns([3, 2, 1])
+    
+    with col1:
+        st.markdown(f"""
+        <div class="cart-item-info">
+            <div class="cart-item-name">{item['sku']}</div>
+            <div class="cart-item-model">Model: {item.get('product_type', 'N/A')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        col_minus, col_qty, col_plus = st.columns([1, 1, 1])
+        with col_minus:
+            if st.button("−", key=f"minus_{item['id']}"):
+                # Update quantity logic
+                pass
+        with col_qty:
+            st.markdown(f"<div class='quantity-value'>{item['quantity']}</div>", unsafe_allow_html=True)
+        with col_plus:
+            if st.button("+", key=f"plus_{item['id']}"):
+                # Update quantity logic
+                pass
+    
+    with col3:
+        st.markdown(f"<div class='product-price'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
+
+def cart_summary(subtotal: float, tax_rate: float = 0.08):
+    """Display cart summary"""
     tax = subtotal * tax_rate
     total = subtotal + tax
     
-    st.markdown("### Summary")
-    
     st.markdown(f"""
-    <div style="padding: 16px; background: {COLORS['surface']}; border-radius: 12px;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+    <div class="summary-section">
+        <div class="summary-row">
             <span>Subtotal</span>
             <span>${subtotal:,.2f}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-            <span>Estimated Taxes</span>
+        <div class="summary-row">
+            <span>Tax ({tax_rate*100:.0f}%)</span>
             <span>${tax:,.2f}</span>
         </div>
-        <div style="display: flex; justify-content: space-between; font-weight: 600; font-size: 18px; 
-                    padding-top: 8px; border-top: 1px solid {COLORS['divider']};">
+        <div class="summary-row total">
             <span>Total</span>
             <span>${total:,.2f}</span>
         </div>
@@ -760,56 +684,31 @@ def summary_section(subtotal: float, tax_rate: float = 0.075):
     
     return total
 
-def quantity_selector(current_quantity: int, unique_key: str) -> int:
-    """Create a quantity selector"""
-    col1, col2, col3 = st.columns([1, 2, 1])
-    
-    with col1:
-        if st.button("−", key=f"decrease_{unique_key}"):
-            return max(1, current_quantity - 1)
-    
-    with col2:
-        st.markdown(f"<h4 style='text-align: center; margin: 0;'>{current_quantity}</h4>", 
-                   unsafe_allow_html=True)
-    
-    with col3:
-        if st.button("+", key=f"increase_{unique_key}"):
-            return current_quantity + 1
-    
-    return current_quantity
+def quote_export_buttons():
+    """Display quote export buttons"""
+    st.markdown("""
+    <div class="export-buttons">
+        <div class="export-button">Export as Excel</div>
+        <div class="export-button primary">Export as PDF</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-def empty_state(icon: str, title: str, description: str, 
-                button_text: Optional[str] = None, 
-                button_action: Optional[Callable] = None):
-    """Display an empty state"""
-    st.markdown(
-        f"""
-        <div style='text-align: center; padding: 3rem 1rem;'>
-            <div style='font-size: 4rem; margin-bottom: 1rem;'>{icon}</div>
-            <h3 style='margin-bottom: 0.5rem;'>{title}</h3>
-            <p style='color: #666; margin-bottom: 2rem;'>{description}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    if button_text and button_action:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button(button_text, use_container_width=True):
-                button_action()
-                st.rerun()
+def empty_state(icon: str, title: str, description: str):
+    """Display empty state"""
+    st.markdown(f"""
+    <div style="text-align: center; padding: 60px 20px;">
+        <div style="font-size: 64px; margin-bottom: 16px;">{icon}</div>
+        <h3 style="margin-bottom: 8px; color: {COLORS['text_primary']};">{title}</h3>
+        <p style="color: {COLORS['text_secondary']};">{description}</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-def format_price(price: float, currency_symbol: str = "$") -> str:
-    """Format a price value"""
-    return f"{currency_symbol}{price:,.2f}"
+def format_price(price: float) -> str:
+    """Format price for display"""
+    return f"${price:,.2f}"
 
-def truncate_text(text: str, max_length: int = 50, suffix: str = "...") -> str:
-    """Truncate text to a maximum length"""
+def truncate_text(text: str, max_length: int = 50) -> str:
+    """Truncate text to specified length"""
     if not text:
         return ""
-    
-    if len(text) <= max_length:
-        return text
-    
-    return text[:max_length - len(suffix)] + suffix
+    return text[:max_length] + "..." if len(text) > max_length else text

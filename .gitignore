@@ -38,6 +38,8 @@ manual_upload.py
 test_categories.py
 test_rls.py
 test_resetRLS.py
+test_database.py
+
 
 # Virtual environments
 venv/

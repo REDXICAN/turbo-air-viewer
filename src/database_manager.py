@@ -1,6 +1,7 @@
 """
 Database operations module for Turbo Air Equipment Viewer
 Handles both SQLite (offline) and Supabase (online) operations
+Updated with get_user_quotes method
 """
 
 import sqlite3
@@ -550,6 +551,32 @@ class DatabaseManager:
         conn = self.get_connection()
         df = pd.read_sql_query("SELECT * FROM quotes WHERE client_id = ? ORDER BY created_at DESC", 
                               conn, params=(client_id,))
+        conn.close()
+        return df
+    
+    def get_user_quotes(self, user_id: str, limit: int = None) -> pd.DataFrame:
+        """Get all quotes for a user"""
+        if self.is_online:
+            try:
+                query = self.supabase.table('quotes').select('*').eq('user_id', user_id).order('created_at', desc=True)
+                if limit:
+                    query = query.limit(limit)
+                response = query.execute()
+                return pd.DataFrame(response.data)
+            except:
+                pass
+        
+        # Use SQLite
+        conn = self.get_connection()
+        query = """
+            SELECT * FROM quotes 
+            WHERE user_id = ? 
+            ORDER BY created_at DESC
+        """
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        df = pd.read_sql_query(query, conn, params=(user_id,))
         conn.close()
         return df
     
