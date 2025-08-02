@@ -17,7 +17,20 @@ from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.persistence import PersistenceManager
-from src.ui import apply_mobile_css, bottom_navigation, floating_cart_button
+
+# Import UI components - check if they exist first
+try:
+    from src.ui import apply_mobile_css, bottom_navigation, floating_cart_button
+except ImportError as e:
+    print(f"UI import error: {e}")
+    # Fallback imports
+    from src.ui import apply_mobile_css
+    # Define missing functions as stubs if needed
+    def bottom_navigation():
+        pass
+    def floating_cart_button(count):
+        pass
+
 from src.pages import (
     show_home_page,
     show_search_page,
