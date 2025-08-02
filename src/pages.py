@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Fixed with proper responsive design support
+Fixed with proper responsive design support and collapsible categories
 """
 
 import streamlit as st
@@ -11,7 +11,7 @@ from typing import Dict
 
 from .ui import (
     app_header, search_bar_component, category_grid,
-    bottom_navigation, product_list_item_compact, recent_searches_section,
+    product_list_item_compact, product_details_expanded, recent_searches_section,
     recent_quotes_section, metrics_section, cart_item_component,
     cart_summary, quote_export_buttons, empty_state, format_price,
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
@@ -44,6 +44,9 @@ except ImportError:
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     """Display home page with recent activity and metrics"""
+    
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh; padding: 20px;">', unsafe_allow_html=True)
     
     # Create responsive layout
     container = st.container()
@@ -96,15 +99,49 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
                 if st.button("👤 Add Client", use_container_width=True):
                     st.session_state.active_page = 'profile'
                     st.rerun()
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_search_page(user_id, db_manager):
-    """Display search/products page with categories always visible"""
+    """Display search/products page with collapsible categories"""
     
-    # Search bar with title and padding
-    search_term = search_bar_component("Search by SKU, category or description")
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh;">', unsafe_allow_html=True)
     
-    # Always show categories
-    st.markdown("### Categories")
+    # Create sticky header with logo and search
+    sticky_container = st.container()
+    with sticky_container:
+        st.markdown('<div class="sticky-header">', unsafe_allow_html=True)
+        
+        # Logo
+        logo_path = "Turboair_Logo_01.png"
+        if os.path.exists(logo_path):
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(logo_path, use_container_width=True)
+        else:
+            st.markdown("""
+            <h1 style='
+                text-align: center; 
+                margin: 0.5rem 0;
+                font-size: 1.8rem;
+            '>
+                Turbo Air
+            </h1>
+            """, unsafe_allow_html=True)
+        
+        # Search title (will hide on scroll)
+        st.markdown('<h3 class="search-title" style="text-align: center; margin: 0.5rem 0;">Search</h3>', unsafe_allow_html=True)
+        
+        # Search bar
+        search_term = search_bar_component("Search by SKU, category or description")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Content container
+    st.markdown('<div style="padding: 0 16px;">', unsafe_allow_html=True)
+    
+    # Collapsible categories section
     categories = []
     for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
         try:
@@ -119,8 +156,48 @@ def show_search_page(user_id, db_manager):
             "icon": cat_info["icon"]
         })
     
+    # Initialize categories state
+    if 'categories_expanded' not in st.session_state:
+        st.session_state.categories_expanded = True
+    
+    # Collapsible categories container
+    st.markdown("""
+    <div class="categories-section">
+        <div class="categories-header" onclick="toggleCategories()">
+            <h3 style="margin: 0;">Categories</h3>
+            <span class="categories-toggle """ + ('open' if st.session_state.categories_expanded else '') + """">▼</span>
+        </div>
+        <div class="categories-content """ + ('open' if st.session_state.categories_expanded else '') + """">
+    """, unsafe_allow_html=True)
+    
+    # Display category buttons with material design shadow
     if categories:
-        category_grid(categories)
+        cols = st.columns(2)  # Mobile-first: 2 columns
+        for i, category in enumerate(categories):
+            with cols[i % 2]:
+                button_html = f"""
+                <div class="category-button" onclick="document.getElementById('cat_btn_{i}').click()">
+                    <div style="font-size: 32px; margin-bottom: 8px;">{category['icon']}</div>
+                    <div style="font-weight: 500; color: #333;">{category['name']}</div>
+                    <div style="font-size: 12px; color: #666; margin-top: 4px;">({category['count']} items)</div>
+                </div>
+                """
+                st.markdown(button_html, unsafe_allow_html=True)
+                
+                # Hidden button for actual click handling
+                if st.button("", key=f"cat_btn_{i}", help=category['name'], type="secondary"):
+                    st.session_state.selected_category = category['name']
+                    st.rerun()
+    
+    st.markdown("""
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Toggle categories state
+    if st.button("Toggle Categories", key="toggle_categories", help="Show/hide categories"):
+        st.session_state.categories_expanded = not st.session_state.categories_expanded
+        st.rerun()
     
     # Handle search or category selection
     results_df = pd.DataFrame()
@@ -166,43 +243,98 @@ def show_search_page(user_id, db_manager):
     if not results_df.empty:
         st.markdown(f"### Results ({len(results_df)} items)")
         
+        # Get current cart items
+        cart_items = []
+        if st.session_state.get('selected_client'):
+            try:
+                cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+                if not cart_items_df.empty:
+                    cart_items = cart_items_df.to_dict('records')
+            except:
+                pass
+        
         # Create list header
         st.markdown("""
         <div class="product-list-header">
             <div>Image</div>
-            <div>SKU</div>
-            <div>Description</div>
+            <div>SKU / Description</div>
+            <div style="text-align: center;">Details</div>
             <div style="text-align: right;">Price</div>
+            <div style="text-align: center;">Qty</div>
         </div>
         """, unsafe_allow_html=True)
         
         # Display products
         for idx, product in results_df.iterrows():
-            # Display the product row with image
-            st.markdown(product_list_item_compact(product.to_dict()), unsafe_allow_html=True)
+            product_dict = product.to_dict()
             
-            # Action buttons in a compact row
-            st.markdown('<div class="action-buttons-row">', unsafe_allow_html=True)
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("View Details", key=f"view_{product['id']}", use_container_width=True, type="secondary"):
-                    st.session_state.show_product_detail = product.to_dict()
-                    st.rerun()
+            # Display the product row with quantity controls
+            st.markdown(product_list_item_compact(product_dict, cart_items, user_id, db_manager), unsafe_allow_html=True)
+            
+            # Handle View Details click
+            col1, col2, col3 = st.columns([2, 1, 1])
             with col2:
-                if st.button("Add to Cart", key=f"add_{product['id']}", use_container_width=True, type="primary"):
-                    if st.session_state.get('selected_client'):
-                        success, message = db_manager.add_to_cart(
-                            user_id, product['id'], st.session_state.selected_client
-                        )
-                        if success:
-                            st.success("Added to cart!")
-                            st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
-                    else:
-                        st.error("Please select a client first")
-            st.markdown('</div>', unsafe_allow_html=True)
+                if st.button("View Details", key=f"view_{product['id']}", use_container_width=True, type="secondary"):
+                    # Toggle expanded view
+                    expanded_key = f"expanded_{product['id']}"
+                    st.session_state[expanded_key] = not st.session_state.get(expanded_key, False)
+                    st.rerun()
+            
+            # Handle quantity controls
+            with col3:
+                col_minus, col_plus = st.columns([1, 1])
+                
+                # Get current quantity
+                current_qty = 0
+                cart_item_id = None
+                for item in cart_items:
+                    if item.get('product_id') == product['id']:
+                        current_qty = item.get('quantity', 0)
+                        cart_item_id = item.get('id')
+                        break
+                
+                with col_minus:
+                    if st.button("−", key=f"minus_{product['id']}", disabled=(current_qty == 0)):
+                        if st.session_state.get('selected_client') and current_qty > 0:
+                            if current_qty == 1:
+                                # Remove from cart
+                                db_manager.remove_from_cart(cart_item_id)
+                            else:
+                                # Decrease quantity
+                                db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                            st.session_state.cart_count = max(0, st.session_state.get('cart_count', 0) - 1)
+                            st.rerun()
+                
+                with col_plus:
+                    if st.button("+", key=f"plus_{product['id']}"):
+                        if st.session_state.get('selected_client'):
+                            if current_qty == 0:
+                                # Add to cart
+                                success, message = db_manager.add_to_cart(
+                                    user_id, product['id'], st.session_state.selected_client
+                                )
+                                if success:
+                                    st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
+                            else:
+                                # Increase quantity
+                                db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
+                                st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
+                            st.rerun()
+                        else:
+                            st.error("Please select a client first")
+            
+            # Show expanded details if toggled
+            if st.session_state.get(f"expanded_{product['id']}", False):
+                st.markdown(product_details_expanded(product_dict), unsafe_allow_html=True)
+    
+    # Close content container and page wrapper
+    st.markdown('</div></div>', unsafe_allow_html=True)
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
+    
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh; padding: 20px;">', unsafe_allow_html=True)
     
     st.markdown("### Cart")
     
@@ -211,6 +343,7 @@ def show_cart_page(user_id, db_manager):
         if st.button("Go to Profile", use_container_width=True):
             st.session_state.active_page = 'profile'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     
     try:
@@ -223,6 +356,7 @@ def show_cart_page(user_id, db_manager):
         if st.button("Browse Products", use_container_width=True):
             st.session_state.active_page = 'search'
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
         return
     
     # Display cart items
@@ -270,9 +404,14 @@ def show_cart_page(user_id, db_manager):
                     st.error(message)
             except Exception as e:
                 st.error(f"Error generating quote: {str(e)}")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
     """Display profile page with client management"""
+    
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh; padding: 20px;">', unsafe_allow_html=True)
     
     st.markdown("### Profile")
     
@@ -386,9 +525,15 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
     if st.button("Sign Out", use_container_width=True, type="primary"):
         auth_manager.sign_out()
         st.rerun()
+    
+    # Close page wrapper
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_product_detail(product: Dict, user_id: str, db_manager):
     """Display product detail modal"""
+    
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh; padding: 20px;">', unsafe_allow_html=True)
     
     # Back button
     if st.button("← Back", key="back_from_detail"):
@@ -465,9 +610,15 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
                 st.error(message)
         else:
             st.error("Please select a client first")
+    
+    # Close page wrapper
+    st.markdown('</div>', unsafe_allow_html=True)
 
 def show_quote_summary(quote: Dict):
     """Display quote summary page with export options"""
+    
+    # Add page wrapper for consistent styling
+    st.markdown('<div style="background: white; min-height: 100vh; padding: 20px;">', unsafe_allow_html=True)
     
     st.markdown("### Quote Summary")
     
@@ -586,3 +737,6 @@ def show_quote_summary(quote: Dict):
                 pass
             st.session_state.active_page = 'home'
             st.rerun()
+    
+    # Close page wrapper
+    st.markdown('</div>', unsafe_allow_html=True)

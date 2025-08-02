@@ -86,13 +86,29 @@ def apply_mobile_css():
     /* Reset and base styles */
     * {{
         margin: 0;
-        padding: 0;
         box-sizing: border-box;
     }}
     
+    html, body {{
+        background-color: #ffffff !important;
+    }}
+    
     .stApp {{
-        background-color: {COLORS['background']};
+        background-color: #ffffff !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }}
+    
+    /* Ensure main content has white background */
+    .main {{
+        background-color: #ffffff !important;
+    }}
+    
+    [data-testid="stAppViewContainer"] {{
+        background-color: #ffffff !important;
+    }}
+    
+    [data-testid="stMain"] {{
+        background-color: #ffffff !important;
     }}
     
     /* Hide Streamlit elements */
@@ -112,18 +128,11 @@ def apply_mobile_css():
         max-width: 100% !important;
     }}
     
-    /* Search section with padding */
-    .search-section {{
+    /* Search container */
+    .search-container {{
         padding: 12px 16px;
         background: {COLORS['background']};
         border-bottom: 1px solid {COLORS['divider']};
-    }}
-    
-    .search-title {{
-        font-size: 18px;
-        font-weight: 600;
-        color: {COLORS['text_primary']};
-        margin-bottom: 10px;
     }}
     
     /* Content area */
@@ -176,7 +185,7 @@ def apply_mobile_css():
     /* Product list styling */
     .product-list-header {{
         display: grid;
-        grid-template-columns: 45px 110px 1fr 90px;
+        grid-template-columns: 80px 1fr 100px 120px 80px;
         gap: 8px;
         align-items: center;
         padding: 8px 12px;
@@ -191,13 +200,13 @@ def apply_mobile_css():
     
     .product-row {{
         display: grid;
-        grid-template-columns: 45px 110px 1fr 90px;
+        grid-template-columns: 80px 1fr 100px 120px 80px;
         gap: 8px;
         align-items: center;
-        padding: 8px 12px;
+        padding: 12px;
         border-bottom: 1px solid {COLORS['divider']};
         background: {COLORS['card']};
-        min-height: 48px;
+        min-height: 80px;
         transition: background 0.2s ease;
     }}
     
@@ -206,93 +215,175 @@ def apply_mobile_css():
     }}
     
     .product-image-compact {{
-        width: 40px;
-        height: 40px;
+        width: 70px;
+        height: 70px;
         background: {COLORS['surface']};
-        border-radius: 4px;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        font-size: 10px;
+        font-size: 12px;
         color: {COLORS['text_secondary']};
+        border: 1px solid {COLORS['divider']};
     }}
     
     .product-image-compact img {{
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
+        padding: 4px;
+    }}
+    
+    .product-info {{
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
     }}
     
     .product-sku {{
         font-weight: 600;
         color: {COLORS['text_primary']};
-        font-size: 13px;
+        font-size: 14px;
     }}
     
     .product-desc {{
         color: {COLORS['text_secondary']};
-        font-size: 13px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        font-size: 12px;
+        line-height: 1.4;
     }}
     
     .product-price-compact {{
         font-weight: 600;
         color: {COLORS['text_primary']};
         text-align: right;
+        font-size: 15px;
+    }}
+    
+    .view-details-link {{
+        color: {COLORS['primary']};
+        font-size: 13px;
+        text-decoration: underline;
+        cursor: pointer;
+        text-align: center;
+    }}
+    
+    .view-details-link:hover {{
+        color: #0066E0;
+    }}
+    
+    /* Quantity controls */
+    .quantity-controls {{
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }}
+    
+    .qty-btn {{
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
+        background: {COLORS['primary']};
+        color: white;
+        border: none;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }}
+    
+    .qty-btn:hover {{
+        background: #0066E0;
+        transform: scale(1.1);
+    }}
+    
+    .qty-btn:disabled {{
+        background: {COLORS['border']};
+        cursor: not-allowed;
+        transform: none;
+    }}
+    
+    .qty-value {{
+        font-size: 14px;
+        font-weight: 500;
+        min-width: 20px;
+        text-align: center;
+        color: {COLORS['text_primary']};
+    }}
+    
+    /* Product details expansion */
+    .product-details {{
+        grid-column: 1 / -1;
+        padding: 20px;
+        background: {COLORS['surface']};
+        border-top: 1px solid {COLORS['divider']};
+        margin: 0 -12px;
+    }}
+    
+    .details-grid {{
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        gap: 20px;
+        align-items: start;
+    }}
+    
+    .details-image {{
+        width: 100%;
+        height: 200px;
+        background: white;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border: 1px solid {COLORS['divider']};
+    }}
+    
+    .details-image img {{
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        padding: 8px;
+    }}
+    
+    .details-info h3 {{
+        font-size: 18px;
+        margin-bottom: 8px;
+        color: {COLORS['text_primary']};
+    }}
+    
+    .details-info p {{
+        font-size: 14px;
+        color: {COLORS['text_secondary']};
+        margin-bottom: 16px;
+    }}
+    
+    .specs-grid {{
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }}
+    
+    .spec-item {{
         font-size: 13px;
     }}
     
-
+    .spec-label {{
+        font-weight: 600;
+        color: {COLORS['text_primary']};
+    }}
+    
+    .spec-value {{
+        color: {COLORS['text_secondary']};
+    }}
     
     /* Recent items styling */
     .recent-section {{
         margin-bottom: 24px;
-    }}
-    
-    /* Bottom navigation - responsive */
-    .bottom-nav {{
-        position: fixed;
-        bottom: 30px; /* Adjusted for console */
-        left: 0;
-        right: 0;
-        background: {COLORS['background']};
-        border-top: 1px solid {COLORS['divider']};
-        display: flex;
-        justify-content: space-around;
-        padding: 8px 0;
-        z-index: 1000;
-        height: 56px;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
-    }}
-    
-    .nav-item {{
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        flex: 1;
-        padding: 4px;
-        color: {COLORS['text_tertiary']};
-        cursor: pointer;
-        text-decoration: none;
-        transition: color 0.2s ease;
-    }}
-    
-    .nav-item.active {{
-        color: {COLORS['primary']};
-    }}
-    
-    .nav-icon {{
-        font-size: 22px;
-        margin-bottom: 2px;
-    }}
-    
-    .nav-label {{
-        font-size: 11px;
-        font-weight: 500;
     }}
     
     .section-title {{
@@ -379,38 +470,6 @@ def apply_mobile_css():
     .cart-item-model {{
         font-size: 14px;
         color: {COLORS['text_secondary']};
-    }}
-    
-    .quantity-controls {{
-        display: flex;
-        align-items: center;
-        gap: 16px;
-    }}
-    
-    .quantity-btn {{
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: {COLORS['surface']};
-        border: none;
-        font-size: 18px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-    }}
-    
-    .quantity-btn:hover {{
-        background: {COLORS['primary']};
-        color: white;
-    }}
-    
-    .quantity-value {{
-        font-size: 18px;
-        font-weight: 500;
-        min-width: 30px;
-        text-align: center;
     }}
     
     /* Summary section */
@@ -530,22 +589,6 @@ def apply_mobile_css():
         font-weight: bold;
     }}
     
-    /* Action buttons row */
-    .action-buttons-row {{
-        display: flex;
-        gap: 8px;
-        padding: 8px 12px;
-        background: {COLORS['card']};
-    }}
-    
-    .action-button {{
-        flex: 1;
-        font-size: 12px;
-        padding: 6px 12px;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-    }}
-    
     /* Hide Streamlit specific elements */
     .stButton > button {{
         width: 100%;
@@ -558,7 +601,7 @@ def apply_mobile_css():
         display: none;
     }}
     
-    /* Tablet Responsive (768px - 1024px) */
+    /* Updated responsive styles for search container */
     @media (min-width: 768px) and (max-width: 1024px) {{
         .category-row {{
             grid-template-columns: repeat(3, 1fr);
@@ -576,40 +619,24 @@ def apply_mobile_css():
         }}
         
         .product-row, .product-list-header {{
-            grid-template-columns: 60px 140px 1fr 110px;
-            padding: 12px 16px;
+            grid-template-columns: 100px 1fr 120px 140px 100px;
+            padding: 16px;
         }}
         
         .product-image-compact {{
-            width: 50px;
-            height: 50px;
+            width: 90px;
+            height: 90px;
         }}
         
-        .search-section {{
-            padding: 16px 24px;
-        }}
-        
-        .search-title {{
-            font-size: 20px;
+        .search-container {{
+            padding: 10px 24px;
         }}
         
         .floating-cart {{
             bottom: 100px; /* Adjusted for bottom nav + console */
         }}
-        
-        .bottom-nav {{
-            height: 64px;
-            padding: 10px 0;
-        }}
-        
-        .nav-icon {{
-            font-size: 24px;
-        }}
-        
-        .nav-label {{
-            font-size: 12px;
-        }}
     }}
+    
     /* Desktop Responsive (1024px+) */
     @media (min-width: 1024px) {{
         .category-row {{
@@ -629,17 +656,17 @@ def apply_mobile_css():
         }}
         
         .product-row, .product-list-header {{
-            grid-template-columns: 80px 180px 1fr 150px;
-            padding: 16px 24px;
+            grid-template-columns: 120px 1fr 140px 160px 120px;
+            padding: 20px 24px;
         }}
         
         .product-image-compact {{
-            width: 60px;
-            height: 60px;
+            width: 100px;
+            height: 100px;
         }}
         
         .product-sku {{
-            font-size: 14px;
+            font-size: 16px;
         }}
         
         .product-desc {{
@@ -647,12 +674,7 @@ def apply_mobile_css():
         }}
         
         .product-price-compact {{
-            font-size: 14px;
-        }}
-        
-        /* Hide bottom nav on desktop */
-        .bottom-nav {{
-            display: none;
+            font-size: 16px;
         }}
         
         /* Show desktop navigation */
@@ -660,15 +682,10 @@ def apply_mobile_css():
             margin-bottom: 30px; /* Only console on desktop */
         }}
         
-        .search-section {{
-            padding: 20px 32px;
+        .search-container {{
+            padding: 12px 32px;
             background: {COLORS['surface']};
             margin-bottom: 20px;
-        }}
-        
-        .search-title {{
-            font-size: 24px;
-            margin-bottom: 16px;
         }}
         
         .category-card {{
@@ -695,14 +712,13 @@ def apply_mobile_css():
             height: 64px;
         }}
         
-        .action-buttons-row {{
-            gap: 12px;
-            padding: 12px 24px;
+        .details-grid {{
+            grid-template-columns: 300px 1fr;
+            gap: 30px;
         }}
         
-        .action-button {{
-            font-size: 14px;
-            padding: 8px 16px;
+        .details-image {{
+            height: 300px;
         }}
     }}
     
@@ -726,9 +742,9 @@ def app_header():
     pass
 
 def search_bar_component(placeholder: str = "Search for products"):
-    """Display search bar component with title and padding"""
-    st.markdown('<div class="search-section">', unsafe_allow_html=True)
-    st.markdown('<div class="search-title">Search</div>', unsafe_allow_html=True)
+    """Display search bar component"""
+    # Create search container
+    st.markdown('<div class="search-container">', unsafe_allow_html=True)
     search_key = f"search_{st.session_state.get('active_page', 'home')}"
     search_term = st.text_input(
         "Search",
@@ -738,49 +754,6 @@ def search_bar_component(placeholder: str = "Search for products"):
     )
     st.markdown('</div>', unsafe_allow_html=True)
     return search_term
-
-def bottom_navigation():
-    """Display bottom navigation bar"""
-    active_page = st.session_state.get('active_page', 'home')
-    
-    nav_items = [
-        {"icon": "🏠", "label": "Home", "page": "home"},
-        {"icon": "🔍", "label": "Search", "page": "search"},
-        {"icon": "🛒", "label": "Cart", "page": "cart"},
-        {"icon": "👤", "label": "Profile", "page": "profile"}
-    ]
-    
-    # Create the navigation HTML
-    nav_html = '<div class="bottom-nav">'
-    for item in nav_items:
-        active_class = "active" if item["page"] == active_page else ""
-        nav_html += f'''
-        <div class="nav-item {active_class}" id="nav_{item['page']}">
-            <div class="nav-icon">{item["icon"]}</div>
-            <div class="nav-label">{item["label"]}</div>
-        </div>
-        '''
-    nav_html += '</div>'
-    
-    st.markdown(nav_html, unsafe_allow_html=True)
-    
-    # Handle navigation clicks
-    col1, col2, col3, col4 = st.columns(4)
-    cols = [col1, col2, col3, col4]
-    
-    for i, item in enumerate(nav_items):
-        with cols[i]:
-            if st.button(
-                "",
-                key=f"nav_btn_{item['page']}",
-                use_container_width=True,
-                disabled=(item["page"] == active_page)
-            ):
-                st.session_state.active_page = item["page"]
-                # Clear category selection when navigating away from search
-                if item["page"] != "search":
-                    st.session_state.selected_category = None
-                st.rerun()
 
 def category_grid(categories: List[Dict[str, any]]):
     """Display category grid for search page"""
@@ -800,11 +773,20 @@ def category_grid(categories: List[Dict[str, any]]):
                 st.session_state.selected_category = cat_name
                 st.rerun()
 
-def product_list_item_compact(product: Dict) -> str:
-    """Render compact product list item with working images"""
+def product_list_item_compact(product: Dict, cart_items: List[Dict] = None, user_id: str = None, db_manager = None) -> str:
+    """Render compact product list item with quantity controls"""
     sku = product.get('sku', 'Unknown')
     description = product.get('description') or product.get('product_type', '')
     price = product.get('price', 0)
+    product_id = product.get('id')
+    
+    # Get current quantity in cart
+    current_qty = 0
+    if cart_items and product_id:
+        for item in cart_items:
+            if item.get('product_id') == product_id:
+                current_qty = item.get('quantity', 0)
+                break
     
     # Get image path - check multiple possible locations
     image_html = '<div class="product-image-compact">📷</div>'
@@ -827,14 +809,93 @@ def product_list_item_compact(product: Dict) -> str:
             '''
             break
     
-    return f"""
+    # Build the HTML
+    html = f"""
     <div class="product-row">
         {image_html}
-        <div class="product-sku">{sku}</div>
-        <div class="product-desc">{truncate_text(description, 50)}</div>
+        <div class="product-info">
+            <div class="product-sku">{sku}</div>
+            <div class="product-desc">{description}</div>
+        </div>
+        <div class="view-details-link">View Details</div>
         <div class="product-price-compact">${price:,.2f}</div>
+        <div class="quantity-controls">
+            <button class="qty-btn" id="minus_{product_id}" {'disabled' if current_qty == 0 else ''}>−</button>
+            <span class="qty-value">{current_qty}</span>
+            <button class="qty-btn" id="plus_{product_id}">+</button>
+        </div>
     </div>
     """
+    
+    return html
+
+def product_details_expanded(product: Dict) -> str:
+    """Render expanded product details section"""
+    sku = product.get('sku', 'Unknown')
+    description = product.get('description') or product.get('product_type', '')
+    price = product.get('price', 0)
+    
+    # Get image
+    image_html = '<div class="details-image">📷</div>'
+    possible_paths = [
+        f"pdf_screenshots/{sku}/{sku} P.1.png",
+        f"pdf_screenshots/{sku}/{sku}_P.1.png",
+        f"pdf_screenshots/{sku}/{sku}.png",
+        f"pdf_screenshots/{sku}/page_1.png"
+    ]
+    
+    for image_path in possible_paths:
+        image_base64 = get_image_base64(image_path)
+        if image_base64:
+            image_html = f'''
+            <div class="details-image">
+                <img src="data:image/png;base64,{image_base64}" alt="{sku}">
+            </div>
+            '''
+            break
+    
+    # Build specifications
+    specs_html = ""
+    specs = {
+        "Category": product.get('category', '-'),
+        "Subcategory": product.get('subcategory', '-'),
+        "Capacity": product.get('capacity', '-'),
+        "Dimensions": product.get('dimensions', '-'),
+        "Weight": product.get('weight', '-'),
+        "Voltage": product.get('voltage', '-'),
+        "Temperature Range": product.get('temperature_range', '-'),
+        "Refrigerant": product.get('refrigerant', '-')
+    }
+    
+    specs_items = []
+    for key, value in specs.items():
+        if value and value != '-':
+            specs_items.append(f'''
+            <div class="spec-item">
+                <span class="spec-label">{key}:</span> <span class="spec-value">{value}</span>
+            </div>
+            ''')
+    
+    if specs_items:
+        specs_html = f'<div class="specs-grid">{"".join(specs_items)}</div>'
+    
+    html = f"""
+    <div class="product-details">
+        <div class="details-grid">
+            {image_html}
+            <div class="details-info">
+                <h3>{sku}</h3>
+                <p>{description}</p>
+                <div style="font-size: 24px; font-weight: bold; color: {COLORS['primary']}; margin-bottom: 16px;">
+                    ${price:,.2f}
+                </div>
+                {specs_html}
+            </div>
+        </div>
+    </div>
+    """
+    
+    return html
 
 def product_list_item(product: Dict) -> str:
     """Render product list item with image"""
@@ -844,22 +905,54 @@ def product_list_item(product: Dict) -> str:
 def recent_searches_section(searches: List[str]):
     """Display recent searches section"""
     if searches:
-        st.markdown('<div class="recent-section">', unsafe_allow_html=True)
-        st.markdown('<h3 class="section-title">Recent Searches</h3>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        ">
+            <h3 style="
+                font-size: 18px;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #007AFF;
+            ">Recent Searches</h3>
+        </div>
+        """, unsafe_allow_html=True)
         
         for search in searches[:5]:
-            if st.button(f"🔍 {search}", key=f"recent_{search}", use_container_width=True):
-                st.session_state.search_term = search
-                st.session_state.active_page = 'search'
-                st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+            col1, col2 = st.columns([10, 1])
+            with col1:
+                if st.button(f"🔍 {search}", key=f"recent_{search}", use_container_width=True):
+                    st.session_state.search_term = search
+                    st.session_state.active_page = 'search'
+                    st.rerun()
 
 def recent_quotes_section(quotes: List[Dict]):
     """Display recent quotes section"""
     if quotes:
-        st.markdown('<div class="recent-section">', unsafe_allow_html=True)
-        st.markdown('<h3 class="section-title">Recent Quotes</h3>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        ">
+            <h3 style="
+                font-size: 18px;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 16px;
+                padding-bottom: 12px;
+                border-bottom: 2px solid #007AFF;
+            ">Recent Quotes</h3>
+        </div>
+        """, unsafe_allow_html=True)
         
         for quote in quotes[:5]:
             quote_info = f"#{quote['quote_number']} - ${quote['total_amount']:,.2f}"
@@ -867,35 +960,48 @@ def recent_quotes_section(quotes: List[Dict]):
                 st.session_state.selected_quote = quote['id']
                 st.session_state.active_page = 'profile'
                 st.rerun()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
 
 def metrics_section(metrics: Dict):
     """Display metrics grid"""
-    st.markdown('<div class="metrics-grid">', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{metrics.get('total_clients', 0)}</div>
-            <div class="metric-label">Total Clients</div>
+    st.markdown("""
+    <div style="
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin-bottom: 24px;
+    ">
+        <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        ">
+            <div style="font-size: 36px; font-weight: 700; margin-bottom: 8px;">
+                """ + str(metrics.get('total_clients', 0)) + """
+            </div>
+            <div style="font-size: 14px; opacity: 0.9;">Total Clients</div>
         </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-value">{metrics.get('total_quotes', 0)}</div>
-            <div class="metric-label">Total Quotes</div>
+        <div style="
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            border-radius: 16px;
+            padding: 24px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
+        ">
+            <div style="font-size: 36px; font-weight: 700; margin-bottom: 8px;">
+                """ + str(metrics.get('total_quotes', 0)) + """
+            </div>
+            <div style="font-size: 14px; opacity: 0.9;">Total Quotes</div>
         </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
 
 def cart_item_component(item: Dict, db_manager=None):
     """Display cart item with quantity controls"""
-    col1, col2, col3 = st.columns([3, 2, 1])
+    col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
     
     with col1:
         st.markdown(f"""
@@ -906,22 +1012,29 @@ def cart_item_component(item: Dict, db_manager=None):
         """, unsafe_allow_html=True)
     
     with col2:
-        col_minus, col_qty, col_plus = st.columns([1, 1, 1])
+        col_minus, col_qty, col_plus = st.columns([1, 2, 1])
         with col_minus:
-            if st.button("−", key=f"minus_{item['id']}"):
+            if st.button("−", key=f"cart_minus_{item['id']}"):
                 if db_manager and item['quantity'] > 1:
                     db_manager.update_cart_quantity(item['id'], item['quantity'] - 1)
                     st.rerun()
         with col_qty:
-            st.markdown(f"<div class='quantity-value'>{item['quantity']}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='text-align: center; font-size: 16px; font-weight: 500;'>{item['quantity']}</div>", unsafe_allow_html=True)
         with col_plus:
-            if st.button("+", key=f"plus_{item['id']}"):
+            if st.button("+", key=f"cart_plus_{item['id']}"):
                 if db_manager:
                     db_manager.update_cart_quantity(item['id'], item['quantity'] + 1)
                     st.rerun()
     
     with col3:
-        st.markdown(f"<div class='product-price-compact'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='text-align: right; font-size: 14px; color: #666;'>${item['price']:,.2f}</div>", unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown(f"<div style='text-align: right; font-weight: 600; font-size: 15px;'>${item['price'] * item['quantity']:,.2f}</div>", unsafe_allow_html=True)
+        if st.button("🗑️", key=f"remove_{item['id']}", help="Remove from cart"):
+            if db_manager:
+                db_manager.remove_from_cart(item['id'])
+                st.rerun()
 
 def cart_summary(subtotal: float, tax_rate: float = 0.08):
     """Display cart summary"""
@@ -975,10 +1088,27 @@ def quote_export_buttons():
 def empty_state(icon: str, title: str, description: str):
     """Display empty state"""
     st.markdown(f"""
-    <div style="text-align: center; padding: 60px 20px;">
+    <div style="
+        text-align: center; 
+        padding: 60px 20px;
+        background: #f8f9fa;
+        border-radius: 16px;
+        margin: 20px auto;
+        max-width: 400px;
+        border: 2px dashed #dee2e6;
+    ">
         <div style="font-size: 64px; margin-bottom: 16px;">{icon}</div>
-        <h3 style="margin-bottom: 8px; color: {COLORS['text_primary']};">{title}</h3>
-        <p style="color: {COLORS['text_secondary']};">{description}</p>
+        <h3 style="
+            margin-bottom: 8px; 
+            color: #212529;
+            font-size: 24px;
+            font-weight: 600;
+        ">{title}</h3>
+        <p style="
+            color: #6c757d;
+            font-size: 16px;
+            line-height: 1.5;
+        ">{description}</p>
     </div>
     """, unsafe_allow_html=True)
 
