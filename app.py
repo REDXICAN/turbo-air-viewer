@@ -11,15 +11,17 @@ import atexit
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Import core services directly (avoid __init__.py circular imports)
 from src.config import Config, init_session_state
 from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.persistence import PersistenceManager
 
-# Import UI components with proper error handling
+# Import UI components directly
 from src.ui import apply_mobile_css
 
+# Import page functions directly
 from src.pages import (
     show_home_page,
     show_search_page,
