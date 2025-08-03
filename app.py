@@ -178,32 +178,54 @@ def periodic_backup(persistence_manager, auth_manager):
             except:
                 pass
 
-def show_navigation():
-    """Display navigation using Streamlit tabs"""
-    # Initialize active page if not set
-    if 'active_page' not in st.session_state:
-        st.session_state.active_page = 'home'
+def show_main_content(user, user_id, db_manager, sync_manager, auth_manager):
+    """Display main content with working tab navigation"""
     
-    # Create navigation tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Home", "🔍 Search", f"🛒 Cart ({st.session_state.get('cart_count', 0)})", "👤 Profile"])
+    # Handle product detail view (overlay)
+    if st.session_state.get('show_product_detail'):
+        show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
+        return
     
-    # Handle tab selection
-    if tab1:
-        if st.session_state.active_page != 'home':
-            st.session_state.active_page = 'home'
-            st.rerun()
-    elif tab2:
-        if st.session_state.active_page != 'search':
-            st.session_state.active_page = 'search'
-            st.rerun()
-    elif tab3:
-        if st.session_state.active_page != 'cart':
-            st.session_state.active_page = 'cart'
-            st.rerun()
-    elif tab4:
-        if st.session_state.active_page != 'profile':
-            st.session_state.active_page = 'profile'
-            st.rerun()
+    # Handle quote summary (overlay)
+    if st.session_state.get('active_page') == 'quote_summary' and st.session_state.get('last_quote'):
+        show_quote_summary(st.session_state.last_quote)
+        return
+    
+    # Create navigation tabs with content inside each tab
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🏠 Home", 
+        "🔍 Search", 
+        f"🛒 Cart ({st.session_state.get('cart_count', 0)})", 
+        "👤 Profile"
+    ])
+    
+    with tab1:
+        try:
+            show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
+        except Exception as e:
+            st.error(f"Error loading home page: {str(e)}")
+            st.info("Try refreshing the page.")
+    
+    with tab2:
+        try:
+            show_search_page(user_id, db_manager)
+        except Exception as e:
+            st.error(f"Error loading search page: {str(e)}")
+            st.info("Try refreshing the page.")
+    
+    with tab3:
+        try:
+            show_cart_page(user_id, db_manager)
+        except Exception as e:
+            st.error(f"Error loading cart page: {str(e)}")
+            st.info("Try refreshing the page.")
+    
+    with tab4:
+        try:
+            show_profile_page(user, auth_manager, sync_manager, db_manager)
+        except Exception as e:
+            st.error(f"Error loading profile page: {str(e)}")
+            st.info("Try refreshing the page.")
 
 def main():
     """Main application entry point"""
@@ -305,65 +327,8 @@ def main():
         else:
             st.session_state.cart_count = 0
         
-        # Show navigation FIRST
-        show_navigation()
-        
-        # Handle product detail view (overlay)
-        if st.session_state.get('show_product_detail'):
-            with st.container():
-                show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
-            return
-        
-        # Clear product detail when navigating away from search
-        if st.session_state.active_page != 'search':
-            if 'show_product_detail' in st.session_state:
-                del st.session_state.show_product_detail
-        
-        # Main content area
-        with st.container():
-            # Route to appropriate page based on active tab
-            active_page = st.session_state.active_page
-            
-            try:
-                if active_page == 'home':
-                    show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
-                
-                elif active_page == 'search':
-                    show_search_page(user_id, db_manager)
-                
-                elif active_page == 'cart':
-                    show_cart_page(user_id, db_manager)
-                
-                elif active_page == 'profile':
-                    show_profile_page(user, auth_manager, sync_manager, db_manager)
-                
-                elif active_page == 'quote_summary' and st.session_state.get('last_quote'):
-                    show_quote_summary(st.session_state.last_quote)
-                
-                else:
-                    # Default fallback
-                    st.session_state.active_page = 'home'
-                    st.rerun()
-                    
-            except Exception as e:
-                st.error(f"Error loading page: {str(e)}")
-                st.markdown("### Troubleshooting")
-                st.info("Try refreshing the page or selecting a different tab.")
-                
-                # Provide navigation options
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if st.button("Go to Home", use_container_width=True):
-                        st.session_state.active_page = 'home'
-                        st.rerun()
-                with col2:
-                    if st.button("Go to Search", use_container_width=True):
-                        st.session_state.active_page = 'search'
-                        st.rerun()
-                with col3:
-                    if st.button("Go to Profile", use_container_width=True):
-                        st.session_state.active_page = 'profile'
-                        st.rerun()
+        # Show main content with working navigation
+        show_main_content(user, user_id, db_manager, sync_manager, auth_manager)
 
 if __name__ == "__main__":
     main()
