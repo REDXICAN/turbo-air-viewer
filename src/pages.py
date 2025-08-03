@@ -83,13 +83,11 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
         # Add quick action buttons
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🔍 Browse Products", use_container_width=True, type="primary"):
-                st.session_state.active_page = 'search'
-                st.rerun()
+            st.markdown("**🔍 Browse Products**")
+            st.caption("Use the Search tab above to browse products")
         with col2:
-            if st.button("👤 Add Client", use_container_width=True):
-                st.session_state.active_page = 'profile'
-                st.rerun()
+            st.markdown("**👤 Add Client**") 
+            st.caption("Use the Profile tab above to manage clients")
 
 def show_search_page(user_id, db_manager):
     """Display search/products page with Streamlit-native components"""
@@ -170,7 +168,7 @@ def show_search_page(user_id, db_manager):
                 for search in searches[:5]:
                     if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
                         # Set search term and rerun
-                        st.session_state[f"search_{st.session_state.get('active_page', 'home')}"] = search
+                        st.session_state["main_search"] = search
                         st.rerun()
         except Exception as e:
             st.warning(f"Could not load search history: {str(e)}")
@@ -269,10 +267,7 @@ def show_cart_page(user_id, db_manager):
     st.markdown("### Shopping Cart")
     
     if not st.session_state.get('selected_client'):
-        empty_state("🛒", "No Client Selected", "Please select a client to view cart")
-        if st.button("Go to Profile", use_container_width=True, type="primary"):
-            st.session_state.active_page = 'profile'
-            st.rerun()
+        empty_state("🛒", "No Client Selected", "Please select a client in the Profile tab to view cart")
         return
     
     try:
@@ -282,10 +277,7 @@ def show_cart_page(user_id, db_manager):
         cart_items_df = pd.DataFrame()
     
     if cart_items_df.empty:
-        empty_state("🛒", "Cart is Empty", "Add products to your cart to create a quote")
-        if st.button("Browse Products", use_container_width=True, type="primary"):
-            st.session_state.active_page = 'search'
-            st.rerun()
+        empty_state("🛒", "Cart is Empty", "Add products using the Search tab to create a quote")
         return
     
     # Display cart items
@@ -329,8 +321,11 @@ def show_cart_page(user_id, db_manager):
                         'quote_data': quote_data
                     }
                     
-                    st.session_state.active_page = 'quote_summary'
-                    st.rerun()
+                    # Show quote details inline instead of navigating
+                    st.markdown("---")
+                    st.markdown("### Generated Quote")
+                    st.success(f"Quote #{quote_number} created successfully!")
+                    st.info("Quote export options are available in future updates.")
                 else:
                     st.error(message)
             except Exception as e:
@@ -641,28 +636,26 @@ def show_quote_summary(quote: Dict):
     
     with col1:
         if st.button("Create New Quote", use_container_width=True):
-            # Clear cart and go to search
+            # Clear cart and show success message
             try:
                 db_manager = st.session_state.db_manager
                 user_id = st.session_state.user['id']
                 db_manager.clear_cart(user_id, st.session_state.selected_client)
                 st.session_state.cart_count = 0
-                st.session_state.active_page = 'search'
-                st.rerun()
+                st.success("Cart cleared - use Search tab to create new quote")
             except Exception as e:
                 st.warning(f"Could not clear cart: {str(e)}")
-                st.session_state.active_page = 'search'
-                st.rerun()
     
     with col2:
-        if st.button("Back to Home", use_container_width=True, type="primary"):
-            # Clear cart
+        if st.button("Clear Quote Data", use_container_width=True, type="primary"):
+            # Clear quote data
             try:
                 db_manager = st.session_state.db_manager
                 user_id = st.session_state.user['id']
                 db_manager.clear_cart(user_id, st.session_state.selected_client)
                 st.session_state.cart_count = 0
+                if 'last_quote' in st.session_state:
+                    del st.session_state.last_quote
+                st.success("Quote cleared successfully")
             except Exception as e:
-                st.warning(f"Could not clear cart: {str(e)}")
-            st.session_state.active_page = 'home'
-            st.rerun()
+                st.warning(f"Could not clear quote: {str(e)}")
