@@ -1,6 +1,6 @@
 """
 Turbo Air - Main Application
-Fixed with proper imports and responsive design - removed console and duplicate navigation
+Phase 1: Restored to Streamlit-native navigation and components
 """
 
 import streamlit as st
@@ -18,7 +18,7 @@ from src.sync import SyncManager
 from src.persistence import PersistenceManager
 
 # Import UI components with proper error handling
-from src.ui import apply_mobile_css, floating_cart_button
+from src.ui import apply_mobile_css
 
 from src.pages import (
     show_home_page,
@@ -36,344 +36,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed"
 )
-
-# Apply responsive CSS with clean navigation
-st.markdown("""
-<style>
-    /* Remove all default Streamlit padding */
-    #root > div:nth-child(1) > div > div > div > div > section > div {padding-top: 0rem;}
-    .main > div:first-child { padding-top: 0rem !important; }
-    div[data-testid="stDecoration"] { display: none; }
-    .block-container { 
-        padding-top: 0rem !important; 
-        padding-bottom: 0rem !important;
-        max-width: 100% !important;
-    }
-    
-    /* Ensure content doesn't get hidden behind nav */
-    .main {
-        padding-bottom: 70px !important;
-    }
-    
-    /* Fix Streamlit button styling */
-    .stButton > button {
-        margin: 0 !important;
-        width: 100%;
-        background-color: #ffffff !important;
-        color: #333333 !important;
-        border: 1px solid #e0e0e0 !important;
-        border-radius: 8px;
-        padding: 12px 16px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }
-    
-    .stButton > button:hover {
-        background-color: #f5f5f5 !important;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-    
-    /* Primary button styling */
-    div[data-testid="stButton"] button[kind="primary"] {
-        background-color: #007AFF !important;
-        color: white !important;
-        border: none !important;
-    }
-    
-    div[data-testid="stButton"] button[kind="primary"]:hover {
-        background-color: #0066E0 !important;
-    }
-    
-    /* Fix any scrollbar issues */
-    .main {
-        overflow-x: hidden;
-    }
-    
-    /* Section styling for better distinction */
-    section[data-testid="stSidebar"] + div {
-        background-color: #ffffff;
-    }
-    
-    /* Content sections */
-    .element-container {
-        background-color: #ffffff;
-    }
-    
-    /* Base app styling */
-    .stApp {
-        background-color: #ffffff;
-    }
-    
-    /* Main content area */
-    .main > div {
-        background-color: #ffffff;
-        padding: 0 16px;
-    }
-    
-    /* Sticky header for search page */
-    .sticky-header {
-        position: sticky;
-        position: -webkit-sticky;
-        top: 0;
-        background: #ffffff;
-        z-index: 100;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        padding-bottom: 10px;
-        margin-bottom: 20px;
-        transition: all 0.3s ease;
-    }
-    
-    /* Hide search title when scrolling */
-    .sticky-header.scrolled .search-title {
-        opacity: 0;
-        height: 0;
-        margin: 0;
-        transition: all 0.3s ease;
-    }
-    
-    /* Logo styling */
-    .stImage {
-        max-width: 200px;
-        margin: 0 auto;
-    }
-    
-    /* Search container styling */
-    .search-container {
-        background: #ffffff;
-        padding: 8px 16px;
-        margin: 0;
-    }
-    
-    /* Categories section */
-    .categories-section {
-        background: #f8f9fa;
-        border-radius: 12px;
-        padding: 16px;
-        margin: 16px 0;
-    }
-    
-    .categories-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        cursor: pointer;
-        padding: 8px 0;
-        user-select: none;
-    }
-    
-    .categories-header:hover {
-        color: #007AFF;
-    }
-    
-    .categories-toggle {
-        font-size: 20px;
-        transition: transform 0.3s ease;
-    }
-    
-    .categories-toggle.open {
-        transform: rotate(180deg);
-    }
-    
-    .categories-content {
-        max-height: 0;
-        overflow: hidden;
-        transition: max-height 0.3s ease;
-    }
-    
-    .categories-content.open {
-        max-height: 1000px;
-    }
-    
-    /* Material design shadow for category buttons */
-    .category-card {
-        background: #ffffff;
-        border: none;
-        border-radius: 8px;
-        padding: 16px;
-        margin: 8px;
-        cursor: pointer;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-        text-align: center;
-    }
-    
-    .category-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    .category-card:active {
-        transform: translateY(0);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    }
-    
-    .category-row {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-bottom: 20px;
-    }
-    
-    .category-icon {
-        font-size: 32px;
-        margin-bottom: 8px;
-    }
-    
-    .category-name {
-        font-size: 14px;
-        font-weight: 500;
-        color: #333333;
-    }
-    
-    .category-count {
-        font-size: 12px;
-        color: #666666;
-        margin-top: 4px;
-    }
-    
-    @media (min-width: 768px) {
-        .stImage {
-            max-width: 250px;
-        }
-        .search-container {
-            padding: 10px 24px;
-        }
-        .category-row {
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-        }
-    }
-    
-    @media (min-width: 1024px) {
-        .stImage {
-            max-width: 300px;
-        }
-        .search-container {
-            padding: 12px 32px;
-        }
-        .category-row {
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-        }
-        .category-card {
-            padding: 24px;
-        }
-        .category-icon {
-            font-size: 40px;
-            margin-bottom: 12px;
-        }
-        .category-name {
-            font-size: 16px;
-        }
-        .category-count {
-            font-size: 14px;
-        }
-    }
-    
-    /* Navigation menu */
-    .nav-menu {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: #ffffff;
-        border-top: 2px solid #007AFF;
-        display: flex;
-        justify-content: space-around;
-        align-items: center;
-        height: 60px;
-        z-index: 9999;
-        box-shadow: 0 -4px 16px rgba(0,0,0,0.15);
-    }
-    
-    .nav-item {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        color: #666;
-        position: relative;
-    }
-    
-    .nav-item:hover {
-        background: #f0f7ff;
-        color: #007AFF;
-    }
-    
-    .nav-item.active {
-        color: #007AFF;
-        background: #f0f7ff;
-    }
-    
-    .nav-item.active::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 3px;
-        background: #007AFF;
-    }
-    
-    .nav-icon {
-        font-size: 24px;
-        margin-bottom: 4px;
-    }
-    
-    .nav-label {
-        font-size: 11px;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-    }
-    
-    /* Hide navigation on desktop */
-    @media (min-width: 1024px) {
-        .nav-menu {
-            display: none;
-        }
-        .main {
-            padding-bottom: 30px !important;
-        }
-    }
-</style>
-
-<script>
-    // Add scroll detection for sticky header
-    window.addEventListener('scroll', function() {
-        const stickyHeader = document.querySelector('.sticky-header');
-        if (stickyHeader) {
-            if (window.scrollY > 50) {
-                stickyHeader.classList.add('scrolled');
-            } else {
-                stickyHeader.classList.remove('scrolled');
-            }
-        }
-    });
-    
-    // Categories toggle functionality
-    function toggleCategories() {
-        const content = document.querySelector('.categories-content');
-        const toggle = document.querySelector('.categories-toggle');
-        if (content && toggle) {
-            content.classList.toggle('open');
-            toggle.classList.toggle('open');
-        }
-    }
-    
-    // Handle navigation clicks
-    function navigateToPage(page) {
-        // This would trigger a Streamlit rerun with the new page
-        const event = new CustomEvent('navigate', { detail: { page: page } });
-        window.dispatchEvent(event);
-    }
-</script>
-""", unsafe_allow_html=True)
 
 def check_and_migrate_database():
     """Check database and run migrations if needed"""
@@ -517,81 +179,31 @@ def periodic_backup(persistence_manager, auth_manager):
                 pass
 
 def show_navigation():
-    """Display navigation menu with HTML only"""
-    active_page = st.session_state.get('active_page', 'home')
+    """Display navigation using Streamlit tabs"""
+    # Initialize active page if not set
+    if 'active_page' not in st.session_state:
+        st.session_state.active_page = 'home'
     
-    # Create navigation with HTML only
-    nav_html = f'''
-    <div class="nav-menu">
-        <div class="nav-item {'active' if active_page == 'home' else ''}" onclick="setActivePage('home')">
-            <div class="nav-icon">🏠</div>
-            <div class="nav-label">Home</div>
-        </div>
-        <div class="nav-item {'active' if active_page == 'search' else ''}" onclick="setActivePage('search')">
-            <div class="nav-icon">🔍</div>
-            <div class="nav-label">Search</div>
-        </div>
-        <div class="nav-item {'active' if active_page == 'cart' else ''}" onclick="setActivePage('cart')">
-            <div class="nav-icon">🛒</div>
-            <div class="nav-label">Cart</div>
-        </div>
-        <div class="nav-item {'active' if active_page == 'profile' else ''}" onclick="setActivePage('profile')">
-            <div class="nav-icon">👤</div>
-            <div class="nav-label">Profile</div>
-        </div>
-    </div>
+    # Create navigation tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Home", "🔍 Search", f"🛒 Cart ({st.session_state.get('cart_count', 0)})", "👤 Profile"])
     
-    <script>
-        let pendingNavigation = null;
-        
-        function setActivePage(page) {{
-            // Store the navigation request
-            pendingNavigation = page;
-            
-            // Try to find and click a hidden navigation trigger
-            const triggers = document.querySelectorAll('[data-testid="stButton"] button');
-            for (let trigger of triggers) {{
-                if (trigger.textContent.includes('nav_trigger')) {{
-                    trigger.click();
-                    break;
-                }}
-            }}
-        }}
-        
-        // Check for pending navigation
-        function checkPendingNavigation() {{
-            if (pendingNavigation) {{
-                const page = pendingNavigation;
-                pendingNavigation = null;
-                
-                // Set session storage for the navigation
-                sessionStorage.setItem('pendingNavigation', page);
-                
-                // Force a page reload to trigger navigation
-                window.location.reload();
-            }}
-        }}
-        
-        // Check on page load
-        window.addEventListener('load', function() {{
-            const pendingPage = sessionStorage.getItem('pendingNavigation');
-            if (pendingPage) {{
-                sessionStorage.removeItem('pendingNavigation');
-                // This would need to be handled by the Streamlit backend
-                console.log('Navigate to:', pendingPage);
-            }}
-        }});
-        
-        setInterval(checkPendingNavigation, 100);
-    </script>
-    '''
-    
-    st.markdown(nav_html, unsafe_allow_html=True)
-    
-    # Single hidden trigger button for navigation
-    if st.button("nav_trigger", key="nav_trigger", type="secondary"):
-        # Check for pending navigation in JavaScript and handle it
-        pass
+    # Handle tab selection
+    if tab1:
+        if st.session_state.active_page != 'home':
+            st.session_state.active_page = 'home'
+            st.rerun()
+    elif tab2:
+        if st.session_state.active_page != 'search':
+            st.session_state.active_page = 'search'
+            st.rerun()
+    elif tab3:
+        if st.session_state.active_page != 'cart':
+            st.session_state.active_page = 'cart'
+            st.rerun()
+    elif tab4:
+        if st.session_state.active_page != 'profile':
+            st.session_state.active_page = 'profile'
+            st.rerun()
 
 def main():
     """Main application entry point"""
@@ -651,30 +263,29 @@ def main():
             auth_manager.show_auth_form()
     else:
         # Main app content
-        # Display logo for all pages except search (search page handles its own)
-        if st.session_state.active_page != 'search':
-            logo_path = "Turboair_Logo_01.png"
-            if os.path.exists(logo_path):
-                col1, col2, col3 = st.columns([1, 3, 1])
-                with col2:
-                    st.image(logo_path, use_container_width=True)
-                    st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <h1 style='
-                    text-align: center; 
-                    margin-bottom: 0.5rem; 
-                    margin-top: 0.5rem;
-                    font-size: clamp(1.5rem, 4vw, 2.5rem);
-                '>
-                    Turbo Air
-                </h1>
-                """, unsafe_allow_html=True)
+        # Display logo for all pages
+        logo_path = "Turboair_Logo_01.png"
+        if os.path.exists(logo_path):
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col2:
+                st.image(logo_path, use_container_width=True)
+        else:
+            st.markdown("""
+            <h1 style='
+                text-align: center; 
+                margin-bottom: 1rem; 
+                margin-top: 0.5rem;
+                font-size: clamp(1.5rem, 4vw, 2.5rem);
+            '>
+                Turbo Air
+            </h1>
+            """, unsafe_allow_html=True)
         
         # Update sync status
         try:
             sync_manager.update_sync_status()
         except Exception as e:
+            # Don't show error to user, just log it
             print(f"Sync status update error: {e}")
         
         # Get current user
@@ -685,52 +296,74 @@ def main():
         st.session_state.user = user
         
         # Update cart count
-        if st.session_state.selected_client:
+        if st.session_state.get('selected_client'):
             try:
                 cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
                 st.session_state.cart_count = len(cart_items)
             except:
                 st.session_state.cart_count = 0
+        else:
+            st.session_state.cart_count = 0
         
-        # Handle product detail view
+        # Show navigation FIRST
+        show_navigation()
+        
+        # Handle product detail view (overlay)
         if st.session_state.get('show_product_detail'):
-            show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
-            # Show navigation on product detail
-            show_navigation()
+            with st.container():
+                show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
             return
         
-        # Clear product detail when navigating away
+        # Clear product detail when navigating away from search
         if st.session_state.active_page != 'search':
-            st.session_state.show_product_detail = None
+            if 'show_product_detail' in st.session_state:
+                del st.session_state.show_product_detail
         
-        # Create content container with responsive padding
-        container = st.container()
-        with container:
-            # Route to appropriate page
+        # Main content area
+        with st.container():
+            # Route to appropriate page based on active tab
             active_page = st.session_state.active_page
             
-            if active_page == 'home':
-                show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
-            
-            elif active_page == 'search':
-                show_search_page(user_id, db_manager)
-            
-            elif active_page == 'cart':
-                show_cart_page(user_id, db_manager)
-            
-            elif active_page == 'profile':
-                show_profile_page(user, auth_manager, sync_manager, db_manager)
-            
-            elif active_page == 'quote_summary' and st.session_state.last_quote:
-                show_quote_summary(st.session_state.last_quote)
-        
-        # Show navigation (not on quote summary)
-        if active_page != 'quote_summary':
-            show_navigation()
-        
-        # Floating cart button (only on search page when cart has items)
-        if active_page == 'search' and st.session_state.cart_count > 0:
-            floating_cart_button(st.session_state.cart_count)
+            try:
+                if active_page == 'home':
+                    show_home_page(user, user_id, db_manager, sync_manager, auth_manager)
+                
+                elif active_page == 'search':
+                    show_search_page(user_id, db_manager)
+                
+                elif active_page == 'cart':
+                    show_cart_page(user_id, db_manager)
+                
+                elif active_page == 'profile':
+                    show_profile_page(user, auth_manager, sync_manager, db_manager)
+                
+                elif active_page == 'quote_summary' and st.session_state.get('last_quote'):
+                    show_quote_summary(st.session_state.last_quote)
+                
+                else:
+                    # Default fallback
+                    st.session_state.active_page = 'home'
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"Error loading page: {str(e)}")
+                st.markdown("### Troubleshooting")
+                st.info("Try refreshing the page or selecting a different tab.")
+                
+                # Provide navigation options
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    if st.button("Go to Home", use_container_width=True):
+                        st.session_state.active_page = 'home'
+                        st.rerun()
+                with col2:
+                    if st.button("Go to Search", use_container_width=True):
+                        st.session_state.active_page = 'search'
+                        st.rerun()
+                with col3:
+                    if st.button("Go to Profile", use_container_width=True):
+                        st.session_state.active_page = 'profile'
+                        st.rerun()
 
 if __name__ == "__main__":
     main()

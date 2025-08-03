@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Fixed with proper responsive design support and HTML-only categories
+Phase 1: Restored to Streamlit-native components with proper error handling
 """
 
 import streamlit as st
@@ -10,10 +10,10 @@ from datetime import datetime
 from typing import Dict
 
 from .ui import (
-    app_header, search_bar_component, category_grid,
-    product_list_item_compact, product_details_expanded, recent_searches_section,
+    search_bar_component, category_grid,
+    product_list_item_compact, recent_searches_section,
     recent_quotes_section, metrics_section, cart_item_component,
-    cart_summary, quote_export_buttons, empty_state, format_price,
+    cart_summary, empty_state, format_price,
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
 )
 
@@ -45,44 +45,41 @@ except ImportError:
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     """Display home page with recent activity and metrics"""
     
+    # Initialize variables
+    has_content = False
+    
     # Show metrics first to give immediate value
     try:
         stats = db_manager.get_dashboard_stats(user_id)
         if stats and (stats.get('total_clients', 0) > 0 or stats.get('total_quotes', 0) > 0):
             metrics_section(stats)
-    except:
-        pass
+            has_content = True
+    except Exception as e:
+        st.error(f"Error loading dashboard stats: {str(e)}")
     
     # Recent searches
     try:
         searches = db_manager.get_search_history(user_id)
         if searches:
             recent_searches_section(searches)
-    except:
-        pass
+            has_content = True
+    except Exception as e:
+        st.warning(f"Could not load search history: {str(e)}")
     
     # Recent quotes
     try:
         quotes_df = db_manager.get_user_quotes(user_id, limit=5)
         if not quotes_df.empty:
             recent_quotes_section(quotes_df.to_dict('records'))
-    except:
-        pass
+            has_content = True
+    except Exception as e:
+        st.warning(f"Could not load recent quotes: {str(e)}")
     
     # If no content, show empty state with action buttons
-    has_content = False
-    try:
-        has_content = (
-            bool(db_manager.get_search_history(user_id)) or
-            not db_manager.get_user_quotes(user_id, limit=5).empty or
-            db_manager.get_dashboard_stats(user_id).get('total_clients', 0) > 0
-        )
-    except:
-        pass
-    
     if not has_content:
         empty_state("🏠", "Start Your Quote", "Search for products or create a client to begin")
         
+        st.markdown("### Quick Actions")
         # Add quick action buttons
         col1, col2 = st.columns(2)
         with col1:
@@ -95,48 +92,24 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
                 st.rerun()
 
 def show_search_page(user_id, db_manager):
-    """Display search/products page with HTML-only categories"""
+    """Display search/products page with Streamlit-native components"""
     
-    # Create sticky header with logo and search
-    sticky_container = st.container()
-    with sticky_container:
-        st.markdown('<div class="sticky-header">', unsafe_allow_html=True)
-        
-        # Logo
-        logo_path = "Turboair_Logo_01.png"
-        if os.path.exists(logo_path):
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.image(logo_path, use_container_width=True)
-        else:
-            st.markdown("""
-            <h1 style='
-                text-align: center; 
-                margin: 0.5rem 0;
-                font-size: 1.8rem;
-            '>
-                Turbo Air
-            </h1>
-            """, unsafe_allow_html=True)
-        
-        # Search title (will hide on scroll)
-        st.markdown('<h3 class="search-title" style="text-align: center; margin: 0.5rem 0;">Search</h3>', unsafe_allow_html=True)
-        
-        # Search bar
-        search_term = search_bar_component("Search by SKU, category or description")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("### Search Products")
     
-    # Content container
-    st.markdown('<div style="padding: 0 16px;">', unsafe_allow_html=True)
+    # Search bar
+    search_term = search_bar_component("Search by SKU, category or description")
     
-    # Categories section with HTML-only implementation
+    # Categories section
+    st.markdown("### Categories")
+    
+    # Build categories list
     categories = []
     for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
         try:
             products_df = db_manager.get_products_by_category(cat_name)
             count = len(products_df) if products_df is not None and not products_df.empty else 0
-        except:
+        except Exception as e:
+            st.warning(f"Error loading category {cat_name}: {str(e)}")
             count = 0
         
         categories.append({
@@ -145,97 +118,48 @@ def show_search_page(user_id, db_manager):
             "icon": cat_info["icon"]
         })
     
-    # Initialize categories state
-    if 'categories_expanded' not in st.session_state:
-        st.session_state.categories_expanded = True
-    
-    # HTML Categories section with proper styling
-    st.markdown(f"""
-    <div class="categories-section">
-        <div class="categories-header">
-            <h3 style="margin: 0;">Categories</h3>
-            <span class="categories-toggle {'open' if st.session_state.categories_expanded else ''}">▼</span>
-        </div>
-        <div class="categories-content {'open' if st.session_state.categories_expanded else ''}">
-            <div class="category-row">
-    """, unsafe_allow_html=True)
-    
-    # Display category cards with proper HTML structure
-    for i, category in enumerate(categories):
-        category_html = f"""
-        <div class="category-card" onclick="selectCategory('{category['name']}')">
-            <div class="category-icon">{category['icon']}</div>
-            <div class="category-name">{category['name']}</div>
-            <div class="category-count">({category['count']} items)</div>
-        </div>
-        """
-        
-        if i % 2 == 0:  # Start new row every 2 items for mobile
-            if i > 0:
-                st.markdown('</div><div class="category-row">', unsafe_allow_html=True)
-        
-        st.markdown(category_html, unsafe_allow_html=True)
-    
-    st.markdown("""
-            </div>
-        </div>
-    </div>
-    
-    <script>
-        function selectCategory(categoryName) {
-            // Store in sessionStorage for persistence
-            sessionStorage.setItem('selectedCategory', categoryName);
-            // Trigger page reload to handle category selection
-            window.location.reload();
-        }
-        
-        // Check for selected category on page load
-        window.addEventListener('load', function() {
-            const selectedCategory = sessionStorage.getItem('selectedCategory');
-            if (selectedCategory) {
-                sessionStorage.removeItem('selectedCategory');
-                // Set session state for category
-                fetch('/set_category', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({category: selectedCategory})
-                });
-            }
-        });
-    </script>
-    """, unsafe_allow_html=True)
+    # Display categories
+    if categories:
+        category_grid(categories)
+    else:
+        st.warning("No categories available")
     
     # Handle search or category selection
     results_df = pd.DataFrame()
-    
-    # Check for category selection from JavaScript
-    if 'temp_selected_category' in st.session_state:
-        st.session_state.selected_category = st.session_state.temp_selected_category
-        del st.session_state.temp_selected_category
     
     if search_term and len(search_term) >= 2:
         # Save to search history
         try:
             db_manager.add_search_history(user_id, search_term)
-        except:
-            pass
+        except Exception as e:
+            st.warning(f"Could not save search history: {str(e)}")
         
         # Search products
-        st.markdown("### Search Results")
+        st.markdown(f"### Search Results for '{search_term}'")
         try:
             results_df = db_manager.search_products(search_term)
-        except:
-            st.error("Error searching products")
+            if results_df.empty:
+                st.info("No products found matching your search.")
+        except Exception as e:
+            st.error(f"Error searching products: {str(e)}")
     
     elif st.session_state.get('selected_category'):
         # Show category products
         category = st.session_state.selected_category
         st.markdown(f"### {category}")
         
+        # Clear category selection button
+        if st.button("← Back to Categories", key="clear_category"):
+            if 'selected_category' in st.session_state:
+                del st.session_state.selected_category
+            st.rerun()
+        
         try:
             results_df = db_manager.get_products_by_category(category)
-        except:
-            st.error("Error loading category products")
+            if results_df.empty:
+                st.info(f"No products found in {category}")
+        except Exception as e:
+            st.error(f"Error loading category products: {str(e)}")
     
     else:
         # Show recent searches when no active search
@@ -245,14 +169,15 @@ def show_search_page(user_id, db_manager):
                 st.markdown("### Recent Searches")
                 for search in searches[:5]:
                     if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
-                        st.session_state.search_term = search
+                        # Set search term and rerun
+                        st.session_state[f"search_{st.session_state.get('active_page', 'home')}"] = search
                         st.rerun()
-        except:
-            pass
+        except Exception as e:
+            st.warning(f"Could not load search history: {str(e)}")
     
-    # Display results in compact format with images
+    # Display results
     if not results_df.empty:
-        st.markdown(f"### Results ({len(results_df)} items)")
+        st.markdown(f"**Found {len(results_df)} products**")
         
         # Get current cart items
         cart_items = []
@@ -261,120 +186,110 @@ def show_search_page(user_id, db_manager):
                 cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
                 if not cart_items_df.empty:
                     cart_items = cart_items_df.to_dict('records')
-            except:
-                pass
+            except Exception as e:
+                st.warning(f"Could not load cart items: {str(e)}")
         
-        # Create list header
-        st.markdown("""
-        <div class="product-list-header">
-            <div>Image</div>
-            <div>SKU / Description</div>
-            <div style="text-align: center;">Details</div>
-            <div style="text-align: right;">Price</div>
-            <div style="text-align: center;">Qty</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Display products with HTML-only controls
+        # Display products with add to cart functionality
         for idx, product in results_df.iterrows():
-            product_dict = product.to_dict()
-            
-            # Get current quantity
-            current_qty = 0
-            cart_item_id = None
-            for item in cart_items:
-                if item.get('product_id') == product['id']:
-                    current_qty = item.get('quantity', 0)
-                    cart_item_id = item.get('id')
-                    break
-            
-            # Enhanced product row with quantity controls
-            product_html = f"""
-            <div class="product-row" id="product_{product['id']}">
-                <div class="product-image-compact">
-                    <img src="data:image/png;base64,{get_image_base64(f"pdf_screenshots/{product['sku']}/{product['sku']} P.1.png") or ''}" 
-                         alt="{product['sku']}" onerror="this.parentElement.innerHTML='📷'">
-                </div>
-                <div class="product-info">
-                    <div class="product-sku">{product['sku']}</div>
-                    <div class="product-desc">{product.get('description', product.get('product_type', ''))}</div>
-                </div>
-                <div class="view-details-link" onclick="toggleDetails('{product['id']}')">View Details</div>
-                <div class="product-price-compact">${product['price']:,.2f}</div>
-                <div class="quantity-controls">
-                    <button class="qty-btn" onclick="updateQuantity('{product['id']}', -1)" {'disabled' if current_qty == 0 else ''}>−</button>
-                    <span class="qty-value" id="qty_{product['id']}">{current_qty}</span>
-                    <button class="qty-btn" onclick="updateQuantity('{product['id']}', 1)">+</button>
-                </div>
-            </div>
-            """
-            
-            st.markdown(product_html, unsafe_allow_html=True)
-            
-            # Show expanded details if toggled
-            if st.session_state.get(f"expanded_{product['id']}", False):
-                st.markdown(product_details_expanded(product_dict), unsafe_allow_html=True)
-    
-    # Add JavaScript for quantity controls and details toggle
-    st.markdown("""
-    <script>
-        function updateQuantity(productId, change) {
-            // Get current quantity
-            const qtyElement = document.getElementById('qty_' + productId);
-            let currentQty = parseInt(qtyElement.textContent);
-            let newQty = Math.max(0, currentQty + change);
-            
-            // Update display
-            qtyElement.textContent = newQty;
-            
-            // Update cart in backend (this would need to be implemented)
-            // For now, we'll use sessionStorage to track changes
-            const cartChanges = JSON.parse(sessionStorage.getItem('cartChanges') || '{}');
-            cartChanges[productId] = { quantity: newQty, change: change };
-            sessionStorage.setItem('cartChanges', JSON.stringify(cartChanges));
-        }
-        
-        function toggleDetails(productId) {
-            const detailsElement = document.getElementById('details_' + productId);
-            if (detailsElement) {
-                detailsElement.style.display = detailsElement.style.display === 'none' ? 'block' : 'none';
-            } else {
-                // Create details element if it doesn't exist
-                // This would be handled by the backend in a real implementation
-                console.log('Toggle details for product:', productId);
-            }
-        }
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Close content container
-    st.markdown('</div>', unsafe_allow_html=True)
+            with st.container():
+                # Display product info
+                st.markdown(product_list_item_compact(product.to_dict(), cart_items, user_id, db_manager), unsafe_allow_html=True)
+                
+                # Action buttons
+                col1, col2, col3 = st.columns([2, 1, 1])
+                
+                with col1:
+                    if st.button(f"View Details", key=f"view_{product['id']}", use_container_width=True):
+                        st.session_state.show_product_detail = product.to_dict()
+                        st.rerun()
+                
+                with col2:
+                    # Get current quantity
+                    current_qty = 0
+                    cart_item_id = None
+                    for item in cart_items:
+                        if item.get('product_id') == product['id']:
+                            current_qty = item.get('quantity', 0)
+                            cart_item_id = item.get('id')
+                            break
+                    
+                    if current_qty > 0:
+                        if st.button("−", key=f"minus_{product['id']}"):
+                            if current_qty == 1:
+                                # Remove from cart
+                                try:
+                                    db_manager.remove_from_cart(cart_item_id)
+                                    st.success("Removed from cart")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error removing from cart: {str(e)}")
+                            else:
+                                # Decrease quantity
+                                try:
+                                    db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                                    st.success("Updated quantity")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error updating quantity: {str(e)}")
+                    else:
+                        st.markdown(f"**Qty: {current_qty}**")
+                
+                with col3:
+                    if st.button("+ Add", key=f"plus_{product['id']}", type="primary"):
+                        if st.session_state.get('selected_client'):
+                            if current_qty == 0:
+                                # Add to cart
+                                try:
+                                    success, message = db_manager.add_to_cart(
+                                        user_id, product['id'], st.session_state.selected_client
+                                    )
+                                    if success:
+                                        st.success("Added to cart!")
+                                        st.rerun()
+                                    else:
+                                        st.error(message)
+                                except Exception as e:
+                                    st.error(f"Error adding to cart: {str(e)}")
+                            else:
+                                # Increase quantity
+                                try:
+                                    db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
+                                    st.success("Updated quantity")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error updating quantity: {str(e)}")
+                        else:
+                            st.error("Please select a client first")
+                
+                st.divider()
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
     
-    st.markdown("### Cart")
+    st.markdown("### Shopping Cart")
     
     if not st.session_state.get('selected_client'):
         empty_state("🛒", "No Client Selected", "Please select a client to view cart")
-        if st.button("Go to Profile", use_container_width=True):
+        if st.button("Go to Profile", use_container_width=True, type="primary"):
             st.session_state.active_page = 'profile'
             st.rerun()
         return
     
     try:
         cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
-    except:
+    except Exception as e:
+        st.error(f"Error loading cart: {str(e)}")
         cart_items_df = pd.DataFrame()
     
     if cart_items_df.empty:
         empty_state("🛒", "Cart is Empty", "Add products to your cart to create a quote")
-        if st.button("Browse Products", use_container_width=True):
+        if st.button("Browse Products", use_container_width=True, type="primary"):
             st.session_state.active_page = 'search'
             st.rerun()
         return
     
     # Display cart items
+    st.markdown("#### Items in Cart")
     total = 0
     for _, item in cart_items_df.iterrows():
         cart_item_component(item.to_dict(), db_manager)
@@ -384,6 +299,7 @@ def show_cart_page(user_id, db_manager):
     final_total = cart_summary(total)
     
     # Generate Quote button
+    st.markdown("### ")
     if st.button("Generate Quote", use_container_width=True, type="primary"):
         with st.spinner("Generating quote..."):
             try:
@@ -449,14 +365,17 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
             
             if st.form_submit_button("Add Client", use_container_width=True):
                 if company:
-                    success, message = db_manager.create_client(
-                        user['id'], company, contact_name, contact_email, contact_number
-                    )
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
+                    try:
+                        success, message = db_manager.create_client(
+                            user['id'], company, contact_name, contact_email, contact_number
+                        )
+                        if success:
+                            st.success(message)
+                            st.rerun()
+                        else:
+                            st.error(message)
+                    except Exception as e:
+                        st.error(f"Error creating client: {str(e)}")
                 else:
                     st.error("Company name is required")
     
@@ -473,7 +392,7 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
             if st.session_state.get('selected_client'):
                 selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
                 if not selected_client.empty:
-                    st.info(f"Selected Client: **{selected_client.iloc[0]['company']}**")
+                    st.info(f"✅ Selected Client: **{selected_client.iloc[0]['company']}**")
             
             # List all clients
             for _, client in clients_df.iterrows():
@@ -488,7 +407,7 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
                         st.markdown(f"**Added:** {pd.to_datetime(client['created_at']).strftime('%Y-%m-%d')}")
                     
                     # Select client button
-                    if st.button(f"Select Client", key=f"select_{client['id']}", use_container_width=True):
+                    if st.button(f"Select Client", key=f"select_{client['id']}", use_container_width=True, type="primary"):
                         st.session_state.selected_client = client['id']
                         st.success(f"Selected {client['company']}")
                         st.rerun()
@@ -513,38 +432,49 @@ def show_profile_page(user, auth_manager, sync_manager, db_manager):
                                         # Load quote details for viewing
                                         st.session_state.view_quote_id = quote['id']
                                         st.info("Quote viewing coming soon!")
-                    except:
-                        st.caption("Error loading quotes")
+                    except Exception as e:
+                        st.caption(f"Error loading quotes: {str(e)}")
     
     except Exception as e:
         st.error(f"Error loading clients: {str(e)}")
     
     # Admin functions (if applicable)
-    if auth_manager.is_admin():
-        with st.expander("Admin Functions"):
-            if st.button("🔄 Sync Database", use_container_width=True):
-                with st.spinner("Syncing..."):
-                    result = sync_manager.sync_all()
-                    if result['success']:
-                        st.success(result['message'])
-                    else:
-                        st.error(result['message'])
+    try:
+        if auth_manager.is_admin():
+            with st.expander("Admin Functions"):
+                if st.button("🔄 Sync Database", use_container_width=True):
+                    with st.spinner("Syncing..."):
+                        try:
+                            result = sync_manager.sync_all()
+                            if result['success']:
+                                st.success(result['message'])
+                            else:
+                                st.error(result['message'])
+                        except Exception as e:
+                            st.error(f"Sync error: {str(e)}")
+    except Exception as e:
+        st.warning(f"Could not check admin status: {str(e)}")
     
     # Sign out
     st.markdown("### ")
-    if st.button("Sign Out", use_container_width=True, type="primary"):
-        auth_manager.sign_out()
-        st.rerun()
+    if st.button("Sign Out", use_container_width=True, type="secondary"):
+        try:
+            auth_manager.sign_out()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error signing out: {str(e)}")
 
 def show_product_detail(product: Dict, user_id: str, db_manager):
     """Display product detail modal"""
     
+    st.markdown("### Product Details")
+    
     # Back button
-    if st.button("← Back", key="back_from_detail"):
+    if st.button("← Back to Search", key="back_from_detail", use_container_width=True):
         st.session_state.show_product_detail = None
         st.rerun()
     
-    # Product image
+    # Product image and info
     col1, col2 = st.columns([1, 2])
     
     with col1:
@@ -561,23 +491,18 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
         for image_path in possible_paths:
             image_base64 = get_image_base64(image_path)
             if image_base64:
-                st.markdown(f"""
-                <div style="width: 100%; height: 200px; overflow: hidden; border-radius: 8px;">
-                    <img src="data:image/png;base64,{image_base64}" 
-                         style="width: 100%; height: 100%; object-fit: cover;">
-                </div>
-                """, unsafe_allow_html=True)
+                st.image(f"data:image/png;base64,{image_base64}", caption=sku, use_container_width=True)
                 image_found = True
                 break
         
         if not image_found:
-            empty_state("📷", "No Image", "Product image not available")
+            st.markdown("📷 **No image available**")
     
     with col2:
         # Product info
-        st.markdown(f"### {product['sku']}")
+        st.markdown(f"# {product['sku']}")
         st.markdown(f"**{product.get('product_type', 'N/A')}**")
-        st.markdown(f"### {format_price(product.get('price', 0))}")
+        st.markdown(f"## {format_price(product.get('price', 0))}")
         
         if product.get('description'):
             st.markdown(product['description'])
@@ -596,22 +521,27 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
         "Refrigerant": product.get('refrigerant', '-')
     }
     
-    for key, value in specs.items():
+    col1, col2 = st.columns(2)
+    for i, (key, value) in enumerate(specs.items()):
         if value and value != '-':
-            st.markdown(f"**{key}:** {value}")
+            with col1 if i % 2 == 0 else col2:
+                st.markdown(f"**{key}:** {value}")
     
     # Add to Cart button
+    st.markdown("### ")
     if st.button("Add to Cart", use_container_width=True, type="primary"):
         if st.session_state.get('selected_client'):
-            success, message = db_manager.add_to_cart(
-                user_id, product['id'], st.session_state.selected_client
-            )
-            if success:
-                st.success("Added to cart!")
-                st.session_state.cart_count = st.session_state.get('cart_count', 0) + 1
-                # Don't close detail view, let user continue browsing
-            else:
-                st.error(message)
+            try:
+                success, message = db_manager.add_to_cart(
+                    user_id, product['id'], st.session_state.selected_client
+                )
+                if success:
+                    st.success("Added to cart!")
+                    # Don't close detail view, let user continue browsing
+                else:
+                    st.error(message)
+            except Exception as e:
+                st.error(f"Error adding to cart: {str(e)}")
         else:
             st.error("Please select a client first")
 
@@ -702,8 +632,8 @@ def show_quote_summary(quote: Dict):
                 else:
                     st.warning("Email service not configured")
                     st.info("To enable email, configure Gmail credentials in your secrets")
-            except:
-                st.warning("Email functionality not available")
+            except Exception as e:
+                st.warning(f"Email functionality not available: {str(e)}")
     
     # Action buttons
     st.markdown("### ")
@@ -719,7 +649,8 @@ def show_quote_summary(quote: Dict):
                 st.session_state.cart_count = 0
                 st.session_state.active_page = 'search'
                 st.rerun()
-            except:
+            except Exception as e:
+                st.warning(f"Could not clear cart: {str(e)}")
                 st.session_state.active_page = 'search'
                 st.rerun()
     
@@ -731,7 +662,7 @@ def show_quote_summary(quote: Dict):
                 user_id = st.session_state.user['id']
                 db_manager.clear_cart(user_id, st.session_state.selected_client)
                 st.session_state.cart_count = 0
-            except:
-                pass
+            except Exception as e:
+                st.warning(f"Could not clear cart: {str(e)}")
             st.session_state.active_page = 'home'
             st.rerun()
