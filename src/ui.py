@@ -347,8 +347,7 @@ def search_bar_component(placeholder: str = "Search for products"):
     search_term = st.text_input(
         "Search",
         placeholder=placeholder,
-        key="main_search",
-        label_visibility="collapsed"
+        key="main_search"
     )
     return search_term
 
@@ -365,40 +364,75 @@ def category_grid(categories: List[Dict[str, any]]):
     if st.session_state.get('screen_width', 400) > 1024:
         num_cols = 4
     
-    # Display categories in grid - just the cards, no buttons
-    cols = st.columns(num_cols)
-    for i, category in enumerate(categories):
-        with cols[i % num_cols]:
-            # Create category card that's clickable
-            category_html = f"""
-            <div class="category-card" style="cursor: pointer;">
-                <div class="category-icon">{category.get('icon', '📦')}</div>
-                <div class="category-name">{category['name']}</div>
-                <div class="category-count">({category.get('count', 0)} items)</div>
-            </div>
-            """
-            st.markdown(category_html, unsafe_allow_html=True)
-            
-            # Hidden button for category selection - just the card click
-            if st.button(f"Select", key=f"cat_{category['name']}", label_visibility="hidden"):
-                st.session_state.selected_category = category['name']
-                st.rerun()
+    # Display categories in grid
+    for i in range(0, len(categories), num_cols):
+        cols = st.columns(num_cols)
+        for j in range(num_cols):
+            if i + j < len(categories):
+                category = categories[i + j]
+                with cols[j]:
+                    # Create category card that's clickable
+                    category_html = f"""
+                    <div class="category-card" style="cursor: pointer;">
+                        <div class="category-icon">{category.get('icon', '📦')}</div>
+                        <div class="category-name">{category['name']}</div>
+                        <div class="category-count">({category.get('count', 0)} items)</div>
+                    </div>
+                    """
+                    st.markdown(category_html, unsafe_allow_html=True)
+                    
+                    # Button for category selection - without label_visibility
+                    if st.button(f"Browse {category['name']}", key=f"cat_{category['name']}", use_container_width=True):
+                        st.session_state.selected_category = category['name']
+                        st.rerun()
 
 def recent_searches_section(searches: List[str]):
-    """Display recent searches section"""
+    """Display recent searches section with product thumbnails"""
     if not searches:
         return
         
-    st.markdown("""
-    <div class="recent-section">
-        <div class="section-title">Recent Searches</div>
-    </div>
-    """, unsafe_allow_html=True)
+    # Title styling to match "My Clients"
+    st.markdown("### Recent Searches")
     
-    for search in searches[:5]:
-        if st.button(f"🔍 {search}", key=f"recent_{search}", use_container_width=True):
-            st.session_state.search_term = search
-            st.rerun()
+    # Display recent searches with thumbnails
+    cols = st.columns(min(len(searches[:5]), 3))  # Max 3 columns
+    
+    for i, search in enumerate(searches[:5]):
+        with cols[i % len(cols)]:
+            # Try to find a product image for this search term
+            thumbnail_html = f'<div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; font-size: 24px;">🔍</div>'
+            
+            # Try to get actual product image if search matches a SKU
+            try:
+                possible_paths = [
+                    f"pdf_screenshots/{search.upper()}/{search.upper()} P.1.png",
+                    f"pdf_screenshots/{search.upper()}/{search.upper()}_P.1.png",
+                    f"pdf_screenshots/{search.upper()}/{search.upper()}.png",
+                    f"pdf_screenshots/{search}/{search} P.1.png",
+                    f"pdf_screenshots/{search}/{search}_P.1.png",
+                    f"pdf_screenshots/{search}/{search}.png"
+                ]
+                
+                for image_path in possible_paths:
+                    image_base64 = get_image_base64(image_path)
+                    if image_base64:
+                        thumbnail_html = f'''
+                        <div style="width: 80px; height: 80px; background: #f0f0f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin: 0 auto 8px; overflow: hidden;">
+                            <img src="data:image/png;base64,{image_base64}" style="width: 70px; height: 70px; object-fit: contain;">
+                        </div>
+                        '''
+                        break
+            except:
+                pass
+            
+            # Display thumbnail and SKU
+            st.markdown(thumbnail_html, unsafe_allow_html=True)
+            
+            # Button with SKU below thumbnail
+            if st.button(search, key=f"recent_{search}", use_container_width=True):
+                # Set the search term in the main search box
+                st.session_state["main_search"] = search
+                st.rerun()
 
 def recent_quotes_section(quotes: List[Dict]):
     """Display recent quotes section"""

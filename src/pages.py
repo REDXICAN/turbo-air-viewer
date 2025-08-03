@@ -198,19 +198,22 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
 def show_search_page(user_id, db_manager):
     """Display search/products page with Streamlit-native components"""
     
-    # Header with selected client info
-    header_col1, header_col2 = st.columns([3, 1])
-    with header_col1:
-        st.markdown("### Search Products")
-    with header_col2:
-        if st.session_state.get('selected_client'):
-            try:
-                clients_df = db_manager.get_user_clients(user_id)
+    # Header with selected client info - fix the client detection
+    st.markdown("### Search Products")
+    
+    # Show selected client info if available
+    if st.session_state.get('selected_client'):
+        try:
+            clients_df = db_manager.get_user_clients(user_id)
+            if not clients_df.empty:
                 selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
                 if not selected_client.empty:
-                    st.markdown(f"**Client:** {selected_client.iloc[0]['company']}")
-            except:
-                pass
+                    client_name = selected_client.iloc[0]['company']
+                    st.info(f"🏢 **Selected Client:** {client_name}")
+        except Exception as e:
+            st.warning(f"Could not load client info: {str(e)}")
+    else:
+        st.warning("⚠️ No client selected. Please select a client from the Home tab to add items to cart.")
     
     # Search bar
     search_term = search_bar_component("Search by SKU, category or description")
@@ -258,7 +261,7 @@ def show_search_page(user_id, db_manager):
         # Show categories and recent searches
         st.markdown("### Categories")
         
-        # Build categories list
+        # Build categories list - make sure we get all categories
         categories = []
         for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
             try:
@@ -274,21 +277,17 @@ def show_search_page(user_id, db_manager):
                 "icon": cat_info["icon"]
             })
         
-        # Display categories
+        # Display categories - make sure all show up
         if categories:
             category_grid(categories)
         else:
             st.warning("No categories available")
         
-        # Show recent searches
+        # Show recent searches with improved styling
         try:
             searches = db_manager.get_search_history(user_id)
             if searches:
-                st.markdown("### Recent Searches")
-                for search in searches[:5]:
-                    if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
-                        st.session_state["main_search"] = search
-                        st.rerun()
+                recent_searches_section(searches)
         except Exception as e:
             st.warning(f"Could not load search history: {str(e)}")
 
