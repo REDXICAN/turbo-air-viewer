@@ -352,7 +352,7 @@ def search_bar_component(placeholder: str = "Search for products"):
     return search_term
 
 def category_grid(categories: List[Dict[str, any]]):
-    """Display category grid using Streamlit native components - simplified"""
+    """Display category grid as single clickable buttons"""
     if not categories:
         st.info("No categories available")
         return
@@ -371,18 +371,10 @@ def category_grid(categories: List[Dict[str, any]]):
             if i + j < len(categories):
                 category = categories[i + j]
                 with cols[j]:
-                    # Create category card that's clickable
-                    category_html = f"""
-                    <div class="category-card" style="cursor: pointer;">
-                        <div class="category-icon">{category.get('icon', '📦')}</div>
-                        <div class="category-name">{category['name']}</div>
-                        <div class="category-count">({category.get('count', 0)} items)</div>
-                    </div>
-                    """
-                    st.markdown(category_html, unsafe_allow_html=True)
+                    # Single button with all category info
+                    button_text = f"{category.get('icon', '📦')}\n\n{category['name']}\n\n({category.get('count', 0)} items)"
                     
-                    # Button for category selection - without label_visibility
-                    if st.button(f"Browse {category['name']}", key=f"cat_{category['name']}", use_container_width=True):
+                    if st.button(button_text, key=f"cat_btn_{category['name']}", use_container_width=True, height=120):
                         st.session_state.selected_category = category['name']
                         st.rerun()
 
@@ -428,8 +420,8 @@ def recent_searches_section(searches: List[str]):
             # Display thumbnail and SKU
             st.markdown(thumbnail_html, unsafe_allow_html=True)
             
-            # Button with SKU below thumbnail
-            if st.button(search, key=f"recent_{search}", use_container_width=True):
+            # Button with SKU below thumbnail - make key unique with index
+            if st.button(search, key=f"recent_search_{i}_{search.replace(' ', '_')}", use_container_width=True):
                 # Set the search term in the main search box
                 st.session_state["main_search"] = search
                 st.rerun()

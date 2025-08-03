@@ -65,7 +65,7 @@ def initialize_session_state():
             st.session_state.auth_token = None
         
 def check_and_migrate_database():
-    """Check database and run migrations if needed"""
+    """Check database and run migrations if needed - silent operation"""
     db_path = 'turbo_air_db_online.sqlite'
     
     if os.path.exists(db_path):
@@ -80,13 +80,12 @@ def check_and_migrate_database():
             columns = [column[1] for column in cursor.fetchall()]
             
             if 'password_hash' not in columns:
-                st.warning("Database schema needs updating. Running migration...")
+                # Silent migration - no user message
                 cursor.execute("""
                     ALTER TABLE user_profiles 
                     ADD COLUMN password_hash TEXT
                 """)
                 conn.commit()
-                st.success("Database migration completed!")
             
             # Ensure auth_tokens table exists
             cursor.execute("""
@@ -122,7 +121,8 @@ def check_and_migrate_database():
             
             conn.commit()
         except Exception as e:
-            st.error(f"Migration error: {e}")
+            # Silent error handling
+            print(f"Migration error: {e}")
         finally:
             conn.close()
     """Check database and run migrations if needed"""
@@ -315,14 +315,14 @@ def show_main_content(user, user_id, db_manager, sync_manager, auth_manager):
             st.info("Try refreshing the page.")
 
 def main():
-    """Main application entry point"""
-    # Initialize session state with persistence
+    """Main application entry point with enhanced session persistence"""
+    # Initialize session state with enhanced persistence
     initialize_session_state()
     
     # Apply responsive CSS
     apply_mobile_css()
     
-    # Check and migrate database if needed
+    # Check and migrate database silently
     check_and_migrate_database()
     
     # Create database if it doesn't exist
@@ -331,36 +331,27 @@ def main():
             # Check if Excel file exists before creating database
             excel_exists = check_excel_file()
             
-            st.info("Creating database for first time setup...")
-            
-            # Import create_db module properly
+            # Silent database creation
             import sys
             sys.path.append(os.path.dirname(os.path.abspath(__file__)))
             from src.database.create_db import create_local_database
             
             if create_local_database():
-                if excel_exists:
-                    st.success("Database created and products loaded successfully!")
-                else:
-                    st.warning("Database created but no products loaded. Please add turbo_air_products.xlsx")
-                st.rerun()
+                if not excel_exists:
+                    st.info("Database created. Add turbo_air_products.xlsx for product data.")
+            else:
+                st.warning("Could not create database. Some features may not work.")
         except Exception as e:
-            st.error(f"Error creating database: {e}")
-            # Don't stop - allow app to continue with empty database
+            st.warning(f"Database setup issue: {e}")
     
     # Initialize services
     auth_manager, db_manager, sync_manager, persistence_manager = initialize_services()
     
+    # Maintain authentication state across refreshes
+    maintain_authentication_state(auth_manager)
+    
     # Perform periodic backup
     periodic_backup(persistence_manager, auth_manager)
-    
-    # Maintain authentication state across refreshes
-    if auth_manager.is_authenticated():
-        # Store authentication info in session state for persistence
-        user = auth_manager.get_current_user()
-        if user:
-            st.session_state.auth_token = user.get('id')  # Store user identifier
-            st.session_state.user = user
     
     # Check authentication
     if not auth_manager.is_authenticated():
@@ -373,11 +364,55 @@ def main():
         else:
             st.markdown("<h1 style='text-align: center; margin-bottom: 2rem; margin-top: 1rem;'>Turbo Air</h1>", unsafe_allow_html=True)
         
-        # Show auth form centered
-        col1, col2, col3 = st.columns([1, 2, 1])
+        # Show auth form with improved layout
+        col1, col2, col3 = st.columns([1, 6, 1])
         with col2:
-            # Show auth form
-            auth_manager.show_auth_form()
+            st.markdown("### Welcome to Turbo Air")
+            
+            # Improved auth form layout
+            tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
+            
+            with tab1:
+                with st.form("signin_form"):
+                    email = st.text_input("Email", key="signin_email")
+                    password = st.text_input("Password", type="password", key="signin_password")
+                    
+                    col_signin1, col_signin2 = st.columns([1, 1])
+                    with col_signin1:
+                        if st.form_submit_button("Sign In", use_container_width=True, type="primary"):
+                            try:
+                                result = auth_manager.sign_in(email, password)
+                                if result.get('success'):
+                                    st.success("Signed in successfully!")
+                                    st.rerun()
+                                else:
+                                    st.error(result.get('message', 'Sign in failed'))
+                            except Exception as e:
+                                st.error(f"Sign in error: {str(e)}")
+                    
+                    with col_signin2:
+                        if st.form_submit_button("Forgot Password", use_container_width=True):
+                            st.info("Password reset feature coming soon!")
+            
+            with tab2:
+                with st.form("signup_form"):
+                    email = st.text_input("Email", key="signup_email")
+                    password = st.text_input("Password", type="password", key="signup_password")
+                    confirm_password = st.text_input("Confirm Password", type="password", key="signup_confirm")
+                    
+                    if st.form_submit_button("Sign Up", use_container_width=True, type="primary"):
+                        if password != confirm_password:
+                            st.error("Passwords don't match")
+                        else:
+                            try:
+                                result = auth_manager.sign_up(email, password)
+                                if result.get('success'):
+                                    st.success("Account created successfully! Please sign in.")
+                                else:
+                                    st.error(result.get('message', 'Sign up failed'))
+                            except Exception as e:
+                                st.error(f"Sign up error: {str(e)}")
+    
     else:
         # Main app content
         # Display logo for all pages
@@ -398,29 +433,28 @@ def main():
             </h1>
             """, unsafe_allow_html=True)
         
-        # Update sync status
+        # Update sync status silently
         try:
             sync_manager.update_sync_status()
         except Exception as e:
-            # Don't show error to user, just log it
-            print(f"Sync status update error: {e}")
+            # Silent error handling
+            pass
         
         # Get current user
         user = auth_manager.get_current_user()
         user_id = user['id'] if user else 'offline_user'
         
-        # Store user in session state for other pages
+        # Store user in session state for persistence
         st.session_state.user = user
         
-        # Maintain cart count across sessions
+        # Maintain cart count across sessions with better error handling
         if st.session_state.get('selected_client'):
             try:
                 cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
                 current_cart_count = len(cart_items)
-                # Only update if significantly different to avoid unnecessary reruns
-                if abs(current_cart_count - st.session_state.get('cart_count', 0)) > 0:
-                    st.session_state.cart_count = current_cart_count
-            except:
+                st.session_state.cart_count = current_cart_count
+            except Exception as e:
+                # Handle cart loading errors gracefully
                 if 'cart_count' not in st.session_state:
                     st.session_state.cart_count = 0
         else:
