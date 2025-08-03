@@ -120,7 +120,7 @@ def apply_mobile_css():
     /* Remove default Streamlit padding */
     .main {{
         padding: 0 !important;
-        margin-bottom: 90px; /* Space for bottom nav + console */
+        margin-bottom: 90px; /* Space for bottom nav */
     }}
     
     .block-container {{
@@ -552,7 +552,7 @@ def apply_mobile_css():
     /* Floating cart button */
     .floating-cart {{
         position: fixed;
-        bottom: 100px; /* Adjusted for bottom nav + console */
+        bottom: 100px; /* Adjusted for bottom nav */
         right: 20px;
         background: {COLORS['primary']};
         color: white;
@@ -601,6 +601,67 @@ def apply_mobile_css():
         display: none;
     }}
     
+    /* Navigation menu */
+    .nav-menu {{
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border-top: 2px solid #007AFF;
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        height: 60px;
+        z-index: 9999;
+        box-shadow: 0 -4px 16px rgba(0,0,0,0.15);
+    }}
+    
+    .nav-item {{
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        text-decoration: none;
+        color: #666;
+        position: relative;
+    }}
+    
+    .nav-item:hover {{
+        background: #f0f7ff;
+        color: #007AFF;
+    }}
+    
+    .nav-item.active {{
+        color: #007AFF;
+        background: #f0f7ff;
+    }}
+    
+    .nav-item.active::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: #007AFF;
+    }}
+    
+    .nav-icon {{
+        font-size: 24px;
+        margin-bottom: 4px;
+    }}
+    
+    .nav-label {{
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }}
+    
     /* Updated responsive styles for search container */
     @media (min-width: 768px) and (max-width: 1024px) {{
         .category-row {{
@@ -633,7 +694,7 @@ def apply_mobile_css():
         }}
         
         .floating-cart {{
-            bottom: 100px; /* Adjusted for bottom nav + console */
+            bottom: 100px;
         }}
     }}
     
@@ -677,9 +738,13 @@ def apply_mobile_css():
             font-size: 16px;
         }}
         
-        /* Show desktop navigation */
+        /* Hide navigation on desktop */
+        .nav-menu {{
+            display: none;
+        }}
+        
         .main {{
-            margin-bottom: 30px; /* Only console on desktop */
+            margin-bottom: 30px;
         }}
         
         .search-container {{
@@ -706,7 +771,7 @@ def apply_mobile_css():
         }}
         
         .floating-cart {{
-            bottom: 50px; /* Only console on desktop */
+            bottom: 50px;
             right: 30px;
             width: 64px;
             height: 64px;
@@ -756,22 +821,38 @@ def search_bar_component(placeholder: str = "Search for products"):
     return search_term
 
 def category_grid(categories: List[Dict[str, any]]):
-    """Display category grid for search page"""
-    # Responsive columns based on screen size
-    cols = st.columns(2)  # Default mobile layout
+    """Display category grid for search page using HTML only"""
+    # Create HTML category grid
+    category_html = '<div class="category-row">'
     
     for i, (cat_name, cat_info) in enumerate(TURBO_AIR_CATEGORIES.items()):
-        with cols[i % 2]:
-            # Get product count
-            count = next((c['count'] for c in categories if c['name'] == cat_name), 0)
-            
-            if st.button(
-                f"{cat_info['icon']}\n{cat_name}\n({count} items)",
-                key=f"cat_{cat_name}",
-                use_container_width=True
-            ):
-                st.session_state.selected_category = cat_name
-                st.rerun()
+        # Get product count
+        count = next((c['count'] for c in categories if c['name'] == cat_name), 0)
+        
+        category_html += f'''
+        <div class="category-card" onclick="selectCategory('{cat_name}')">
+            <div class="category-icon">{cat_info['icon']}</div>
+            <div class="category-name">{cat_name}</div>
+            <div class="category-count">({count} items)</div>
+        </div>
+        '''
+    
+    category_html += '</div>'
+    
+    # Add JavaScript to handle category selection
+    category_html += '''
+    <script>
+        function selectCategory(categoryName) {
+            // Store selected category in session state
+            window.parent.postMessage({
+                type: 'category_selected',
+                category: categoryName
+            }, '*');
+        }
+    </script>
+    '''
+    
+    st.markdown(category_html, unsafe_allow_html=True)
 
 def product_list_item_compact(product: Dict, cart_items: List[Dict] = None, user_id: str = None, db_manager = None) -> str:
     """Render compact product list item with quantity controls"""
@@ -820,9 +901,9 @@ def product_list_item_compact(product: Dict, cart_items: List[Dict] = None, user
         <div class="view-details-link">View Details</div>
         <div class="product-price-compact">${price:,.2f}</div>
         <div class="quantity-controls">
-            <button class="qty-btn" id="minus_{product_id}" {'disabled' if current_qty == 0 else ''}>−</button>
+            <button class="qty-btn" onclick="updateQuantity('{product_id}', -1)" {'disabled' if current_qty == 0 else ''}>−</button>
             <span class="qty-value">{current_qty}</span>
-            <button class="qty-btn" id="plus_{product_id}">+</button>
+            <button class="qty-btn" onclick="updateQuantity('{product_id}', 1)">+</button>
         </div>
     </div>
     """
@@ -1063,18 +1144,20 @@ def cart_summary(subtotal: float, tax_rate: float = 0.08):
 def floating_cart_button(cart_count: int):
     """Display floating cart button with count"""
     cart_html = f"""
-    <div class="floating-cart" onclick="document.getElementById('floating_cart_btn').click()">
+    <div class="floating-cart" onclick="navigateToCart()">
         🛒
         <div class="cart-badge">{cart_count}</div>
     </div>
+    <script>
+        function navigateToCart() {{
+            window.parent.postMessage({{
+                type: 'navigate',
+                page: 'cart'
+            }}, '*');
+        }}
+    </script>
     """
     st.markdown(cart_html, unsafe_allow_html=True)
-    
-    # Hidden button for click handling
-    if st.button("", key="floating_cart_btn", help="Go to cart", disabled=False, 
-                 type="secondary", use_container_width=False):
-        st.session_state.active_page = 'cart'
-        st.rerun()
 
 def quote_export_buttons():
     """Display quote export buttons"""

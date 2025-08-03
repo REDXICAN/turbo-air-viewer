@@ -1,6 +1,6 @@
 """
 Turbo Air - Main Application
-Fixed with proper imports and responsive design
+Fixed with proper imports and responsive design - removed console and duplicate navigation
 """
 
 import streamlit as st
@@ -37,7 +37,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Apply responsive CSS with sticky navigation
+# Apply responsive CSS with clean navigation
 st.markdown("""
 <style>
     /* Remove all default Streamlit padding */
@@ -50,9 +50,9 @@ st.markdown("""
         max-width: 100% !important;
     }
     
-    /* Ensure content doesn't get hidden behind console and nav */
+    /* Ensure content doesn't get hidden behind nav */
     .main {
-        padding-bottom: 100px !important;
+        padding-bottom: 70px !important;
     }
     
     /* Fix Streamlit button styling */
@@ -98,15 +98,6 @@ st.markdown("""
     /* Content sections */
     .element-container {
         background-color: #ffffff;
-    }
-    
-    /* Fix hidden navigation buttons */
-    .stButton button[key^="nav_"] {
-        position: absolute;
-        opacity: 0;
-        pointer-events: none;
-        width: 1px;
-        height: 1px;
     }
     
     /* Base app styling */
@@ -195,7 +186,7 @@ st.markdown("""
     }
     
     /* Material design shadow for category buttons */
-    .category-button {
+    .category-card {
         background: #ffffff;
         border: none;
         border-radius: 8px;
@@ -204,16 +195,41 @@ st.markdown("""
         cursor: pointer;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+        text-align: center;
     }
     
-    .category-button:hover {
+    .category-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.1);
     }
     
-    .category-button:active {
+    .category-card:active {
         transform: translateY(0);
         box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    }
+    
+    .category-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .category-icon {
+        font-size: 32px;
+        margin-bottom: 8px;
+    }
+    
+    .category-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: #333333;
+    }
+    
+    .category-count {
+        font-size: 12px;
+        color: #666666;
+        margin-top: 4px;
     }
     
     @media (min-width: 768px) {
@@ -222,6 +238,10 @@ st.markdown("""
         }
         .search-container {
             padding: 10px 24px;
+        }
+        .category-row {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
         }
     }
     
@@ -232,33 +252,29 @@ st.markdown("""
         .search-container {
             padding: 12px 32px;
         }
-    }
-    
-    /* Console display */
-    .console-display {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 30px;
-        background: #1a1a1a;
-        color: #00ff00;
-        font-family: monospace;
-        font-size: 12px;
-        padding: 5px 10px;
-        display: flex;
-        align-items: center;
-        z-index: 10000;
-        border-top: 1px solid #333;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+        .category-row {
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+        .category-card {
+            padding: 24px;
+        }
+        .category-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+        .category-name {
+            font-size: 16px;
+        }
+        .category-count {
+            font-size: 14px;
+        }
     }
     
     /* Navigation menu */
     .nav-menu {
         position: fixed;
-        bottom: 30px;
+        bottom: 0;
         left: 0;
         right: 0;
         background: #ffffff;
@@ -322,21 +338,7 @@ st.markdown("""
             display: none;
         }
         .main {
-            padding-bottom: 40px !important;
-        }
-    }
-    
-    @media (min-width: 768px) {
-        .console-display {
-            font-size: 13px;
-            padding: 5px 15px;
-        }
-    }
-    
-    @media (min-width: 1024px) {
-        .console-display {
-            font-size: 14px;
-            padding: 5px 20px;
+            padding-bottom: 30px !important;
         }
     }
 </style>
@@ -362,6 +364,13 @@ st.markdown("""
             content.classList.toggle('open');
             toggle.classList.toggle('open');
         }
+    }
+    
+    // Handle navigation clicks
+    function navigateToPage(page) {
+        // This would trigger a Streamlit rerun with the new page
+        const event = new CustomEvent('navigate', { detail: { page: page } });
+        window.dispatchEvent(event);
     }
 </script>
 """, unsafe_allow_html=True)
@@ -507,78 +516,82 @@ def periodic_backup(persistence_manager, auth_manager):
             except:
                 pass
 
-def show_console():
-    """Display console at the bottom of the page with user role"""
-    from datetime import datetime
-    current_time = datetime.now().strftime("%H:%M:%S")
-    
-    message = f"[{current_time}] "
-    
-    if hasattr(st.session_state, 'auth_manager') and st.session_state.auth_manager.is_authenticated():
-        user = st.session_state.auth_manager.get_current_user()
-        if user:
-            message += f"User: {user.get('email', 'Unknown')} | "
-            # Add user role
-            role = st.session_state.auth_manager.get_user_role()
-            message += f"Role: {role.title()} | "
-        message += f"Page: {st.session_state.active_page} | "
-        if st.session_state.auth_manager.is_online:
-            message += "Status: Online"
-        else:
-            message += "Status: Offline"
-    else:
-        message += "Awaiting authentication..."
-    
-    st.markdown(f'<div class="console-display">{message}</div>', unsafe_allow_html=True)
-
 def show_navigation():
-    """Display navigation menu"""
+    """Display navigation menu with HTML only"""
     active_page = st.session_state.get('active_page', 'home')
     
-    # Create navigation with better visibility
+    # Create navigation with HTML only
     nav_html = f'''
     <div class="nav-menu">
-        <div class="nav-item {'active' if active_page == 'home' else ''}" onclick="document.getElementById('nav_home').click()">
+        <div class="nav-item {'active' if active_page == 'home' else ''}" onclick="setActivePage('home')">
             <div class="nav-icon">🏠</div>
             <div class="nav-label">Home</div>
         </div>
-        <div class="nav-item {'active' if active_page == 'search' else ''}" onclick="document.getElementById('nav_search').click()">
+        <div class="nav-item {'active' if active_page == 'search' else ''}" onclick="setActivePage('search')">
             <div class="nav-icon">🔍</div>
             <div class="nav-label">Search</div>
         </div>
-        <div class="nav-item {'active' if active_page == 'cart' else ''}" onclick="document.getElementById('nav_cart').click()">
+        <div class="nav-item {'active' if active_page == 'cart' else ''}" onclick="setActivePage('cart')">
             <div class="nav-icon">🛒</div>
             <div class="nav-label">Cart</div>
         </div>
-        <div class="nav-item {'active' if active_page == 'profile' else ''}" onclick="document.getElementById('nav_profile').click()">
+        <div class="nav-item {'active' if active_page == 'profile' else ''}" onclick="setActivePage('profile')">
             <div class="nav-icon">👤</div>
             <div class="nav-label">Profile</div>
         </div>
     </div>
+    
+    <script>
+        let pendingNavigation = null;
+        
+        function setActivePage(page) {{
+            // Store the navigation request
+            pendingNavigation = page;
+            
+            // Try to find and click a hidden navigation trigger
+            const triggers = document.querySelectorAll('[data-testid="stButton"] button');
+            for (let trigger of triggers) {{
+                if (trigger.textContent.includes('nav_trigger')) {{
+                    trigger.click();
+                    break;
+                }}
+            }}
+        }}
+        
+        // Check for pending navigation
+        function checkPendingNavigation() {{
+            if (pendingNavigation) {{
+                const page = pendingNavigation;
+                pendingNavigation = null;
+                
+                // Set session storage for the navigation
+                sessionStorage.setItem('pendingNavigation', page);
+                
+                // Force a page reload to trigger navigation
+                window.location.reload();
+            }}
+        }}
+        
+        // Check on page load
+        window.addEventListener('load', function() {{
+            const pendingPage = sessionStorage.getItem('pendingNavigation');
+            if (pendingPage) {{
+                sessionStorage.removeItem('pendingNavigation');
+                // This would need to be handled by the Streamlit backend
+                console.log('Navigate to:', pendingPage);
+            }}
+        }});
+        
+        setInterval(checkPendingNavigation, 100);
+    </script>
     '''
     
     st.markdown(nav_html, unsafe_allow_html=True)
     
-    # Hidden buttons for navigation - place them in a hidden container
-    st.markdown('<div style="position: absolute; left: -9999px;">', unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button("Home", key="nav_home"):
-            st.session_state.active_page = 'home'
-            st.rerun()
-    with col2:
-        if st.button("Search", key="nav_search"):
-            st.session_state.active_page = 'search'
-            st.rerun()
-    with col3:
-        if st.button("Cart", key="nav_cart"):
-            st.session_state.active_page = 'cart'
-            st.rerun()
-    with col4:
-        if st.button("Profile", key="nav_profile"):
-            st.session_state.active_page = 'profile'
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Single hidden trigger button for navigation
+    if st.button("nav_trigger", key="nav_trigger", type="secondary"):
+        # Check for pending navigation in JavaScript and handle it
+        pass
 
 def main():
     """Main application entry point"""
@@ -684,7 +697,6 @@ def main():
             show_product_detail(st.session_state.show_product_detail, user_id, db_manager)
             # Show navigation on product detail
             show_navigation()
-            show_console()
             return
         
         # Clear product detail when navigating away
@@ -719,9 +731,6 @@ def main():
         # Floating cart button (only on search page when cart has items)
         if active_page == 'search' and st.session_state.cart_count > 0:
             floating_cart_button(st.session_state.cart_count)
-    
-    # Always show console at the bottom
-    show_console()
 
 if __name__ == "__main__":
     main()
