@@ -353,7 +353,7 @@ def search_bar_component(placeholder: str = "Search for products"):
     return search_term
 
 def category_grid(categories: List[Dict[str, any]]):
-    """Display category grid using Streamlit native components"""
+    """Display category grid using Streamlit native components - simplified"""
     if not categories:
         st.info("No categories available")
         return
@@ -365,13 +365,13 @@ def category_grid(categories: List[Dict[str, any]]):
     if st.session_state.get('screen_width', 400) > 1024:
         num_cols = 4
     
-    # Display categories in grid
+    # Display categories in grid - just the cards, no buttons
     cols = st.columns(num_cols)
     for i, category in enumerate(categories):
         with cols[i % num_cols]:
-            # Create category card with button
+            # Create category card that's clickable
             category_html = f"""
-            <div class="category-card">
+            <div class="category-card" style="cursor: pointer;">
                 <div class="category-icon">{category.get('icon', '📦')}</div>
                 <div class="category-name">{category['name']}</div>
                 <div class="category-count">({category.get('count', 0)} items)</div>
@@ -379,8 +379,8 @@ def category_grid(categories: List[Dict[str, any]]):
             """
             st.markdown(category_html, unsafe_allow_html=True)
             
-            # Button for category selection
-            if st.button(f"Browse {category['name']}", key=f"cat_{category['name']}", use_container_width=True):
+            # Hidden button for category selection - just the card click
+            if st.button(f"Select", key=f"cat_{category['name']}", label_visibility="hidden"):
                 st.session_state.selected_category = category['name']
                 st.rerun()
 

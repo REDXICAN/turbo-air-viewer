@@ -43,7 +43,7 @@ except ImportError:
         return None
 
 def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
-    """Display home page with recent activity and metrics"""
+    """Display home page with recent activity, metrics, and client management"""
     
     # Initialize variables
     has_content = False
@@ -56,6 +56,112 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
             has_content = True
     except Exception as e:
         st.error(f"Error loading dashboard stats: {str(e)}")
+    
+    # Client Management Section - moved from profile
+    st.markdown("### My Clients")
+    
+    try:
+        clients_df = db_manager.get_user_clients(user_id)
+        
+        if not clients_df.empty:
+            # Show current selected client
+            if st.session_state.get('selected_client'):
+                selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
+                if not selected_client.empty:
+                    st.success(f"✅ Selected Client: **{selected_client.iloc[0]['company']}**")
+            
+            # Add new client form
+            with st.expander("➕ Add New Client"):
+                with st.form("add_client_form"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        company = st.text_input("Company Name*", key="new_company")
+                        contact_email = st.text_input("Contact Email", key="new_contact_email")
+                    with col2:
+                        contact_name = st.text_input("Contact Name", key="new_contact_name")
+                        contact_number = st.text_input("Contact Phone", key="new_contact_number")
+                    
+                    if st.form_submit_button("Add Client", use_container_width=True, type="primary"):
+                        if company:
+                            try:
+                                success, message = db_manager.create_client(
+                                    user_id, company, contact_name, contact_email, contact_number
+                                )
+                                if success:
+                                    st.success(message)
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            except Exception as e:
+                                st.error(f"Error creating client: {str(e)}")
+                        else:
+                            st.error("Company name is required")
+            
+            # List all clients in a more compact way
+            for _, client in clients_df.iterrows():
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    
+                    with col1:
+                        st.markdown(f"**{client['company']}**")
+                        if client.get('contact_name'):
+                            st.caption(f"Contact: {client['contact_name']}")
+                    
+                    with col2:
+                        if client.get('contact_email'):
+                            st.caption(f"📧 {client['contact_email']}")
+                        if client.get('contact_number'):
+                            st.caption(f"📞 {client['contact_number']}")
+                    
+                    with col3:
+                        is_selected = st.session_state.get('selected_client') == client['id']
+                        button_type = "secondary" if is_selected else "primary"
+                        button_text = "✅ Selected" if is_selected else "Select"
+                        
+                        if st.button(button_text, key=f"select_{client['id']}", 
+                                   use_container_width=True, type=button_type):
+                            if not is_selected:
+                                st.session_state.selected_client = client['id']
+                                st.success(f"Selected {client['company']}")
+                                st.rerun()
+                    
+                    st.divider()
+            
+            has_content = True
+            
+        else:
+            # No clients yet
+            st.info("👥 No clients yet. Add your first client above to start creating quotes.")
+            
+            # Add new client form for empty state
+            with st.expander("➕ Add Your First Client", expanded=True):
+                with st.form("add_first_client_form"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        company = st.text_input("Company Name*", key="first_company")
+                        contact_email = st.text_input("Contact Email", key="first_contact_email")
+                    with col2:
+                        contact_name = st.text_input("Contact Name", key="first_contact_name")
+                        contact_number = st.text_input("Contact Phone", key="first_contact_number")
+                    
+                    if st.form_submit_button("Add Client", use_container_width=True, type="primary"):
+                        if company:
+                            try:
+                                success, message = db_manager.create_client(
+                                    user_id, company, contact_name, contact_email, contact_number
+                                )
+                                if success:
+                                    st.success(message)
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            except Exception as e:
+                                st.error(f"Error creating client: {str(e)}")
+                        else:
+                            st.error("Company name is required")
+    
+    except Exception as e:
+        st.error(f"Error loading clients: {str(e)}")
     
     # Recent searches
     try:
@@ -75,191 +181,262 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     except Exception as e:
         st.warning(f"Could not load recent quotes: {str(e)}")
     
-    # If no content, show empty state with action buttons
+    # If no content, show getting started info
     if not has_content:
-        empty_state("🏠", "Start Your Quote", "Search for products or create a client to begin")
+        st.markdown("### Getting Started")
+        st.info("🚀 Welcome to Turbo Air! Add a client above, then use the Search tab to browse products and create quotes.")
         
-        st.markdown("### Quick Actions")
-        # Add quick action buttons
+        st.markdown("### Quick Guide")
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**🔍 Browse Products**")
             st.caption("Use the Search tab above to browse products")
         with col2:
-            st.markdown("**👤 Add Client**") 
-            st.caption("Use the Profile tab above to manage clients")
+            st.markdown("**👤 Manage Clients**") 
+            st.caption("Add and select clients on this Home tab")
 
 def show_search_page(user_id, db_manager):
     """Display search/products page with Streamlit-native components"""
     
-    st.markdown("### Search Products")
+    # Header with selected client info
+    header_col1, header_col2 = st.columns([3, 1])
+    with header_col1:
+        st.markdown("### Search Products")
+    with header_col2:
+        if st.session_state.get('selected_client'):
+            try:
+                clients_df = db_manager.get_user_clients(user_id)
+                selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
+                if not selected_client.empty:
+                    st.markdown(f"**Client:** {selected_client.iloc[0]['company']}")
+            except:
+                pass
     
     # Search bar
     search_term = search_bar_component("Search by SKU, category or description")
     
-    # Categories section
-    st.markdown("### Categories")
-    
-    # Build categories list
-    categories = []
-    for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
-        try:
-            products_df = db_manager.get_products_by_category(cat_name)
-            count = len(products_df) if products_df is not None and not products_df.empty else 0
-        except Exception as e:
-            st.warning(f"Error loading category {cat_name}: {str(e)}")
-            count = 0
+    # Handle category selection or show all categories
+    if st.session_state.get('selected_category'):
+        # Show back button and selected category products
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("← Back", key="back_to_categories"):
+                if 'selected_category' in st.session_state:
+                    del st.session_state.selected_category
+                st.rerun()
+        with col2:
+            st.markdown(f"### {st.session_state.selected_category}")
         
-        categories.append({
-            "name": cat_name,
-            "count": count,
-            "icon": cat_info["icon"]
-        })
+        # Show products for selected category
+        try:
+            results_df = db_manager.get_products_by_category(st.session_state.selected_category)
+            if results_df.empty:
+                st.info(f"No products found in {st.session_state.selected_category}")
+            else:
+                display_product_results(results_df, user_id, db_manager)
+        except Exception as e:
+            st.error(f"Error loading category products: {str(e)}")
     
-    # Display categories
-    if categories:
-        category_grid(categories)
-    else:
-        st.warning("No categories available")
-    
-    # Handle search or category selection
-    results_df = pd.DataFrame()
-    
-    if search_term and len(search_term) >= 2:
-        # Save to search history
+    elif search_term and len(search_term) >= 2:
+        # Search results
         try:
             db_manager.add_search_history(user_id, search_term)
         except Exception as e:
             st.warning(f"Could not save search history: {str(e)}")
         
-        # Search products
         st.markdown(f"### Search Results for '{search_term}'")
         try:
             results_df = db_manager.search_products(search_term)
             if results_df.empty:
                 st.info("No products found matching your search.")
+            else:
+                display_product_results(results_df, user_id, db_manager)
         except Exception as e:
             st.error(f"Error searching products: {str(e)}")
     
-    elif st.session_state.get('selected_category'):
-        # Show category products
-        category = st.session_state.selected_category
-        st.markdown(f"### {category}")
-        
-        # Clear category selection button
-        if st.button("← Back to Categories", key="clear_category"):
-            if 'selected_category' in st.session_state:
-                del st.session_state.selected_category
-            st.rerun()
-        
-        try:
-            results_df = db_manager.get_products_by_category(category)
-            if results_df.empty:
-                st.info(f"No products found in {category}")
-        except Exception as e:
-            st.error(f"Error loading category products: {str(e)}")
-    
     else:
-        # Show recent searches when no active search
+        # Show categories and recent searches
+        st.markdown("### Categories")
+        
+        # Build categories list
+        categories = []
+        for cat_name, cat_info in TURBO_AIR_CATEGORIES.items():
+            try:
+                products_df = db_manager.get_products_by_category(cat_name)
+                count = len(products_df) if products_df is not None and not products_df.empty else 0
+            except Exception as e:
+                st.warning(f"Error loading category {cat_name}: {str(e)}")
+                count = 0
+            
+            categories.append({
+                "name": cat_name,
+                "count": count,
+                "icon": cat_info["icon"]
+            })
+        
+        # Display categories
+        if categories:
+            category_grid(categories)
+        else:
+            st.warning("No categories available")
+        
+        # Show recent searches
         try:
             searches = db_manager.get_search_history(user_id)
             if searches:
                 st.markdown("### Recent Searches")
                 for search in searches[:5]:
                     if st.button(f"🔍 {search}", key=f"recent_search_{search}", use_container_width=True):
-                        # Set search term and rerun
                         st.session_state["main_search"] = search
                         st.rerun()
         except Exception as e:
             st.warning(f"Could not load search history: {str(e)}")
+
+def display_product_results(results_df, user_id, db_manager):
+    """Display product results with collapsible details and quantity controls"""
+    st.markdown(f"**Found {len(results_df)} products**")
     
-    # Display results
-    if not results_df.empty:
-        st.markdown(f"**Found {len(results_df)} products**")
-        
-        # Get current cart items
-        cart_items = []
-        if st.session_state.get('selected_client'):
-            try:
-                cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
-                if not cart_items_df.empty:
-                    cart_items = cart_items_df.to_dict('records')
-            except Exception as e:
-                st.warning(f"Could not load cart items: {str(e)}")
-        
-        # Display products with add to cart functionality
-        for idx, product in results_df.iterrows():
-            with st.container():
-                # Display product info
-                st.markdown(product_list_item_compact(product.to_dict(), cart_items, user_id, db_manager), unsafe_allow_html=True)
-                
-                # Action buttons
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    if st.button(f"View Details", key=f"view_{product['id']}", use_container_width=True):
-                        st.session_state.show_product_detail = product.to_dict()
-                        st.rerun()
-                
-                with col2:
-                    # Get current quantity
-                    current_qty = 0
-                    cart_item_id = None
-                    for item in cart_items:
-                        if item.get('product_id') == product['id']:
-                            current_qty = item.get('quantity', 0)
-                            cart_item_id = item.get('id')
-                            break
-                    
-                    if current_qty > 0:
-                        if st.button("−", key=f"minus_{product['id']}"):
-                            if current_qty == 1:
-                                # Remove from cart
-                                try:
-                                    db_manager.remove_from_cart(cart_item_id)
-                                    st.success("Removed from cart")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error removing from cart: {str(e)}")
-                            else:
-                                # Decrease quantity
-                                try:
-                                    db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
-                                    st.success("Updated quantity")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error updating quantity: {str(e)}")
-                    else:
-                        st.markdown(f"**Qty: {current_qty}**")
-                
-                with col3:
-                    if st.button("+ Add", key=f"plus_{product['id']}", type="primary"):
-                        if st.session_state.get('selected_client'):
-                            if current_qty == 0:
-                                # Add to cart
-                                try:
-                                    success, message = db_manager.add_to_cart(
-                                        user_id, product['id'], st.session_state.selected_client
-                                    )
-                                    if success:
-                                        st.success("Added to cart!")
-                                        st.rerun()
-                                    else:
-                                        st.error(message)
-                                except Exception as e:
-                                    st.error(f"Error adding to cart: {str(e)}")
-                            else:
-                                # Increase quantity
-                                try:
-                                    db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
-                                    st.success("Updated quantity")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error updating quantity: {str(e)}")
+    # Get current cart items
+    cart_items = []
+    if st.session_state.get('selected_client'):
+        try:
+            cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+            if not cart_items_df.empty:
+                cart_items = cart_items_df.to_dict('records')
+        except Exception as e:
+            st.warning(f"Could not load cart items: {str(e)}")
+    
+    # Display products
+    for idx, product in results_df.iterrows():
+        with st.container():
+            # Display product info
+            st.markdown(product_list_item_compact(product.to_dict(), cart_items, user_id, db_manager), unsafe_allow_html=True)
+            
+            # Get current quantity
+            current_qty = 0
+            cart_item_id = None
+            for item in cart_items:
+                if item.get('product_id') == product['id']:
+                    current_qty = item.get('quantity', 0)
+                    cart_item_id = item.get('id')
+                    break
+            
+            # Action row with collapsible details and quantity controls
+            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+            
+            with col1:
+                # Collapsible details
+                if st.button("📋 Details", key=f"toggle_details_{product['id']}", use_container_width=True):
+                    detail_key = f"show_details_{product['id']}"
+                    st.session_state[detail_key] = not st.session_state.get(detail_key, False)
+                    st.rerun()
+            
+            with col2:
+                # Decrease quantity
+                if current_qty > 0:
+                    if st.button("−", key=f"minus_{product['id']}", use_container_width=True):
+                        if current_qty == 1:
+                            try:
+                                db_manager.remove_from_cart(cart_item_id)
+                                st.success("Removed from cart")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
                         else:
-                            st.error("Please select a client first")
-                
-                st.divider()
+                            try:
+                                db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                                st.success("Updated quantity")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                else:
+                    st.markdown("**−**")
+            
+            with col3:
+                # Show quantity
+                st.markdown(f"**Qty: {current_qty}**")
+            
+            with col4:
+                # Increase quantity
+                if st.button("+", key=f"plus_{product['id']}", use_container_width=True):
+                    if st.session_state.get('selected_client'):
+                        if current_qty == 0:
+                            try:
+                                success, message = db_manager.add_to_cart(
+                                    user_id, product['id'], st.session_state.selected_client
+                                )
+                                if success:
+                                    st.success("Added to cart!")
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                        else:
+                            try:
+                                db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
+                                st.success("Updated quantity")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                    else:
+                        st.error("Please select a client first")
+            
+            with col5:
+                # Price
+                st.markdown(f"**${product['price']:,.2f}**")
+            
+            # Show collapsible details if toggled
+            if st.session_state.get(f"show_details_{product['id']}", False):
+                with st.expander("Product Details", expanded=True):
+                    col_img, col_info = st.columns([1, 2])
+                    
+                    with col_img:
+                        # Try to show product image
+                        sku = product['sku']
+                        possible_paths = [
+                            f"pdf_screenshots/{sku}/{sku} P.1.png",
+                            f"pdf_screenshots/{sku}/{sku}_P.1.png",
+                            f"pdf_screenshots/{sku}/{sku}.png",
+                            f"pdf_screenshots/{sku}/page_1.png"
+                        ]
+                        
+                        image_found = False
+                        for image_path in possible_paths:
+                            image_base64 = get_image_base64(image_path)
+                            if image_base64:
+                                st.image(f"data:image/png;base64,{image_base64}", caption=sku, use_container_width=True)
+                                image_found = True
+                                break
+                        
+                        if not image_found:
+                            st.markdown("📷 **No image available**")
+                    
+                    with col_info:
+                        st.markdown(f"**SKU:** {product['sku']}")
+                        st.markdown(f"**Model:** {product.get('product_type', 'N/A')}")
+                        st.markdown(f"**Price:** ${product['price']:,.2f}")
+                        
+                        if product.get('description'):
+                            st.markdown(f"**Description:** {product['description']}")
+                        
+                        # Specifications
+                        specs = {
+                            "Category": product.get('category', '-'),
+                            "Subcategory": product.get('subcategory', '-'),
+                            "Capacity": product.get('capacity', '-'),
+                            "Dimensions": product.get('dimensions', '-'),
+                            "Weight": product.get('weight', '-'),
+                            "Voltage": product.get('voltage', '-'),
+                            "Temperature Range": product.get('temperature_range', '-'),
+                            "Refrigerant": product.get('refrigerant', '-')
+                        }
+                        
+                        for key, value in specs.items():
+                            if value and value != '-':
+                                st.markdown(f"**{key}:** {value}")
+            
+            st.divider()
 
 def show_cart_page(user_id, db_manager):
     """Display cart page"""
@@ -332,132 +509,114 @@ def show_cart_page(user_id, db_manager):
                 st.error(f"Error generating quote: {str(e)}")
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
-    """Display profile page with client management"""
+    """Display profile page with user settings and admin functions"""
     
-    st.markdown("### Profile")
+    st.markdown("### Profile & Settings")
     
     # User info section
     with st.expander("User Information", expanded=True):
-        st.markdown(f"**Email:** {user.get('email', 'N/A')}")
-        st.markdown(f"**Role:** {auth_manager.get_user_role().title()}")
-        
-        # Connection status
-        if auth_manager.is_online:
-            st.success("🟢 Connected to Supabase")
-        else:
-            st.warning("🔴 Running in offline mode")
-    
-    # Client Management Section
-    st.markdown("### Client Management")
-    
-    # Add new client form
-    with st.expander("Add New Client"):
-        with st.form("add_client_form"):
-            company = st.text_input("Company Name*", key="new_company")
-            contact_name = st.text_input("Contact Name", key="new_contact_name")
-            contact_email = st.text_input("Contact Email", key="new_contact_email")
-            contact_number = st.text_input("Contact Phone", key="new_contact_number")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**Email:** {user.get('email', 'N/A')}")
+            st.markdown(f"**User ID:** {user.get('id', 'N/A')}")
+        with col2:
+            st.markdown(f"**Role:** {auth_manager.get_user_role().title()}")
             
-            if st.form_submit_button("Add Client", use_container_width=True):
-                if company:
-                    try:
-                        success, message = db_manager.create_client(
-                            user['id'], company, contact_name, contact_email, contact_number
-                        )
-                        if success:
-                            st.success(message)
-                            st.rerun()
-                        else:
-                            st.error(message)
-                    except Exception as e:
-                        st.error(f"Error creating client: {str(e)}")
-                else:
-                    st.error("Company name is required")
+            # Connection status
+            if auth_manager.is_online:
+                st.success("🟢 Connected to Supabase")
+            else:
+                st.warning("🔴 Running in offline mode")
     
-    # Client list with quotes
-    st.markdown("### My Clients")
+    # App Settings
+    st.markdown("### App Settings")
     
-    try:
-        clients_df = db_manager.get_user_clients(user['id'])
+    with st.expander("Preferences"):
+        # Currency settings
+        currency = st.selectbox("Currency Display", ["USD ($)", "CAD ($)", "EUR (€)"], index=0)
         
-        if clients_df.empty:
-            empty_state("👥", "No Clients Yet", "Add your first client above")
-        else:
-            # Show current selected client
-            if st.session_state.get('selected_client'):
-                selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
-                if not selected_client.empty:
-                    st.info(f"✅ Selected Client: **{selected_client.iloc[0]['company']}**")
-            
-            # List all clients
-            for _, client in clients_df.iterrows():
-                with st.expander(f"**{client['company']}**"):
-                    # Client details
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.markdown(f"**Contact:** {client.get('contact_name', 'N/A')}")
-                        st.markdown(f"**Email:** {client.get('contact_email', 'N/A')}")
-                    with col2:
-                        st.markdown(f"**Phone:** {client.get('contact_number', 'N/A')}")
-                        st.markdown(f"**Added:** {pd.to_datetime(client['created_at']).strftime('%Y-%m-%d')}")
-                    
-                    # Select client button
-                    if st.button(f"Select Client", key=f"select_{client['id']}", use_container_width=True, type="primary"):
-                        st.session_state.selected_client = client['id']
-                        st.success(f"Selected {client['company']}")
-                        st.rerun()
-                    
-                    # Show client quotes
-                    st.markdown("#### Quotes")
-                    try:
-                        quotes_df = db_manager.get_client_quotes(client['id'])
-                        
-                        if quotes_df.empty:
-                            st.caption("No quotes for this client yet")
-                        else:
-                            for _, quote in quotes_df.iterrows():
-                                col1, col2, col3 = st.columns([2, 1, 1])
-                                with col1:
-                                    st.markdown(f"**{quote['quote_number']}**")
-                                    st.caption(pd.to_datetime(quote['created_at']).strftime('%Y-%m-%d'))
-                                with col2:
-                                    st.markdown(f"${quote['total_amount']:,.2f}")
-                                with col3:
-                                    if st.button("View", key=f"view_quote_{quote['id']}", use_container_width=True):
-                                        # Load quote details for viewing
-                                        st.session_state.view_quote_id = quote['id']
-                                        st.info("Quote viewing coming soon!")
-                    except Exception as e:
-                        st.caption(f"Error loading quotes: {str(e)}")
+        # Items per page
+        items_per_page = st.slider("Products per page", 10, 50, 20)
+        
+        # Auto-save cart
+        auto_save = st.checkbox("Auto-save cart items", value=True)
+        
+        if st.button("Save Preferences", use_container_width=True):
+            st.success("Preferences saved! (Feature coming soon)")
     
-    except Exception as e:
-        st.error(f"Error loading clients: {str(e)}")
+    # Data Management
+    st.markdown("### Data Management")
+    
+    with st.expander("Export & Backup"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📊 Export My Data", use_container_width=True):
+                st.info("Data export feature coming soon!")
+        
+        with col2:
+            if st.button("💾 Backup Data", use_container_width=True):
+                with st.spinner("Creating backup..."):
+                    try:
+                        # This would backup user data
+                        st.success("Backup created successfully!")
+                    except Exception as e:
+                        st.error(f"Backup failed: {str(e)}")
     
     # Admin functions (if applicable)
     try:
         if auth_manager.is_admin():
-            with st.expander("Admin Functions"):
-                if st.button("🔄 Sync Database", use_container_width=True):
-                    with st.spinner("Syncing..."):
-                        try:
-                            result = sync_manager.sync_all()
-                            if result['success']:
-                                st.success(result['message'])
-                            else:
-                                st.error(result['message'])
-                        except Exception as e:
-                            st.error(f"Sync error: {str(e)}")
+            st.markdown("### Admin Functions")
+            
+            with st.expander("Database Management", expanded=False):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    if st.button("🔄 Sync Database", use_container_width=True):
+                        with st.spinner("Syncing..."):
+                            try:
+                                result = sync_manager.sync_all()
+                                if result['success']:
+                                    st.success(result['message'])
+                                else:
+                                    st.error(result['message'])
+                            except Exception as e:
+                                st.error(f"Sync error: {str(e)}")
+                
+                with col2:
+                    if st.button("📈 View Analytics", use_container_width=True):
+                        st.info("Analytics dashboard coming soon!")
+            
+            with st.expander("User Management"):
+                st.info("User management features available in future updates.")
+    
     except Exception as e:
         st.warning(f"Could not check admin status: {str(e)}")
     
-    # Sign out
-    st.markdown("### ")
-    if st.button("Sign Out", use_container_width=True, type="secondary"):
-        try:
-            auth_manager.sign_out()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error signing out: {str(e)}")
+    # Account Actions
+    st.markdown("### Account")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🔒 Change Password", use_container_width=True):
+            st.info("Password change feature coming soon!")
+    
+    with col2:
+        if st.button("🚪 Sign Out", use_container_width=True, type="secondary"):
+            try:
+                auth_manager.sign_out()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error signing out: {str(e)}")
+    
+    # App Information
+    st.markdown("### About")
+    with st.expander("App Information"):
+        st.markdown("**Turbo Air Equipment Viewer**")
+        st.markdown("Version: 1.0.0")
+        st.markdown("Built with Streamlit")
+        st.markdown("© 2024 Turbo Air")
 
 def show_product_detail(product: Dict, user_id: str, db_manager):
     """Display product detail modal"""

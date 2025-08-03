@@ -39,7 +39,92 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+def initialize_session_state():
+    """Initialize session state with persistence"""
+    # Initialize core session state
+    init_session_state()
+    
+    # Add session persistence for critical data
+    if 'session_initialized' not in st.session_state:
+        st.session_state.session_initialized = True
+        
+        # Try to restore session from browser storage (if available)
+        # This would normally use browser localStorage but Streamlit doesn't support it
+        # Instead, we'll use Streamlit's built-in session persistence
+        
+        # Initialize cart count
+        if 'cart_count' not in st.session_state:
+            st.session_state.cart_count = 0
+        
+        # Initialize selected client persistence
+        if 'selected_client' not in st.session_state:
+            st.session_state.selected_client = None
+        
+        # Initialize authentication state
+        if 'auth_token' not in st.session_state:
+            st.session_state.auth_token = None
+        
 def check_and_migrate_database():
+    """Check database and run migrations if needed"""
+    db_path = 'turbo_air_db_online.sqlite'
+    
+    if os.path.exists(db_path):
+        # Check if migration is needed
+        import sqlite3
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # Check for password_hash column
+            cursor.execute("PRAGMA table_info(user_profiles)")
+            columns = [column[1] for column in cursor.fetchall()]
+            
+            if 'password_hash' not in columns:
+                st.warning("Database schema needs updating. Running migration...")
+                cursor.execute("""
+                    ALTER TABLE user_profiles 
+                    ADD COLUMN password_hash TEXT
+                """)
+                conn.commit()
+                st.success("Database migration completed!")
+            
+            # Ensure auth_tokens table exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auth_tokens (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id TEXT NOT NULL,
+                    token TEXT UNIQUE NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Ensure sync_queue table exists
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sync_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    table_name TEXT NOT NULL,
+                    operation TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    synced BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Ensure database_backups table info is stored
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            conn.commit()
+        except Exception as e:
+            st.error(f"Migration error: {e}")
+        finally:
+            conn.close()
     """Check database and run migrations if needed"""
     db_path = 'turbo_air_db_online.sqlite'
     
@@ -231,8 +316,8 @@ def show_main_content(user, user_id, db_manager, sync_manager, auth_manager):
 
 def main():
     """Main application entry point"""
-    # Initialize session state
-    init_session_state()
+    # Initialize session state with persistence
+    initialize_session_state()
     
     # Apply responsive CSS
     apply_mobile_css()
@@ -268,6 +353,14 @@ def main():
     
     # Perform periodic backup
     periodic_backup(persistence_manager, auth_manager)
+    
+    # Maintain authentication state across refreshes
+    if auth_manager.is_authenticated():
+        # Store authentication info in session state for persistence
+        user = auth_manager.get_current_user()
+        if user:
+            st.session_state.auth_token = user.get('id')  # Store user identifier
+            st.session_state.user = user
     
     # Check authentication
     if not auth_manager.is_authenticated():
@@ -319,15 +412,20 @@ def main():
         # Store user in session state for other pages
         st.session_state.user = user
         
-        # Update cart count
+        # Maintain cart count across sessions
         if st.session_state.get('selected_client'):
             try:
                 cart_items = db_manager.get_cart_items(user_id, st.session_state.selected_client)
-                st.session_state.cart_count = len(cart_items)
+                current_cart_count = len(cart_items)
+                # Only update if significantly different to avoid unnecessary reruns
+                if abs(current_cart_count - st.session_state.get('cart_count', 0)) > 0:
+                    st.session_state.cart_count = current_cart_count
             except:
-                st.session_state.cart_count = 0
+                if 'cart_count' not in st.session_state:
+                    st.session_state.cart_count = 0
         else:
-            st.session_state.cart_count = 0
+            if 'cart_count' not in st.session_state:
+                st.session_state.cart_count = 0
         
         # Show main content with working navigation
         show_main_content(user, user_id, db_manager, sync_manager, auth_manager)
