@@ -83,7 +83,9 @@ class EmailService:
             return False, error_msg
     
     def _create_email_body(self, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> str:
-        """Create HTML email body"""
+        """Create HTML email body with logo"""
+        import base64
+        import os
         
         # Calculate totals
         subtotal = float(quote_data.get('subtotal', 0))
@@ -124,6 +126,21 @@ class EmailService:
             </div>
             """
         
+        # Try to load and encode the logo
+        logo_html = ""
+        try:
+            logo_path = "Turboair_Logo_01.png"
+            if os.path.exists(logo_path):
+                with open(logo_path, "rb") as logo_file:
+                    logo_base64 = base64.b64encode(logo_file.read()).decode()
+                logo_html = f'<img src="data:image/png;base64,{logo_base64}" alt="Turbo Air Logo" style="max-width: 300px; height: auto;">'
+            else:
+                # Fallback to text if logo not found
+                logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
+        except Exception as e:
+            # Fallback to text if there's an error loading the logo
+            logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
+        
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -143,7 +160,8 @@ class EmailService:
         </head>
         <body>
             <div class="header">
-                <h1>TURBO AIR EQUIPMENT QUOTE</h1>
+                {logo_html}
+                <h2 style="margin-top: 10px; margin-bottom: 0;">EQUIPMENT QUOTE</h2>
             </div>
             
             <div class="content">

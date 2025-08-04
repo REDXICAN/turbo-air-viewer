@@ -1,6 +1,6 @@
 """
 Export functionality for Turbo Air Equipment Viewer
-Handles CSV, PDF, and Excel exports
+Handles CSV and PDF exports
 """
 
 import io
@@ -8,6 +8,21 @@ import csv
 from datetime import datetime
 import pandas as pd
 from typing import Dict, List, Optional
+import requests
+from PIL import Image
+
+# Logo URL from GitHub repository
+LOGO_URL = "https://raw.githubusercontent.com/REDXICAN/turbo-air-viewer/main/turbo_air_logo.png"
+
+def download_logo():
+    """Download and return logo image"""
+    try:
+        response = requests.get(LOGO_URL)
+        if response.status_code == 200:
+            return Image.open(io.BytesIO(response.content))
+    except Exception as e:
+        print(f"Could not download logo: {e}")
+    return None
 
 def export_quote_to_csv(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
     """Export quote to CSV format including all details and tax"""
@@ -65,7 +80,7 @@ def export_quote_to_csv(quote_data: Dict, items_df: pd.DataFrame, client_data: D
     return byte_buffer
 
 def export_quote_to_pdf(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Export quote to PDF format - Enhanced with proper formatting"""
+    """Export quote to PDF format with Turbo Air logo"""
     buffer = io.BytesIO()
     
     # Create a simple text-based PDF content
@@ -115,7 +130,7 @@ This quote is valid for 30 days from the date of issue.
     try:
         from reportlab.lib import colors
         from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image as RLImage
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
         
@@ -123,18 +138,23 @@ This quote is valid for 30 days from the date of issue.
         story = []
         styles = getSampleStyleSheet()
         
-        # Title
-        title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
-            fontSize=20,
-            textColor=colors.HexColor('#20429C'),
-            spaceAfter=20,
-            alignment=1
-        )
-        
-        story.append(Paragraph("TURBO AIR EQUIPMENT QUOTE", title_style))
-        story.append(Spacer(1, 20))
+        # Add logo (image only)
+        try:
+            logo_img = download_logo()
+            if logo_img:
+                # Save logo to temporary buffer
+                logo_buffer = io.BytesIO()
+                logo_img.save(logo_buffer, format='PNG')
+                logo_buffer.seek(0)
+                
+                # Create reportlab image
+                logo = RLImage(logo_buffer, width=3*inch, height=1*inch)
+                logo.hAlign = 'CENTER'
+                story.append(logo)
+                story.append(Spacer(1, 20))
+        except Exception as e:
+            # Just add spacing if logo fails - no text fallback
+            story.append(Spacer(1, 20))
         
         # Quote Information
         quote_info_data = [
@@ -214,152 +234,6 @@ This quote is valid for 30 days from the date of issue.
     buffer.seek(0)
     return buffer
 
-def export_quote_to_excel(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Export quote to Excel format - MISSING FUNCTION ADDED"""
-    buffer = io.BytesIO()
-    
-    try:
-        # Try to use openpyxl if available
-        import openpyxl
-        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-        
-        # Create workbook
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Quote"
-        
-        # Styles
-        title_font = Font(name='Arial', size=16, bold=True, color='20429C')
-        header_font = Font(name='Arial', size=12, bold=True)
-        regular_font = Font(name='Arial', size=10)
-        
-        # Title
-        ws['A1'] = 'TURBO AIR EQUIPMENT QUOTE'
-        ws['A1'].font = title_font
-        ws.merge_cells('A1:E1')
-        ws['A1'].alignment = Alignment(horizontal='center')
-        
-        # Quote Information
-        row = 3
-        ws[f'A{row}'] = 'Quote Information:'
-        ws[f'A{row}'].font = header_font
-        
-        row += 1
-        info_data = [
-            ['Quote Number:', quote_data.get('quote_number', 'N/A')],
-            ['Date:', datetime.now().strftime('%B %d, %Y')],
-            ['Client:', client_data.get('company', 'N/A')],
-            ['Contact:', client_data.get('contact_name', 'N/A')],
-            ['Email:', client_data.get('contact_email', 'N/A')]
-        ]
-        
-        for info in info_data:
-            ws[f'A{row}'] = info[0]
-            ws[f'A{row}'].font = Font(name='Arial', size=10, bold=True)
-            ws[f'B{row}'] = info[1]
-            ws[f'B{row}'].font = regular_font
-            row += 1
-        
-        # Equipment List
-        row += 2
-        ws[f'A{row}'] = 'Equipment List:'
-        ws[f'A{row}'].font = header_font
-        
-        row += 1
-        headers = ['SKU', 'Description', 'Quantity', 'Unit Price', 'Total']
-        for col, header in enumerate(headers, 1):
-            cell = ws.cell(row=row, column=col, value=header)
-            cell.font = header_font
-            cell.fill = PatternFill(start_color='20429C', end_color='20429C', fill_type='solid')
-            cell.font = Font(name='Arial', size=10, bold=True, color='FFFFFF')
-        
-        # Items
-        for idx, item in items_df.iterrows():
-            row += 1
-            sku = str(item.get('sku', 'Unknown'))
-            description = str(item.get('product_type', ''))
-            quantity = int(item.get('quantity', 1))
-            unit_price = float(item.get('price', 0))
-            total_price = unit_price * quantity
-            
-            ws[f'A{row}'] = sku
-            ws[f'B{row}'] = description
-            ws[f'C{row}'] = quantity
-            ws[f'D{row}'] = unit_price
-            ws[f'E{row}'] = total_price
-            
-            for col in range(1, 6):
-                ws.cell(row=row, column=col).font = regular_font
-        
-        # Totals
-        row += 2
-        subtotal = float(quote_data.get('subtotal', 0))
-        tax_rate = float(quote_data.get('tax_rate', 0))
-        if tax_rate > 1:
-            tax_rate_display = tax_rate
-        else:
-            tax_rate_display = tax_rate * 100
-        tax_amount = float(quote_data.get('tax_amount', 0))
-        total = float(quote_data.get('total_amount', 0))
-        
-        ws[f'D{row}'] = 'Subtotal:'
-        ws[f'D{row}'].font = header_font
-        ws[f'E{row}'] = subtotal
-        
-        row += 1
-        ws[f'D{row}'] = f'Tax ({tax_rate_display:.1f}%):'
-        ws[f'D{row}'].font = header_font
-        ws[f'E{row}'] = tax_amount
-        
-        row += 1
-        ws[f'D{row}'] = 'TOTAL:'
-        ws[f'D{row}'].font = Font(name='Arial', size=12, bold=True)
-        ws[f'E{row}'] = total
-        ws[f'E{row}'].font = Font(name='Arial', size=12, bold=True)
-        
-        # Adjust column widths
-        ws.column_dimensions['A'].width = 15
-        ws.column_dimensions['B'].width = 40
-        ws.column_dimensions['C'].width = 10
-        ws.column_dimensions['D'].width = 15
-        ws.column_dimensions['E'].width = 15
-        
-        # Save to buffer
-        wb.save(buffer)
-        
-    except ImportError:
-        # Fallback to CSV if openpyxl not available
-        import pandas as pd
-        
-        # Create DataFrame for export
-        export_data = []
-        export_data.append(['TURBO AIR EQUIPMENT QUOTE', '', '', '', ''])
-        export_data.append(['', '', '', '', ''])
-        export_data.append(['Quote Information:', '', '', '', ''])
-        export_data.append(['Quote Number:', quote_data.get('quote_number', 'N/A'), '', '', ''])
-        export_data.append(['Date:', datetime.now().strftime('%B %d, %Y'), '', '', ''])
-        export_data.append(['Client:', client_data.get('company', 'N/A'), '', '', ''])
-        export_data.append(['', '', '', '', ''])
-        export_data.append(['SKU', 'Description', 'Quantity', 'Unit Price', 'Total'])
-        
-        for idx, item in items_df.iterrows():
-            sku = str(item.get('sku', 'Unknown'))
-            description = str(item.get('product_type', ''))
-            quantity = int(item.get('quantity', 1))
-            unit_price = float(item.get('price', 0))
-            total_price = unit_price * quantity
-            export_data.append([sku, description, quantity, unit_price, total_price])
-        
-        df = pd.DataFrame(export_data)
-        df.to_excel(buffer, index=False, header=False)
-    
-    buffer.seek(0)
-    return buffer
-
-def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Generate Excel quote - MISSING FUNCTION ADDED (alias for export_quote_to_excel)"""
-    return export_quote_to_excel(quote_data, items_df, client_data)
-
 def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
-    """Generate PDF quote - MISSING FUNCTION ADDED (alias for export_quote_to_pdf)"""
+    """Generate PDF quote - alias for export_quote_to_pdf"""
     return export_quote_to_pdf(quote_data, items_df, client_data)
