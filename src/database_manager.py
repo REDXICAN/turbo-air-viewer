@@ -380,11 +380,11 @@ class DatabaseManager:
     
     def add_to_cart(self, user_id: str, product_id: int, client_id: Optional[int] = None, 
                    quantity: int = 1) -> Tuple[bool, str]:
-        """Add item to cart"""
+        """Add item to cart - UUID compatible"""
         if self.is_online:
             try:
                 # Check if item exists
-                query = self.supabase.table('cart_items').select('*').eq('user_id', user_id).eq('product_id', product_id)
+                query = self.supabase.table('cart_items').select('*').eq('user_id', user_id).eq('product_id', str(product_id))
                 if client_id:
                     query = query.eq('client_id', client_id)
                 existing = query.execute()
@@ -396,10 +396,10 @@ class DatabaseManager:
                         {'quantity': new_quantity}
                     ).eq('id', existing.data[0]['id']).execute()
                 else:
-                    # Insert new
+                    # Insert new - keep product_id as string for UUID compatibility
                     cart_data = {
                         'user_id': user_id,
-                        'product_id': product_id,
+                        'product_id': str(product_id),  # Convert to string for UUID
                         'client_id': client_id,
                         'quantity': quantity
                     }
@@ -409,7 +409,7 @@ class DatabaseManager:
             except Exception as e:
                 print(f"Online cart error: {e}")
         
-        # Use SQLite
+        # Use SQLite (integers for local database)
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
@@ -418,12 +418,12 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT id, quantity FROM cart_items 
                     WHERE user_id = ? AND product_id = ? AND client_id = ?
-                """, (user_id, product_id, client_id))
+                """, (user_id, int(product_id), client_id))  # Use int for SQLite
             else:
                 cursor.execute("""
                     SELECT id, quantity FROM cart_items 
                     WHERE user_id = ? AND product_id = ? AND client_id IS NULL
-                """, (user_id, product_id))
+                """, (user_id, int(product_id)))  # Use int for SQLite
             
             existing = cursor.fetchone()
             
@@ -439,14 +439,14 @@ class DatabaseManager:
                 cursor.execute("""
                     INSERT INTO cart_items (user_id, product_id, client_id, quantity)
                     VALUES (?, ?, ?, ?)
-                """, (user_id, product_id, client_id, quantity))
+                """, (user_id, int(product_id), client_id, quantity))  # Use int for SQLite
             
             conn.commit()
             
             # Add to sync queue
             self._add_to_sync_queue(conn, 'cart_items', 'upsert', {
                 'user_id': user_id,
-                'product_id': product_id,
+                'product_id': str(product_id),  # Store as string for sync compatibility
                 'client_id': client_id,
                 'quantity': quantity
             })
@@ -554,7 +554,7 @@ class DatabaseManager:
     
     def create_quote_with_tax(self, user_id: str, client_id: int, cart_items_df: pd.DataFrame, 
                              tax_rate: float, tax_amount: float, total_amount: float) -> Tuple[bool, str, str]:
-        """Create a quote from cart items with custom tax rate - Supabase schema compatible"""
+        """Create a quote from cart items with custom tax rate - UUID compatible"""
         try:
             # Generate quote number
             quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -589,23 +589,25 @@ class DatabaseManager:
                     
                     if response.data:
                         # Create quote items
-                        quote_id = response.data[0]['id']
+                        quote_id = response.data[0]['id']  # This is a UUID string in Supabase
                         quote_items = []
                         
                         for _, item in cart_items_df.iterrows():
                             product_data = item.get('products', {})
                             if isinstance(product_data, dict):
                                 price = float(product_data.get('price', 0))
-                                product_id = int(product_data.get('id', item.get('product_id', 0)))
+                                # Keep product_id as string (UUID) - don't convert to int
+                                product_id = product_data.get('id', item.get('product_id'))
                             else:
                                 price = float(item.get('price', 0))
-                                product_id = int(item.get('product_id', 0))
+                                # Keep product_id as string (UUID) - don't convert to int
+                                product_id = item.get('product_id')
                             
                             quantity = int(item.get('quantity', 1))
                             
                             quote_items.append({
-                                'quote_id': quote_id,
-                                'product_id': product_id,
+                                'quote_id': quote_id,  # UUID string
+                                'product_id': product_id,  # UUID string
                                 'quantity': quantity,
                                 'unit_price': price,
                                 'total_price': price * quantity
@@ -624,7 +626,7 @@ class DatabaseManager:
                     return False, f"Supabase error: {str(supabase_error)}", None
             
             else:
-                # Offline mode - check schema and adapt
+                # Offline mode - check schema and adapt (SQLite uses integer IDs)
                 conn = self.get_connection()
                 cursor = conn.cursor()
                 
@@ -647,16 +649,18 @@ class DatabaseManager:
                             VALUES (?, ?, ?, ?, ?, ?)
                         """, (quote_number, user_id, client_id, total_amount, 'draft', datetime.now().isoformat()))
                     
-                    quote_id = cursor.lastrowid
+                    quote_id = cursor.lastrowid  # Integer ID in SQLite
                     
                     # Create quote items
                     for _, item in cart_items_df.iterrows():
                         product_data = item.get('products', {})
                         if isinstance(product_data, dict):
                             price = float(product_data.get('price', 0))
+                            # Convert to int for SQLite (integer primary keys)
                             product_id = int(product_data.get('id', item.get('product_id', 0)))
                         else:
                             price = float(item.get('price', 0))
+                            # Convert to int for SQLite (integer primary keys)
                             product_id = int(item.get('product_id', 0))
                         
                         quantity = int(item.get('quantity', 1))
