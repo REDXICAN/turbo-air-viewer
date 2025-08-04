@@ -1,6 +1,6 @@
 """
 Email functionality for Turbo Air Equipment Viewer
-Complete version with PDF/Excel testing, CC support, file size reporting, and working email form
+Complete version with PDF/Excel attachments, CC support, file size reporting, and working email form
 """
 
 import streamlit as st
@@ -40,44 +40,6 @@ class EmailService:
             self.smtp_port = 587
             self.sender_email = ""
             self.sender_password = ""
-    
-    def test_connection(self) -> Tuple[bool, str]:
-        """Test SMTP connection with detailed error reporting"""
-        if not self.configured:
-            return False, "Email service not configured - check secrets.toml"
-        
-        try:
-            # Create SMTP connection
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.set_debuglevel(0)  # Turn off debug output
-            
-            # Start TLS encryption
-            server.starttls()
-            
-            # Login with credentials
-            server.login(self.sender_email, self.sender_password)
-            
-            # If we get here, connection is successful
-            server.quit()
-            return True, "SMTP connection successful!"
-            
-        except smtplib.SMTPAuthenticationError as e:
-            error_msg = str(e)
-            if "Username and Password not accepted" in error_msg:
-                return False, "Authentication failed: Check your app password (not regular Gmail password)"
-            elif "534-5.7.9" in error_msg or "534-5.7.14" in error_msg:
-                return False, "Authentication failed: Enable 2FA and use app password"
-            else:
-                return False, f"Authentication error: {error_msg}"
-                
-        except smtplib.SMTPConnectError as e:
-            return False, f"Connection error: Cannot connect to {self.smtp_server}:{self.smtp_port}"
-            
-        except smtplib.SMTPException as e:
-            return False, f"SMTP error: {str(e)}"
-            
-        except Exception as e:
-            return False, f"Unexpected error: {str(e)}"
     
     def _create_professional_email_body(self, quote_data: Dict, items_df: pd.DataFrame, 
                                        client_data: Dict, additional_message: str = "") -> str:
@@ -212,89 +174,6 @@ def get_email_service() -> EmailService:
         _email_service = EmailService()
     return _email_service
 
-def test_email_connection() -> Tuple[bool, str]:
-    """Test email connection - wrapper function"""
-    try:
-        email_service = get_email_service()
-        return email_service.test_connection()
-    except Exception as e:
-        return False, f"Test connection error: {str(e)}"
-
-def test_excel_generation(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> Tuple[bool, str, int]:
-    """Test Excel generation and return success, message, and file size"""
-    try:
-        from .export import generate_excel_quote
-        excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
-        
-        if excel_buffer and len(excel_buffer.getvalue()) > 0:
-            file_size = len(excel_buffer.getvalue())
-            return True, f"Excel generated successfully", file_size
-        else:
-            return False, "Excel buffer is empty", 0
-            
-    except ImportError as e:
-        return False, f"Cannot import Excel export module: {str(e)}", 0
-    except Exception as e:
-        return False, f"Excel generation failed: {str(e)}", 0
-
-def test_pdf_generation(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> Tuple[bool, str, int]:
-    """Test PDF generation and return success, message, and file size"""
-    try:
-        from .export import generate_pdf_quote
-        pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
-        
-        if pdf_buffer and len(pdf_buffer.getvalue()) > 0:
-            file_size = len(pdf_buffer.getvalue())
-            return True, f"PDF generated successfully", file_size
-        else:
-            return False, "PDF buffer is empty", 0
-            
-    except ImportError as e:
-        return False, f"Cannot import PDF export module: {str(e)}", 0
-    except Exception as e:
-        return False, f"PDF generation failed: {str(e)}", 0
-
-def send_simple_test_email(email_service, recipient_email: str, quote_data: Dict, client_data: Dict) -> Tuple[bool, str]:
-    """Send simple test email without attachments - like the working SMTP test"""
-    try:
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
-        
-        # Create message (same as working SMTP test)
-        msg = MIMEMultipart()
-        msg['From'] = email_service.sender_email
-        msg['To'] = recipient_email
-        msg['Subject'] = f"TEST - Quote {quote_data.get('quote_number', 'N/A')} - Turbo Air Equipment"
-        
-        body = f"""
-        <html>
-        <body>
-            <h2>🧪 TEST EMAIL - Turbo Air Equipment</h2>
-            <p>This is a test email to verify the email system works from the form context.</p>
-            <p><strong>Quote:</strong> {quote_data.get('quote_number', 'N/A')}</p>
-            <p><strong>Client:</strong> {client_data.get('company', 'N/A')}</p>
-            <p><strong>Total:</strong> ${quote_data.get('total_amount', 0):,.2f}</p>
-            <hr>
-            <p><small>Sent from Turbo Air Equipment Viewer - Form Test</small></p>
-        </body>
-        </html>
-        """
-        
-        msg.attach(MIMEText(body, 'html'))
-        
-        # Send email (same as working SMTP test)
-        server = smtplib.SMTP(email_service.smtp_server, email_service.smtp_port)
-        server.starttls()
-        server.login(email_service.sender_email, email_service.sender_password)
-        server.send_message(msg)
-        server.quit()
-        
-        return True, f"Test email sent successfully to {recipient_email}"
-        
-    except Exception as e:
-        return False, f"Test email failed: {str(e)}"
-
 def send_email_with_attachments(email_service, recipient_email: str, quote_data: Dict, 
                                items_df: pd.DataFrame, client_data: Dict,
                                cc_email: str = None, additional_message: str = "",
@@ -329,12 +208,11 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
         if attach_pdf:
             try:
                 st.write("📄 Generating PDF attachment...")
-                success, message, file_size = test_pdf_generation(quote_data, items_df, client_data)
+                from .export import generate_pdf_quote
+                pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
                 
-                if success:
-                    # Generate PDF again for attachment (we know it works)
-                    from .export import generate_pdf_quote
-                    pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
+                if pdf_buffer and len(pdf_buffer.getvalue()) > 0:
+                    file_size = len(pdf_buffer.getvalue())
                     
                     # Create attachment
                     pdf_attachment = MIMEApplication(pdf_buffer.getvalue(), _subtype='pdf')
@@ -348,7 +226,7 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
                     attachment_details.append(f"PDF ({file_size:,} bytes)")
                     st.write(f"✅ PDF attached successfully ({file_size:,} bytes)")
                 else:
-                    st.error(f"❌ PDF attachment failed: {message}")
+                    st.error("❌ PDF buffer is empty")
                     attach_pdf = False
                     
             except Exception as pdf_error:
@@ -359,12 +237,11 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
         if attach_excel:
             try:
                 st.write("📊 Generating Excel attachment...")
-                success, message, file_size = test_excel_generation(quote_data, items_df, client_data)
+                from .export import generate_excel_quote
+                excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
                 
-                if success:
-                    # Generate Excel again for attachment (we know it works)
-                    from .export import generate_excel_quote
-                    excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
+                if excel_buffer and len(excel_buffer.getvalue()) > 0:
+                    file_size = len(excel_buffer.getvalue())
                     
                     # Create attachment
                     excel_attachment = MIMEApplication(
@@ -381,7 +258,7 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
                     attachment_details.append(f"Excel ({file_size:,} bytes)")
                     st.write(f"✅ Excel attached successfully ({file_size:,} bytes)")
                 else:
-                    st.error(f"❌ Excel attachment failed: {message}")
+                    st.error("❌ Excel buffer is empty")
                     attach_excel = False
                     
             except Exception as excel_error:
@@ -416,8 +293,8 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
     except Exception as e:
         return False, f"Email sending failed: {str(e)}"
 
-def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote form directly on page - no dialog/button needed"""
+def show_email_quote_form(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
+    """Show email quote form directly - always visible"""
     
     st.markdown("### Send Quote via Email")
     
@@ -430,7 +307,7 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     st.success(f"✅ Email configured: {email_service.sender_email}")
     st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
     
-    # EMAIL FORM - DISPLAYED DIRECTLY ON PAGE
+    # EMAIL FORM - ALWAYS DISPLAYED
     st.markdown("**📧 Email Details:**")
     
     # Recipient email
@@ -441,10 +318,10 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         key="email_recipient"
     )
     
-    # CC email - EMPTY BY DEFAULT AS REQUESTED
+    # CC email - EMPTY BY DEFAULT
     cc_email = st.text_input(
         "📋 CC (Optional):",
-        value="",  # EMPTY BY DEFAULT
+        value="",
         placeholder="Enter CC email address (optional)",
         key="email_cc"
     )
@@ -465,46 +342,82 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     with col2:
         attach_excel = st.checkbox("📊 Attach Excel Quote", value=False, key="attach_excel_check")
     
-    # Action buttons
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📧 Send Professional Quote Email", use_container_width=True, type="primary", key="send_email_btn"):
-            # Basic validation
-            if not recipient_email or '@' not in recipient_email:
-                st.error("Please enter a valid recipient email address")
-            elif cc_email.strip() and '@' not in cc_email:
-                st.error("Please enter a valid CC email address")
-            else:
-                st.write("✅ Starting email send process...")
-                
-                # Send email with full debugging and file size reporting
-                with st.spinner("Sending professional quote email..."):
-                    try:
-                        success, message = send_email_with_attachments(
-                            email_service=email_service,
-                            recipient_email=recipient_email,
-                            cc_email=cc_email.strip() if cc_email.strip() else None,
-                            quote_data=quote_data,
-                            items_df=items_df,
-                            client_data=client_data,
-                            additional_message=additional_message,
-                            attach_pdf=attach_pdf,
-                            attach_excel=attach_excel
-                        )
+    # Send Email Button
+    if st.button("📧 Send Professional Quote Email", use_container_width=True, type="primary", key="send_email_btn"):
+        # Basic validation
+        if not recipient_email or '@' not in recipient_email:
+            st.error("Please enter a valid recipient email address")
+        elif cc_email.strip() and '@' not in cc_email:
+            st.error("Please enter a valid CC email address")
+        else:
+            st.write("✅ Starting email send process...")
+            
+            # Send email with full debugging and file size reporting
+            with st.spinner("Sending professional quote email..."):
+                try:
+                    success, message = send_email_with_attachments(
+                        email_service=email_service,
+                        recipient_email=recipient_email,
+                        cc_email=cc_email.strip() if cc_email.strip() else None,
+                        quote_data=quote_data,
+                        items_df=items_df,
+                        client_data=client_data,
+                        additional_message=additional_message,
+                        attach_pdf=attach_pdf,
+                        attach_excel=attach_excel
+                    )
+                    
+                    if success:
+                        st.success(f"✅ {message}")
+                        if cc_email.strip():
+                            st.info(f"📋 CC sent to: {cc_email.strip()}")
+                        st.balloons()
+                    else:
+                        st.error(f"❌ {message}")
                         
-                        if success:
-                            st.success(f"✅ {message}")
-                            if cc_email.strip():
-                                st.info(f"📋 CC sent to: {cc_email.strip()}")
-                            st.balloons()
-                        else:
-                            st.error(f"❌ {message}")
-                            
-                    except Exception as e:
-                        st.error(f"❌ Email sending failed: {str(e)}")
-                        st.exception(e)
+                except Exception as e:
+                    st.error(f"❌ Email sending failed: {str(e)}")
+                    st.exception(e)
+    
+    # Export buttons below the email form
+    st.markdown("---")
+    st.markdown("### Export Options")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📄 Export PDF", use_container_width=True, key="export_pdf_btn"):
+            try:
+                from .export import generate_pdf_quote
+                pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
+                
+                if pdf_buffer:
+                    st.download_button(
+                        label="📥 Download PDF",
+                        data=pdf_buffer.getvalue(),
+                        file_name=f"Quote_{quote_data.get('quote_number', 'N/A')}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Failed to generate PDF")
+            except Exception as e:
+                st.error(f"PDF generation error: {str(e)}")
     
     with col2:
-        if st.button("Cancel", key="cancel_email_btn", use_container_width=True):
-            st.rerun()
+        if st.button("📊 Export Excel", use_container_width=True, key="export_excel_btn"):
+            try:
+                from .export import generate_excel_quote
+                excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
+                
+                if excel_buffer:
+                    st.download_button(
+                        label="📥 Download Excel",
+                        data=excel_buffer.getvalue(),
+                        file_name=f"Quote_{quote_data.get('quote_number', 'N/A')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("Failed to generate Excel")
+            except Exception as e:
+                st.error(f"Excel generation error: {str(e)}")
