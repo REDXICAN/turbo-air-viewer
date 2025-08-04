@@ -398,7 +398,7 @@ def show_search_page(user_id, db_manager):
             pass
 
 def display_product_results_collapsible(results_df, user_id, db_manager):
-    """Display product results with collapsible list and improved details view"""
+    """Display product results as a clean list with details view"""
     st.markdown(f"**Found {len(results_df)} products**")
     
     # Get current cart items
@@ -414,195 +414,246 @@ def display_product_results_collapsible(results_df, user_id, db_manager):
             # Silent error handling
             pass
     
-    # Display products in collapsible format
+    # Display products as clean list
     for idx, product in results_df.iterrows():
         sku = product['sku']
         
-        # Initialize expanded state
-        expanded_key = f"expanded_{product['id']}"
+        # Initialize details state
         details_key = f"details_{product['id']}"
-        
-        if expanded_key not in st.session_state:
-            st.session_state[expanded_key] = False
         if details_key not in st.session_state:
             st.session_state[details_key] = False
         
-        # Create collapsible container
+        # Get current quantity in cart
+        current_qty = 0
+        cart_item_id = None
+        for item in cart_items:
+            if item.get('product_id') == product['id']:
+                current_qty = item.get('quantity', 0)
+                cart_item_id = item.get('id')
+                break
+        
+        # Create main product row
         with st.container():
-            # Header row - always visible (collapsed view)
-            col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
-            
-            with col1:
-                # Product thumbnail
-                possible_paths = [
-                    f"pdf_screenshots/{sku}/{sku} P.1.png",
-                    f"pdf_screenshots/{sku}/{sku}_P.1.png",
-                    f"pdf_screenshots/{sku}/{sku}.png",
-                    f"pdf_screenshots/{sku}/page_1.png"
-                ]
+            if not st.session_state[details_key]:
+                # Main list view - Image, SKU, Price, Qty, Details, Add
+                col_img, col_info, col_price, col_qty, col_details, col_add = st.columns([1, 3, 1, 1, 1, 1])
                 
-                image_found = False
-                for image_path in possible_paths:
-                    image_base64 = get_image_base64(image_path)
-                    if image_base64:
-                        st.image(f"data:image/png;base64,{image_base64}", 
-                               use_container_width=True)
-                        image_found = True
-                        break
+                with col_img:
+                    # Product thumbnail
+                    possible_paths = [
+                        f"pdf_screenshots/{sku}/{sku} P.1.png",
+                        f"pdf_screenshots/{sku}/{sku}_P.1.png",
+                        f"pdf_screenshots/{sku}/{sku}.png",
+                        f"pdf_screenshots/{sku}/page_1.png"
+                    ]
+                    
+                    image_found = False
+                    for image_path in possible_paths:
+                        image_base64 = get_image_base64(image_path)
+                        if image_base64:
+                            st.image(f"data:image/png;base64,{image_base64}", 
+                                   use_container_width=True)
+                            image_found = True
+                            break
+                    
+                    if not image_found:
+                        st.markdown("📷")
                 
-                if not image_found:
-                    st.markdown("📷")
-            
-            with col2:
-                # Product info - clickable to expand
-                if st.button(f"**{sku}** - {product.get('product_type', '')}", key=f"expand_{product['id']}", 
-                           use_container_width=True, type="secondary"):
-                    st.session_state[expanded_key] = not st.session_state[expanded_key]
-                    st.rerun()
+                with col_info:
+                    # Product info - no description, just SKU and model
+                    st.markdown(f"**{sku}**")
+                    if product.get('product_type'):
+                        st.caption(product['product_type'])
                 
-                if product.get('description'):
-                    st.caption(truncate_text(product['description'], 60))
-            
-            with col3:
-                st.markdown(f"**${product.get('price', 0):,.2f}**")
-            
-            with col4:
-                # Get current quantity in cart
-                current_qty = 0
-                cart_item_id = None
-                for item in cart_items:
-                    if item.get('product_id') == product['id']:
-                        current_qty = item.get('quantity', 0)
-                        cart_item_id = item.get('id')
-                        break
+                with col_price:
+                    st.markdown(f"**${product.get('price', 0):,.2f}**")
                 
-                if current_qty > 0:
-                    st.markdown(f"<div style='text-align: center; color: green; font-weight: bold;'>✅ In Cart ({current_qty})</div>", 
-                              unsafe_allow_html=True)
-                else:
-                    if st.button("🛒 Add", key=f"add_cart_{product['id']}", use_container_width=True, type="primary"):
-                        if cart_client_id:
-                            try:
-                                success, message = db_manager.add_to_cart(
-                                    user_id, product['id'], cart_client_id
-                                )
-                                if success:
-                                    st.success("Added to cart!")
+                with col_qty:
+                    if current_qty > 0:
+                        # Quantity controls for items in cart
+                        qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
+                        with qty_col1:
+                            if st.button("➖", key=f"minus_{product['id']}", use_container_width=True):
+                                if current_qty > 1:
+                                    try:
+                                        db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {str(e)}")
+                                elif current_qty == 1:
+                                    try:
+                                        db_manager.remove_from_cart(cart_item_id)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {str(e)}")
+                        
+                        with qty_col2:
+                            st.markdown(f"<div style='text-align: center; font-weight: bold;'>{current_qty}</div>", 
+                                      unsafe_allow_html=True)
+                        
+                        with qty_col3:
+                            if st.button("➕", key=f"plus_{product['id']}", use_container_width=True):
+                                try:
+                                    db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
                                     st.rerun()
-                                else:
-                                    st.error(message)
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                        else:
-                            st.warning("Select a client first")
-            
-            # Expanded view - shown when clicked
-            if st.session_state[expanded_key]:
-                st.markdown("---")
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                    else:
+                        st.markdown("0")
                 
-                # Expanded content with quantity controls and details toggle
-                col_qty1, col_qty2, col_qty3, col_qty4, col_details = st.columns([1, 1, 1, 1, 2])
+                with col_details:
+                    if st.button("📋 Details", key=f"details_btn_{product['id']}", use_container_width=True):
+                        st.session_state[details_key] = True
+                        st.rerun()
                 
-                with col_qty1:
-                    # Minus button
-                    if st.button("➖", key=f"minus_{product['id']}", use_container_width=True, 
-                               disabled=(current_qty == 0)):
-                        if current_qty > 1:
-                            try:
-                                db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                        elif current_qty == 1:
-                            try:
-                                db_manager.remove_from_cart(cart_item_id)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                
-                with col_qty2:
-                    # Quantity display
-                    st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 18px; padding: 8px;'>{current_qty}</div>", 
-                              unsafe_allow_html=True)
-                
-                with col_qty3:
-                    # Plus button
-                    if st.button("➕", key=f"plus_{product['id']}", use_container_width=True):
-                        if cart_client_id:
-                            if current_qty == 0:
+                with col_add:
+                    if current_qty > 0:
+                        st.markdown(f"<div style='text-align: center; color: green; font-weight: bold;'>✅ In Cart</div>", 
+                                  unsafe_allow_html=True)
+                    else:
+                        if st.button("🛒 Add", key=f"add_cart_{product['id']}", use_container_width=True, type="primary"):
+                            if cart_client_id:
                                 try:
                                     success, message = db_manager.add_to_cart(
                                         user_id, product['id'], cart_client_id
                                     )
                                     if success:
+                                        st.success("Added to cart!")
                                         st.rerun()
                                     else:
                                         st.error(message)
                                 except Exception as e:
                                     st.error(f"Error: {str(e)}")
                             else:
-                                try:
-                                    db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error: {str(e)}")
+                                st.warning("Select a client first")
+            
+            else:
+                # Details view - Hide main image, show 2 screenshots and details
+                col_images, col_info = st.columns([1, 2])
+                
+                with col_images:
+                    # Show both PNG screenshots stacked
+                    possible_paths = [
+                        f"pdf_screenshots/{sku}/{sku} P.1.png",
+                        f"pdf_screenshots/{sku}/{sku}_P.1.png",
+                        f"pdf_screenshots/{sku}/{sku}.png",
+                        f"pdf_screenshots/{sku}/page_1.png"
+                    ]
+                    
+                    # Try to find and show first image
+                    image_found = False
+                    for image_path in possible_paths:
+                        image_base64 = get_image_base64(image_path)
+                        if image_base64:
+                            st.image(f"data:image/png;base64,{image_base64}", 
+                                   caption=f"{sku} - Page 1", use_container_width=True)
+                            image_found = True
+                            break
+                    
+                    # Try to find second image (page 2)
+                    second_image_paths = [
+                        f"pdf_screenshots/{sku}/{sku} P.2.png",
+                        f"pdf_screenshots/{sku}/{sku}_P.2.png",
+                        f"pdf_screenshots/{sku}/page_2.png"
+                    ]
+                    
+                    second_image_found = False
+                    for image_path in second_image_paths:
+                        image_base64 = get_image_base64(image_path)
+                        if image_base64:
+                            st.image(f"data:image/png;base64,{image_base64}", 
+                                   caption=f"{sku} - Page 2", use_container_width=True)
+                            second_image_found = True
+                            break
+                    
+                    if not image_found:
+                        st.markdown("📷 **No images available**")
+                
+                with col_info:
+                    # Product details
+                    st.markdown(f"**SKU:** {product['sku']}")
+                    st.markdown(f"**Model:** {product.get('product_type', 'N/A')}")
+                    st.markdown(f"**Price:** ${product.get('price', 0):,.2f}")
+                    
+                    if product.get('description'):
+                        st.markdown(f"**Description:** {product['description']}")
+                    
+                    # Specifications
+                    specs = {
+                        "Category": product.get('category', '-'),
+                        "Subcategory": product.get('subcategory', '-'),
+                        "Capacity": product.get('capacity', '-'),
+                        "Dimensions": product.get('dimensions', '-'),
+                        "Weight": product.get('weight', '-'),
+                        "Voltage": product.get('voltage', '-'),
+                        "Temperature Range": product.get('temperature_range', '-'),
+                        "Refrigerant": product.get('refrigerant', '-')
+                    }
+                    
+                    for key, value in specs.items():
+                        if value and value != '-':
+                            st.markdown(f"**{key}:** {value}")
+                    
+                    # Action buttons in details view
+                    col_back, col_qty_detail, col_add_detail = st.columns([1, 2, 1])
+                    
+                    with col_back:
+                        if st.button("← Back", key=f"back_{product['id']}", use_container_width=True):
+                            st.session_state[details_key] = False
+                            st.rerun()
+                    
+                    with col_qty_detail:
+                        if current_qty > 0:
+                            # Quantity controls
+                            qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
+                            with qty_col1:
+                                if st.button("➖", key=f"minus_detail_{product['id']}", use_container_width=True):
+                                    if current_qty > 1:
+                                        try:
+                                            db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error: {str(e)}")
+                                    elif current_qty == 1:
+                                        try:
+                                            db_manager.remove_from_cart(cart_item_id)
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Error: {str(e)}")
+                            
+                            with qty_col2:
+                                st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 18px;'>{current_qty}</div>", 
+                                          unsafe_allow_html=True)
+                            
+                            with qty_col3:
+                                if st.button("➕", key=f"plus_detail_{product['id']}", use_container_width=True):
+                                    try:
+                                        db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Error: {str(e)}")
                         else:
-                            st.warning("Please select a client first")
-                
-                with col_qty4:
-                    # Empty column for spacing
-                    st.write("")
-                
-                with col_details:
-                    # Details toggle button
-                    details_text = "Hide Details" if st.session_state[details_key] else "📋 Show Details"
-                    if st.button(details_text, key=f"details_toggle_{product['id']}", use_container_width=True):
-                        st.session_state[details_key] = not st.session_state[details_key]
-                        st.rerun()
-                
-                # Show detailed view when details are toggled
-                if st.session_state[details_key]:
-                    st.markdown("#### Product Details")
+                            st.markdown("**Quantity: 0**")
                     
-                    col_img_detail, col_info_detail = st.columns([1, 2])
-                    
-                    with col_img_detail:
-                        # Show product image (same as collapsed view but larger)
-                        image_found = False
-                        for image_path in possible_paths:
-                            image_base64 = get_image_base64(image_path)
-                            if image_base64:
-                                st.image(f"data:image/png;base64,{image_base64}", 
-                                       caption=sku, use_container_width=True)
-                                image_found = True
-                                break
-                        
-                        if not image_found:
-                            st.markdown("📷 **No image available**")
-                    
-                    with col_info_detail:
-                        st.markdown(f"**SKU:** {product['sku']}")
-                        st.markdown(f"**Model:** {product.get('product_type', 'N/A')}")
-                        st.markdown(f"**Price:** ${product.get('price', 0):,.2f}")
-                        
-                        if product.get('description'):
-                            st.markdown(f"**Description:** {product['description']}")
-                        
-                        # Specifications
-                        specs = {
-                            "Category": product.get('category', '-'),
-                            "Subcategory": product.get('subcategory', '-'),
-                            "Capacity": product.get('capacity', '-'),
-                            "Dimensions": product.get('dimensions', '-'),
-                            "Weight": product.get('weight', '-'),
-                            "Voltage": product.get('voltage', '-'),
-                            "Temperature Range": product.get('temperature_range', '-'),
-                            "Refrigerant": product.get('refrigerant', '-')
-                        }
-                        
-                        for key, value in specs.items():
-                            if value and value != '-':
-                                st.markdown(f"**{key}:** {value}")
+                    with col_add_detail:
+                        if current_qty == 0:
+                            if st.button("🛒 Add to Cart", key=f"add_detail_{product['id']}", use_container_width=True, type="primary"):
+                                if cart_client_id:
+                                    try:
+                                        success, message = db_manager.add_to_cart(
+                                            user_id, product['id'], cart_client_id
+                                        )
+                                        if success:
+                                            st.success("Added to cart!")
+                                            st.rerun()
+                                        else:
+                                            st.error(message)
+                                    except Exception as e:
+                                        st.error(f"Error: {str(e)}")
+                                else:
+                                    st.warning("Select a client first")
+                        else:
+                            st.markdown("**✅ In Cart**")
             
             st.divider()
 
