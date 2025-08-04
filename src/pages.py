@@ -1,6 +1,5 @@
 """
 Page components for Turbo Air Equipment Viewer
-Phase 1: Restored to Streamlit-native components with proper error handling
 """
 
 import streamlit as st

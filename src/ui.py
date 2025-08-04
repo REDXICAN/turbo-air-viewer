@@ -1,6 +1,5 @@
 """
 UI Components for Turbo Air Equipment Viewer
-Phase 1: Restored to Streamlit-native components for reliability
 """
 
 import streamlit as st

@@ -1,6 +1,5 @@
 """
 Turbo Air - Main Application
-Phase 1: Restored to Streamlit-native navigation and components
 """
 
 import streamlit as st
