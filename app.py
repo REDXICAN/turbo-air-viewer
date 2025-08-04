@@ -63,7 +63,7 @@ def initialize_session_state():
         # Initialize authentication state
         if 'auth_token' not in st.session_state:
             st.session_state.auth_token = None
-        
+
 def check_and_migrate_database():
     """Check database and run migrations if needed - silent operation"""
     db_path = 'turbo_air_db_online.sqlite'
@@ -123,66 +123,6 @@ def check_and_migrate_database():
         except Exception as e:
             # Silent error handling
             print(f"Migration error: {e}")
-        finally:
-            conn.close()
-    """Check database and run migrations if needed"""
-    db_path = 'turbo_air_db_online.sqlite'
-    
-    if os.path.exists(db_path):
-        # Check if migration is needed
-        import sqlite3
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        try:
-            # Check for password_hash column
-            cursor.execute("PRAGMA table_info(user_profiles)")
-            columns = [column[1] for column in cursor.fetchall()]
-            
-            if 'password_hash' not in columns:
-                st.warning("Database schema needs updating. Running migration...")
-                cursor.execute("""
-                    ALTER TABLE user_profiles 
-                    ADD COLUMN password_hash TEXT
-                """)
-                conn.commit()
-                st.success("Database migration completed!")
-            
-            # Ensure auth_tokens table exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS auth_tokens (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    token TEXT UNIQUE NOT NULL,
-                    expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Ensure sync_queue table exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sync_queue (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    table_name TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    data TEXT NOT NULL,
-                    synced BOOLEAN DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Ensure database_backups table info is stored
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS app_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            conn.commit()
-        except Exception as e:
-            st.error(f"Migration error: {e}")
         finally:
             conn.close()
 
@@ -346,9 +286,6 @@ def main():
     
     # Initialize services
     auth_manager, db_manager, sync_manager, persistence_manager = initialize_services()
-    
-    # Maintain authentication state across refreshes
-    maintain_authentication_state(auth_manager)
     
     # Perform periodic backup
     periodic_backup(persistence_manager, auth_manager)
