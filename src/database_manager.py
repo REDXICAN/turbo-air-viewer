@@ -569,20 +569,12 @@ class DatabaseManager:
                 quantity = int(item.get('quantity', 1))
                 total_amount += price * quantity
             
-            # Add tax (assuming 8% default, but will be overridden by UI)
-            tax_rate = 0.08
-            subtotal = total_amount
-            tax_amount = subtotal * tax_rate
-            total_with_tax = subtotal + tax_amount
-            
+            # Use simple quote data structure that matches database schema
             quote_data = {
                 'quote_number': quote_number,
                 'user_id': user_id,
                 'client_id': client_id,
-                'subtotal': subtotal,
-                'tax_rate': tax_rate,
-                'tax_amount': tax_amount,
-                'total_amount': total_with_tax,
+                'total_amount': total_amount,  # Store the subtotal here
                 'status': 'draft',
                 'created_at': datetime.now().isoformat()
             }
@@ -618,14 +610,26 @@ class DatabaseManager:
                     return False, "Failed to create quote", None
             
             else:
-                # Offline mode
+                # Offline mode - use simple schema
                 conn = self.get_connection()
                 cursor = conn.cursor()
                 
-                cursor.execute("""
-                    INSERT INTO quotes (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_amount, status, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_with_tax, 'draft', datetime.now().isoformat()))
+                # Check if quotes table has subtotal column, if not use total_amount
+                cursor.execute("PRAGMA table_info(quotes)")
+                columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'subtotal' in columns:
+                    # New schema with separate tax fields
+                    cursor.execute("""
+                        INSERT INTO quotes (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_amount, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (quote_number, user_id, client_id, total_amount, 0.08, total_amount * 0.08, total_amount * 1.08, 'draft', datetime.now().isoformat()))
+                else:
+                    # Simple schema - just store total_amount
+                    cursor.execute("""
+                        INSERT INTO quotes (quote_number, user_id, client_id, total_amount, status, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (quote_number, user_id, client_id, total_amount, 'draft', datetime.now().isoformat()))
                 
                 quote_id = cursor.lastrowid
                 

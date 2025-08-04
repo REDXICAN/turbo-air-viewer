@@ -753,112 +753,144 @@ def show_cart_page(user_id, db_manager):
         st.markdown(f"**Tax ({tax_rate:.1f}%):** ${tax_amount:,.2f}")
         st.markdown(f"**Total:** ${total:,.2f}")
     
-    # Generate Quote section
-    st.markdown("### Generate Quote")
+    # Export Options section
+    st.markdown("### Export Options")
     
-    if st.button("Generate Quote", use_container_width=True, type="primary"):
-        with st.spinner("Generating quote..."):
-            try:
-                # Get client data
-                client_data = db_manager.get_user_clients(user_id)
-                client_data = client_data[client_data['id'] == st.session_state.selected_client].iloc[0].to_dict()
-                
-                # Create quote
-                success, message, quote_number = db_manager.create_quote(
-                    user_id, st.session_state.selected_client, cart_items_df
-                )
-                
-                if success:
-                    st.success(message)
+    # Prepare quote data for export
+    quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    quote_data = {
+        'quote_number': quote_number,
+        'total_amount': total,
+        'subtotal': subtotal,
+        'tax_rate': tax_rate,
+        'tax_amount': tax_amount,
+        'created_at': datetime.now()
+    }
+    
+    # Get client data
+    try:
+        client_data = db_manager.get_user_clients(user_id)
+        client_data = client_data[client_data['id'] == st.session_state.selected_client].iloc[0].to_dict()
+    except Exception as e:
+        st.error(f"Error loading client data: {str(e)}")
+        return
+    
+    # Prepare cart items with proper price access for export
+    export_cart_items = []
+    for _, item in cart_items_df.iterrows():
+        product_data = item.get('products', {})
+        if isinstance(product_data, dict):
+            item_price = float(product_data.get('price', 0))
+            item_sku = product_data.get('sku', 'Unknown')
+            item_type = product_data.get('product_type', '')
+        else:
+            item_price = float(item.get('price', 0))
+            item_sku = item.get('sku', 'Unknown')
+            item_type = item.get('product_type', '')
+        
+        export_cart_items.append({
+            'sku': item_sku,
+            'product_type': item_type,
+            'price': item_price,
+            'quantity': int(item.get('quantity', 1)),
+            'total': item_price * int(item.get('quantity', 1))
+        })
+    
+    export_cart_df = pd.DataFrame(export_cart_items)
+    
+    # Show 3 export buttons in columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("📧 Email Quote", use_container_width=True, type="primary"):
+            with st.spinner("Preparing email..."):
+                try:
+                    # Create quote in database first
+                    success, message, db_quote_number = db_manager.create_quote(
+                        user_id, st.session_state.selected_client, cart_items_df
+                    )
                     
-                    # Show quote details inline
-                    st.markdown("---")
-                    st.markdown("### Generated Quote")
-                    st.success(f"Quote #{quote_number} created successfully!")
-                    
-                    # Store quote data for export - FIXED: Using proper price field access
-                    quote_data = {
-                        'quote_number': quote_number,
-                        'total_amount': total,
-                        'subtotal': subtotal,
-                        'tax_rate': tax_rate,
-                        'tax_amount': tax_amount,
-                        'created_at': datetime.now()
-                    }
-                    
-                    # Prepare cart items with proper price access for export
-                    export_cart_items = []
-                    for _, item in cart_items_df.iterrows():
-                        product_data = item.get('products', {})
-                        if isinstance(product_data, dict):
-                            item_price = float(product_data.get('price', 0))
-                            item_sku = product_data.get('sku', 'Unknown')
-                            item_type = product_data.get('product_type', '')
-                        else:
-                            item_price = float(item.get('price', 0))
-                            item_sku = item.get('sku', 'Unknown')
-                            item_type = item.get('product_type', '')
+                    if success:
+                        # Update quote data with database quote number
+                        quote_data['quote_number'] = db_quote_number
                         
-                        export_cart_items.append({
-                            'sku': item_sku,
-                            'product_type': item_type,
-                            'price': item_price,
-                            'quantity': int(item.get('quantity', 1)),
-                            'total': item_price * int(item.get('quantity', 1))
-                        })
+                        email_service = get_email_service()
+                        if email_service and hasattr(email_service, 'configured') and email_service.configured:
+                            show_email_quote_dialog(quote_data, export_cart_df, client_data)
+                        else:
+                            st.warning("Email service not configured")
+                            st.info("To enable email, configure Gmail credentials in your secrets")
+                    else:
+                        st.error(f"Error creating quote: {message}")
+                except Exception as e:
+                    st.error(f"Email functionality error: {str(e)}")
+    
+    with col2:
+        if st.button("📄 Export PDF", use_container_width=True, type="secondary"):
+            with st.spinner("Generating PDF..."):
+                try:
+                    # Create quote in database first
+                    success, message, db_quote_number = db_manager.create_quote(
+                        user_id, st.session_state.selected_client, cart_items_df
+                    )
                     
-                    export_cart_df = pd.DataFrame(export_cart_items)
+                    if success:
+                        # Update quote data with database quote number
+                        quote_data['quote_number'] = db_quote_number
+                        
+                        pdf_buffer = generate_pdf_quote(quote_data, export_cart_df, client_data)
+                        st.download_button(
+                            "Download PDF",
+                            pdf_buffer.getvalue(),
+                            file_name=f"Quote_{db_quote_number}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                            key="pdf_download"
+                        )
+                        st.success(f"Quote {db_quote_number} created and PDF ready for download!")
+                    else:
+                        st.error(f"Error creating quote: {message}")
+                except Exception as e:
+                    st.error(f"PDF export error: {e}")
+    
+    with col3:
+        if st.button("📊 Export Excel", use_container_width=True, type="secondary"):
+            with st.spinner("Generating Excel..."):
+                try:
+                    # Create quote in database first
+                    success, message, db_quote_number = db_manager.create_quote(
+                        user_id, st.session_state.selected_client, cart_items_df
+                    )
                     
-                    # Show 3 export buttons in columns
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        if st.button("📧 Email Quote", use_container_width=True, type="primary"):
-                            try:
-                                email_service = get_email_service()
-                                if email_service and hasattr(email_service, 'configured') and email_service.configured:
-                                    show_email_quote_dialog(quote_data, export_cart_df, client_data)
-                                else:
-                                    st.warning("Email service not configured")
-                                    st.info("To enable email, configure Gmail credentials in your secrets")
-                            except Exception as e:
-                                st.warning(f"Email functionality not available: {str(e)}")
-                    
-                    with col2:
-                        try:
-                            pdf_buffer = generate_pdf_quote(quote_data, export_cart_df, client_data)
-                            st.download_button(
-                                "📄 Export PDF",
-                                pdf_buffer.getvalue(),
-                                file_name=f"Quote_{quote_number}.pdf",
-                                mime="application/pdf",
-                                use_container_width=True
-                            )
-                        except Exception as e:
-                            st.error(f"PDF export error: {e}")
-                    
-                    with col3:
-                        try:
-                            excel_buffer = generate_excel_quote(quote_data, export_cart_df, client_data)
-                            st.download_button(
-                                "📊 Export Excel",
-                                excel_buffer.getvalue(),
-                                file_name=f"Quote_{quote_number}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                        except Exception as e:
-                            st.error(f"Excel export error: {e}")
-                    
-                    st.markdown("---")
-                    if st.button("Clear Cart and Start New Quote", use_container_width=True):
-                        db_manager.clear_cart(user_id, st.session_state.selected_client)
-                        st.session_state.cart_count = 0
-                        st.rerun()
-                else:
-                    st.error(message)
-            except Exception as e:
-                st.error(f"Error generating quote: {str(e)}")
+                    if success:
+                        # Update quote data with database quote number
+                        quote_data['quote_number'] = db_quote_number
+                        
+                        excel_buffer = generate_excel_quote(quote_data, export_cart_df, client_data)
+                        st.download_button(
+                            "Download Excel",
+                            excel_buffer.getvalue(),
+                            file_name=f"Quote_{db_quote_number}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key="excel_download"
+                        )
+                        st.success(f"Quote {db_quote_number} created and Excel ready for download!")
+                    else:
+                        st.error(f"Error creating quote: {message}")
+                except Exception as e:
+                    st.error(f"Excel export error: {e}")
+    
+    # Clear cart section
+    st.markdown("---")
+    if st.button("Clear Cart and Start New Quote", use_container_width=True):
+        try:
+            db_manager.clear_cart(user_id, st.session_state.selected_client)
+            st.session_state.cart_count = 0
+            st.success("Cart cleared successfully!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error clearing cart: {str(e)}")
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
     """Display profile page with user settings and admin functions"""
