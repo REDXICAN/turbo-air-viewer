@@ -42,208 +42,462 @@ except ImportError:
     def get_email_service():
         return None
 
-def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
-    """Display home page with recent activity, metrics, and client management"""
-    
-    # Initialize variables
-    has_content = False
-    
-    # Show metrics first to give immediate value
-    try:
-        stats = db_manager.get_dashboard_stats(user_id)
-        if stats and (stats.get('total_clients', 0) > 0 or stats.get('total_quotes', 0) > 0):
-            metrics_section(stats)
-            has_content = True
-    except Exception as e:
-        st.error(f"Error loading dashboard stats: {str(e)}")
-    
-    # Client Management Section - moved from profile
-    st.markdown("### My Clients")
+def show_client_selector(user_id, db_manager, sync_manager):
+    """Display client selection interface"""
+    st.markdown("### Select Client")
     
     try:
+        # Get user's clients
         clients_df = db_manager.get_user_clients(user_id)
         
-        if not clients_df.empty:
-            # Show current selected client
-            if st.session_state.get('selected_client'):
-                selected_client = clients_df[clients_df['id'] == st.session_state.selected_client]
-                if not selected_client.empty:
-                    st.success(f"✅ Selected Client: **{selected_client.iloc[0]['company']}**")
+        if clients_df.empty:
+            st.info("No clients found. Add a client to get started.")
             
-            # Add new client form
-            with st.expander("➕ Add New Client"):
-                with st.form("add_client_form"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        company = st.text_input("Company Name*", key="new_company")
-                        contact_email = st.text_input("Contact Email", key="new_contact_email")
-                    with col2:
-                        contact_name = st.text_input("Contact Name", key="new_contact_name")
-                        contact_number = st.text_input("Contact Phone", key="new_contact_number")
+            # Simple client creation form
+            with st.expander("Add New Client", expanded=True):
+                with st.form("add_client"):
+                    company_name = st.text_input("Company Name", placeholder="Enter company name")
+                    contact_name = st.text_input("Contact Name", placeholder="Enter contact name")
+                    email = st.text_input("Email", placeholder="Enter email address")
+                    phone = st.text_input("Phone", placeholder="Enter phone number")
+                    address = st.text_area("Address", placeholder="Enter company address")
                     
-                    if st.form_submit_button("Add Client", use_container_width=True, type="primary"):
-                        if company:
+                    if st.form_submit_button("Add Client", use_container_width=True):
+                        if company_name:
                             try:
-                                success, message = db_manager.create_client(
-                                    user_id, company, contact_name, contact_email, contact_number
-                                )
+                                client_data = {
+                                    'user_id': user_id,
+                                    'company': company_name,
+                                    'contact_name': contact_name,
+                                    'contact_email': email,
+                                    'phone': phone,
+                                    'address': address
+                                }
+                                
+                                success, client_id = db_manager.add_client(client_data)
                                 if success:
-                                    st.success(message)
+                                    # Queue sync operation
+                                    sync_manager.queue_sync_operation('clients', 'create', client_data)
+                                    st.success(f"Client '{company_name}' added successfully!")
                                     st.rerun()
                                 else:
-                                    st.error(message)
+                                    st.error("Failed to add client")
                             except Exception as e:
-                                st.error(f"Error creating client: {str(e)}")
+                                st.error(f"Error adding client: {str(e)}")
                         else:
-                            st.error("Company name is required")
+                            st.error("Please enter a company name")
             
-            # List all clients in a more compact way
-            for _, client in clients_df.iterrows():
-                with st.container():
-                    col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
+            return
+        
+        # Display existing clients
+        client_options = {}
+        for _, client in clients_df.iterrows():
+            display_name = f"{client['company']}"
+            if client.get('contact_name'):
+                display_name += f" - {client['contact_name']}"
+            client_options[display_name] = client['id']
+        
+        # Add "Add New Client" option
+        client_options["➕ Add New Client"] = "add_new"
+        
+        # Current selection
+        current_selection = None
+        if st.session_state.get('selected_client'):
+            for display_name, client_id in client_options.items():
+                if client_id == st.session_state.selected_client:
+                    current_selection = display_name
+                    break
+        
+        # Client selectbox
+        selected_display = st.selectbox(
+            "Choose a client:",
+            options=list(client_options.keys()),
+            index=list(client_options.keys()).index(current_selection) if current_selection else 0,
+            key="client_selector"
+        )
+        
+        selected_client_id = client_options[selected_display]
+        
+        # Handle selection
+        if selected_client_id == "add_new":
+            # Show add client form
+            with st.expander("Add New Client", expanded=True):
+                with st.form("add_client"):
+                    company_name = st.text_input("Company Name", placeholder="Enter company name")
+                    contact_name = st.text_input("Contact Name", placeholder="Enter contact name")
+                    email = st.text_input("Email", placeholder="Enter email address")
+                    phone = st.text_input("Phone", placeholder="Enter phone number")
+                    address = st.text_area("Address", placeholder="Enter company address")
                     
-                    with col1:
-                        st.markdown(f"**{client['company']}**")
-                        if client.get('contact_name'):
-                            st.caption(f"Contact: {client['contact_name']}")
-                    
-                    with col2:
-                        if client.get('contact_email'):
-                            st.caption(f"📧 {client['contact_email']}")
-                        if client.get('contact_number'):
-                            st.caption(f"📞 {client['contact_number']}")
-                    
-                    with col3:
-                        is_selected = st.session_state.get('selected_client') == client['id']
-                        button_type = "secondary" if is_selected else "primary"
-                        button_text = "✅ Selected" if is_selected else "Select"
-                        
-                        if st.button(button_text, key=f"select_{client['id']}", 
-                                   use_container_width=True, type=button_type):
-                            if not is_selected:
-                                st.session_state.selected_client = client['id']
-                                st.success(f"Selected {client['company']}")
-                                st.rerun()
-                    
-                    with col4:
-                        # Delete client button
-                        if st.button("🗑️", key=f"delete_{client['id']}", 
-                                   help="Delete client", use_container_width=True):
-                            # Show confirmation dialog
-                            st.session_state[f'confirm_delete_{client["id"]}'] = True
-                            st.rerun()
-                    
-                    # Confirmation dialog for client deletion
-                    if st.session_state.get(f'confirm_delete_{client["id"]}', False):
-                        st.warning(f"⚠️ Are you sure you want to delete **{client['company']}**?")
-                        col_confirm1, col_confirm2 = st.columns(2)
-                        
-                        with col_confirm1:
-                            if st.button("Yes, Delete", key=f"confirm_yes_{client['id']}", 
-                                       type="primary", use_container_width=True):
-                                try:
-                                    # Check if client has quotes
-                                    quotes_df = db_manager.get_client_quotes(client['id'])
-                                    if not quotes_df.empty:
-                                        st.error("Cannot delete client with existing quotes. Archive quotes first.")
-                                    else:
-                                        # Clear cart if this client is selected
-                                        if st.session_state.get('selected_client') == client['id']:
-                                            db_manager.clear_cart(user_id, client['id'])
-                                            st.session_state.selected_client = None
-                                            st.session_state.cart_count = 0
-                                        
-                                        # Delete client
-                                        success, message = db_manager.delete_client(client['id'])
-                                        if success:
-                                            st.success(f"Deleted {client['company']}")
-                                            # Clear confirmation state
-                                            if f'confirm_delete_{client["id"]}' in st.session_state:
-                                                del st.session_state[f'confirm_delete_{client["id"]}']
-                                            st.rerun()
-                                        else:
-                                            st.error(message)
-                                except Exception as e:
-                                    st.error(f"Error deleting client: {str(e)}")
-                        
-                        with col_confirm2:
-                            if st.button("Cancel", key=f"confirm_no_{client['id']}", 
-                                       use_container_width=True):
-                                # Clear confirmation state
-                                if f'confirm_delete_{client["id"]}' in st.session_state:
-                                    del st.session_state[f'confirm_delete_{client["id"]}']
-                                st.rerun()
-                    
-                    st.divider()
-            
-            has_content = True
-            
+                    if st.form_submit_button("Add Client", use_container_width=True):
+                        if company_name:
+                            try:
+                                client_data = {
+                                    'user_id': user_id,
+                                    'company': company_name,
+                                    'contact_name': contact_name,
+                                    'contact_email': email,
+                                    'phone': phone,
+                                    'address': address
+                                }
+                                
+                                success, client_id = db_manager.add_client(client_data)
+                                if success:
+                                    # Queue sync operation
+                                    sync_manager.queue_sync_operation('clients', 'create', client_data)
+                                    st.success(f"Client '{company_name}' added successfully!")
+                                    st.session_state.selected_client = client_id
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to add client")
+                            except Exception as e:
+                                st.error(f"Error adding client: {str(e)}")
+                        else:
+                            st.error("Please enter a company name")
         else:
-            # No clients yet
-            st.info("👥 No clients yet. Add your first client above to start creating quotes.")
-            
-            # Add new client form for empty state
-            with st.expander("➕ Add Your First Client", expanded=True):
-                with st.form("add_first_client_form"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        company = st.text_input("Company Name*", key="first_company")
-                        contact_email = st.text_input("Contact Email", key="first_contact_email")
-                    with col2:
-                        contact_name = st.text_input("Contact Name", key="first_contact_name")
-                        contact_number = st.text_input("Contact Phone", key="first_contact_number")
-                    
-                    if st.form_submit_button("Add Client", use_container_width=True, type="primary"):
-                        if company:
-                            try:
-                                success, message = db_manager.create_client(
-                                    user_id, company, contact_name, contact_email, contact_number
-                                )
-                                if success:
-                                    st.success(message)
-                                    st.rerun()
-                                else:
-                                    st.error(message)
-                            except Exception as e:
-                                st.error(f"Error creating client: {str(e)}")
-                        else:
-                            st.error("Company name is required")
+            # Update selected client
+            if st.session_state.get('selected_client') != selected_client_id:
+                st.session_state.selected_client = selected_client_id
+                
+                # Update cart count for selected client
+                try:
+                    cart_items_df = db_manager.get_cart_items(user_id, selected_client_id)
+                    st.session_state.cart_count = len(cart_items_df) if not cart_items_df.empty else 0
+                except Exception:
+                    st.session_state.cart_count = 0
+                
+                st.rerun()
     
     except Exception as e:
         st.error(f"Error loading clients: {str(e)}")
-    
-    # Recent searches
-    try:
-        searches = db_manager.get_search_history(user_id)
-        if searches:
-            recent_searches_section(searches)
-            has_content = True
-    except Exception as e:
-        st.warning(f"Could not load search history: {str(e)}")
-    
-    # Recent quotes
-    try:
-        quotes_df = db_manager.get_user_quotes(user_id, limit=5)
-        if not quotes_df.empty:
-            recent_quotes_section(quotes_df.to_dict('records'))
-            has_content = True
-    except Exception as e:
-        st.warning(f"Could not load recent quotes: {str(e)}")
-    
-    # If no content, show getting started info
-    if not has_content:
-        st.markdown("### Getting Started")
-        st.info("🚀 Welcome to Turbo Air! Add a client above, then use the Search tab to browse products and create quotes.")
-        
-        st.markdown("### Quick Guide")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**🔍 Browse Products**")
-            st.caption("Use the Search tab above to browse products")
-        with col2:
-            st.markdown("**👤 Manage Clients**") 
-            st.caption("Add and select clients on this Home tab")
 
+
+def show_recent_searches(user_id, db_manager):
+    """Display recent searches section"""
+    st.markdown("### Recent Searches")
+    
+    try:
+        # Get recent searches
+        searches = db_manager.get_search_history(user_id, limit=10)
+        
+        if not searches:
+            st.info("No recent searches yet. Use the Search tab to find products!")
+            return
+        
+        # Display searches as clickable buttons
+        st.markdown("Click to search again:")
+        
+        # Group searches by frequency/recency
+        for idx, search in enumerate(searches):
+            search_term = search.get('search_term', search.get('query', 'Unknown'))
+            search_date = search.get('created_at', search.get('timestamp', ''))
+            
+            # Format date
+            try:
+                if search_date:
+                    if isinstance(search_date, str):
+                        # Try to parse ISO format
+                        from datetime import datetime
+                        search_datetime = datetime.fromisoformat(search_date.replace('Z', '+00:00'))
+                        formatted_date = search_datetime.strftime('%m/%d %H:%M')
+                    else:
+                        formatted_date = search_date.strftime('%m/%d %H:%M')
+                else:
+                    formatted_date = 'Recent'
+            except:
+                formatted_date = 'Recent'
+            
+            # Create clickable search item
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                if st.button(f"🔍 {search_term}", key=f"recent_search_{idx}", use_container_width=True):
+                    # Set the search term and navigate to search page
+                    st.session_state["main_search"] = search_term
+                    st.session_state["selected_tab"] = "Search"
+                    st.rerun()
+            
+            with col2:
+                st.caption(formatted_date)
+        
+        # Clear search history button
+        if st.button("🗑️ Clear History", key="clear_search_history"):
+            try:
+                success = db_manager.clear_search_history(user_id)
+                if success:
+                    st.success("Search history cleared!")
+                    st.rerun()
+                else:
+                    st.error("Failed to clear search history")
+            except Exception as e:
+                st.error(f"Error clearing search history: {str(e)}")
+    
+    except Exception as e:
+        st.error(f"Error loading recent searches: {str(e)}")
+        # Show fallback content
+        st.info("Unable to load recent searches. Use the Search tab to find products!")
+
+
+def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
+    """Show home page with recent searches and quotes"""
+    
+    # Welcome message
+    st.markdown(f"### Welcome back, {user.get('email', 'User')}!")
+    
+    # Sync status
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col3:
+        if auth_manager.is_online:
+            st.success("🌐 Online")
+        else:
+            st.warning("📴 Offline")
+    
+    # Client selection
+    st.markdown("---")
+    show_client_selector(user_id, db_manager, sync_manager)
+    
+    # Recent activity section
+    if st.session_state.get('selected_client'):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            show_recent_searches(user_id, db_manager)
+        
+        with col2:
+            show_recent_quotes_updated(user_id, db_manager, sync_manager)
+    else:
+        st.info("Please select a client to view recent activity")
+
+def show_recent_quotes_updated(user_id: str, db_manager, sync_manager):
+    """Display recent quotes with expandable details and export options"""
+    import json
+    from datetime import datetime
+    import pandas as pd
+    import time
+    
+    # Import export and email functions
+    try:
+        from .export import export_quote_to_csv, export_quote_to_pdf
+        from .email import EmailService
+    except ImportError:
+        from export import export_quote_to_csv, export_quote_to_pdf
+        from email import EmailService
+    
+    # Header with consistent formatting (matching Recent Searches)
+    st.markdown("### Recent Quotes")
+    
+    # Get recent quotes
+    quotes = db_manager.get_recent_quotes(user_id, limit=10)
+    
+    if not quotes:
+        st.info("No quotes yet. Create your first quote from the cart!")
+        return
+    
+    # Create a clean table-like display
+    for idx, quote in enumerate(quotes):
+        # Parse quote data
+        quote_number = quote.get('quote_number', 'N/A')
+        created_at = quote.get('created_at', '')
+        total_amount = float(quote.get('total_amount', 0))
+        client_name = quote.get('client_name', 'N/A')
+        items = json.loads(quote.get('items', '[]'))
+        items_count = len(items)
+        
+        # Format date
+        try:
+            quote_date = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+            formatted_date = quote_date.strftime('%m/%d/%Y')
+        except:
+            formatted_date = 'N/A'
+        
+        # Create expandable container
+        with st.expander(f"{quote_number} - {client_name} - ${total_amount:,.2f} - {formatted_date}", expanded=False):
+            # Quote details
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**Quote Details:**")
+                st.text(f"Number: {quote_number}")
+                st.text(f"Client: {client_name}")
+                st.text(f"Date: {formatted_date}")
+                st.text(f"Items: {items_count}")
+            
+            with col2:
+                st.markdown("**Financial Summary:**")
+                subtotal = float(quote.get('subtotal', 0))
+                tax_amount = float(quote.get('tax_amount', 0))
+                st.text(f"Subtotal: ${subtotal:,.2f}")
+                st.text(f"Tax: ${tax_amount:,.2f}")
+                st.text(f"Total: ${total_amount:,.2f}")
+            
+            st.divider()
+            
+            # Action buttons
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
+            
+            with col1:
+                if st.button("📧 Email", key=f"email_quote_{idx}", use_container_width=True):
+                    st.session_state[f'show_email_dialog_{idx}'] = True
+            
+            with col2:
+                # Prepare data for export
+                items_df = pd.DataFrame(items)
+                quote_data = {
+                    'quote_number': quote_number,
+                    'subtotal': subtotal,
+                    'tax_rate': quote.get('tax_rate', 0),
+                    'tax_amount': tax_amount,
+                    'total_amount': total_amount
+                }
+                client_data = {
+                    'company': client_name,
+                    'contact_name': client_name,
+                    'contact_email': ''
+                }
+                
+                # PDF download
+                pdf_buffer = export_quote_to_pdf(quote_data, items_df, client_data)
+                st.download_button(
+                    "📄 PDF",
+                    data=pdf_buffer,
+                    file_name=f"Quote_{quote_number}.pdf",
+                    mime="application/pdf",
+                    key=f"pdf_quote_{idx}",
+                    use_container_width=True
+                )
+            
+            with col3:
+                # CSV download
+                csv_buffer = export_quote_to_csv(quote_data, items_df, client_data)
+                st.download_button(
+                    "📊 CSV",
+                    data=csv_buffer,
+                    file_name=f"Quote_{quote_number}.csv",
+                    mime="text/csv",
+                    key=f"csv_quote_{idx}",
+                    use_container_width=True
+                )
+            
+            with col4:
+                if st.button("✏️ Rename", key=f"rename_quote_{idx}", use_container_width=True):
+                    st.session_state[f'show_rename_dialog_{idx}'] = True
+            
+            with col5:
+                if st.button("🔄 Duplicate", key=f"duplicate_quote_{idx}", use_container_width=True):
+                    # Duplicate quote
+                    timestamp = int(time.time())
+                    new_quote_number = f"Q{timestamp}"
+                    
+                    new_quote_data = {
+                        'user_id': user_id,
+                        'client_id': quote.get('client_id'),
+                        'quote_number': new_quote_number,
+                        'items': quote.get('items'),
+                        'subtotal': quote.get('subtotal'),
+                        'tax_rate': quote.get('tax_rate'),
+                        'tax_amount': quote.get('tax_amount'),
+                        'total_amount': quote.get('total_amount'),
+                        'client_name': quote.get('client_name')
+                    }
+                    
+                    success, new_quote_id = db_manager.save_quote(new_quote_data)
+                    if success:
+                        sync_manager.queue_sync_operation('quotes', 'create', new_quote_data)
+                        st.success(f"Quote duplicated as {new_quote_number}")
+                        st.rerun()
+            
+            with col6:
+                if st.button("🗑️ Delete", key=f"delete_quote_{idx}", use_container_width=True):
+                    st.session_state[f'confirm_delete_{idx}'] = True
+            
+            # Email dialog
+            if st.session_state.get(f'show_email_dialog_{idx}', False):
+                with st.container():
+                    st.markdown("#### Send Quote via Email")
+                    
+                    email = st.text_input("Recipient Email:", key=f"email_input_{idx}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Send", key=f"send_email_{idx}", type="primary"):
+                            if email and '@' in email:
+                                email_service = EmailService()
+                                success, message = email_service.send_quote_email(
+                                    email, quote_data, items_df, client_data
+                                )
+                                
+                                if success:
+                                    st.success(message)
+                                    st.session_state[f'show_email_dialog_{idx}'] = False
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            else:
+                                st.error("Please enter a valid email address")
+                    
+                    with col2:
+                        if st.button("Cancel", key=f"cancel_email_{idx}"):
+                            st.session_state[f'show_email_dialog_{idx}'] = False
+                            st.rerun()
+            
+            # Rename dialog
+            if st.session_state.get(f'show_rename_dialog_{idx}', False):
+                with st.container():
+                    st.markdown("#### Rename Quote")
+                    
+                    new_number = st.text_input("New Quote Number:", value=quote_number, key=f"rename_input_{idx}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Save", key=f"save_rename_{idx}", type="primary"):
+                            if new_number and new_number != quote_number:
+                                success = db_manager.update_quote_number(quote['id'], new_number)
+                                if success:
+                                    sync_manager.queue_sync_operation('quotes', 'update', 
+                                        {'id': quote['id'], 'quote_number': new_number})
+                                    st.success("Quote renamed successfully!")
+                                    st.session_state[f'show_rename_dialog_{idx}'] = False
+                                    st.rerun()
+                    
+                    with col2:
+                        if st.button("Cancel", key=f"cancel_rename_{idx}"):
+                            st.session_state[f'show_rename_dialog_{idx}'] = False
+                            st.rerun()
+            
+            # Delete confirmation
+            if st.session_state.get(f'confirm_delete_{idx}', False):
+                with st.container():
+                    st.warning(f"Are you sure you want to delete quote {quote_number}?")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Yes, Delete", key=f"confirm_delete_yes_{idx}", type="primary"):
+                            success = db_manager.delete_quote(quote['id'])
+                            if success:
+                                sync_manager.queue_sync_operation('quotes', 'delete', {'id': quote['id']})
+                                st.success("Quote deleted successfully!")
+                                st.session_state[f'confirm_delete_{idx}'] = False
+                                st.rerun()
+                    
+                    with col2:
+                        if st.button("Cancel", key=f"confirm_delete_no_{idx}"):
+                            st.session_state[f'confirm_delete_{idx}'] = False
+                            st.rerun()
+            
+            # Items list
+            st.markdown("**Items in Quote:**")
+            if items:
+                items_df = pd.DataFrame(items)
+                display_df = items_df[['sku', 'product_type', 'quantity', 'price']].copy()
+                display_df['total'] = display_df['quantity'] * display_df['price']
+                display_df.columns = ['SKU', 'Description', 'Qty', 'Unit Price', 'Total']
+                
+                # Format prices
+                display_df['Unit Price'] = display_df['Unit Price'].apply(lambda x: f"${x:,.2f}")
+                display_df['Total'] = display_df['Total'].apply(lambda x: f"${x:,.2f}")
+                
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+                
 def show_search_page(user_id, db_manager):
     """Display search/products page with collapsible product list"""
     
@@ -1183,94 +1437,3 @@ def show_quote_summary(quote: Dict):
             st.markdown(f"Qty: {item.get('quantity', 1)}")
         with col3:
             st.markdown(format_price(item.get('price', 0) * item.get('quantity', 1)))
-    
-    # Pricing summary
-    st.divider()
-    cart_summary(quote['total_amount'] / 1.08)  # Assuming 8% tax
-    
-    # Export options
-    st.markdown("### Export Options")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("📊 Export Excel", use_container_width=True):
-            try:
-                excel_buffer = generate_excel_quote(
-                    quote['quote_data'], 
-                    quote['items'], 
-                    quote['client_data']
-                )
-                st.download_button(
-                    "Download Excel",
-                    excel_buffer.getvalue(),
-                    file_name=f"Quote_{quote['quote_number']}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"Export error: {e}")
-    
-    with col2:
-        if st.button("📄 Export PDF", use_container_width=True):
-            try:
-                pdf_buffer = generate_pdf_quote(
-                    quote['quote_data'], 
-                    quote['items'], 
-                    quote['client_data']
-                )
-                st.download_button(
-                    "Download PDF",
-                    pdf_buffer.getvalue(),
-                    file_name=f"Quote_{quote['quote_number']}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"Export error: {e}")
-    
-    with col3:
-        if st.button("📧 Email Quote", use_container_width=True):
-            try:
-                email_service = get_email_service()
-                if email_service and hasattr(email_service, 'configured') and email_service.configured:
-                    show_email_quote_dialog(
-                        quote['quote_data'],
-                        quote['items'],
-                        quote['client_data']
-                    )
-                else:
-                    st.warning("Email service not configured")
-                    st.info("To enable email, configure Gmail credentials in your secrets")
-            except Exception as e:
-                st.warning(f"Email functionality not available: {str(e)}")
-    
-    # Action buttons
-    st.markdown("### ")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Create New Quote", use_container_width=True):
-            # Clear cart and show success message
-            try:
-                db_manager = st.session_state.db_manager
-                user_id = st.session_state.user['id']
-                db_manager.clear_cart(user_id, st.session_state.selected_client)
-                st.session_state.cart_count = 0
-                st.success("Cart cleared - use Search tab to create new quote")
-            except Exception as e:
-                st.warning(f"Could not clear cart: {str(e)}")
-    
-    with col2:
-        if st.button("Clear Quote Data", use_container_width=True, type="primary"):
-            # Clear quote data
-            try:
-                db_manager = st.session_state.db_manager
-                user_id = st.session_state.user['id']
-                db_manager.clear_cart(user_id, st.session_state.selected_client)
-                st.session_state.cart_count = 0
-                if 'last_quote' in st.session_state:
-                    del st.session_state.last_quote
-                st.success("Quote cleared successfully")
-            except Exception as e:
-                st.warning(f"Could not clear quote: {str(e)}")

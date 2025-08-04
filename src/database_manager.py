@@ -2,7 +2,7 @@
 Database operations module for Turbo Air Equipment Viewer
 Handles both SQLite (offline) and Supabase (online) operations
 Updated with get_user_quotes method and all required functionality
-COMPLETE VERSION WITH ALL FIXES - Enhanced for better reliability
+COMPLETE VERSION WITH ALL FIXES - Enhanced for better reliability and pages.py compatibility
 """
 
 import sqlite3
@@ -258,6 +258,48 @@ class DatabaseManager:
             print(f"Error getting clients from SQLite: {e}")
             return pd.DataFrame()
     
+    def add_client(self, client_data: Dict) -> Tuple[bool, Optional[str]]:
+        """Add a new client - compatible with pages.py requirements"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode
+                response = self.supabase.table('clients').insert(client_data).execute()
+                if response.data:
+                    client_id = response.data[0]['id']
+                    return True, client_id
+                else:
+                    return False, None
+            
+            else:
+                # Offline mode
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO clients (user_id, company, contact_name, contact_email, phone, address)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    client_data['user_id'],
+                    client_data['company'],
+                    client_data.get('contact_name', ''),
+                    client_data.get('contact_email', ''),
+                    client_data.get('phone', ''),
+                    client_data.get('address', '')
+                ))
+                
+                client_id = cursor.lastrowid
+                conn.commit()
+                
+                # Add to sync queue
+                self._add_to_sync_queue(conn, 'clients', 'insert', client_data)
+                
+                conn.close()
+                return True, str(client_id)
+                
+        except Exception as e:
+            print(f"Error adding client: {e}")
+            return False, None
+    
     def create_client(self, user_id: str, company: str, contact_name: str = '', 
                      contact_email: str = '', contact_number: str = '') -> Tuple[bool, str]:
         """Create new client with better error handling"""
@@ -507,6 +549,119 @@ class DatabaseManager:
             print(f"General cart error: {e}")
             return False, str(e)
     
+    def update_quote_number(self, quote_id: str, new_quote_number: str) -> bool:
+        """Update quote number"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                UPDATE quotes 
+                SET quote_number = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (new_quote_number, quote_id))
+            
+            conn.commit()
+            conn.close()
+            
+            return True
+        except Exception as e:
+            print(f"Error updating quote number: {e}")
+            return False
+
+    def delete_quote(self, quote_id: str) -> bool:
+        """Delete a quote"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("DELETE FROM quotes WHERE id = ?", (quote_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            return True
+        except Exception as e:
+            print(f"Error deleting quote: {e}")
+            return False
+
+    def get_recent_quotes(self, user_id: str, limit: int = 10) -> List[Dict]:
+        """Get recent quotes for a user"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT id, user_id, client_id, quote_number, items, 
+                    subtotal, tax_rate, tax_amount, total_amount, 
+                    created_at, updated_at, client_name
+                FROM quotes
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+            """, (user_id, limit))
+            
+            quotes = []
+            for row in cursor.fetchall():
+                quotes.append({
+                    'id': row[0],
+                    'user_id': row[1],
+                    'client_id': row[2],
+                    'quote_number': row[3],
+                    'items': row[4],
+                    'subtotal': row[5],
+                    'tax_rate': row[6],
+                    'tax_amount': row[7],
+                    'total_amount': row[8],
+                    'created_at': row[9],
+                    'updated_at': row[10],
+                    'client_name': row[11]
+                })
+            
+            conn.close()
+            return quotes
+            
+        except Exception as e:
+            print(f"Error getting recent quotes: {e}")
+            return []
+
+    def save_quote(self, quote_data: Dict) -> tuple[bool, Optional[str]]:
+        """Save a quote and return success status and quote ID"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path)
+            cursor = conn.cursor()
+            
+            # Generate a unique ID
+            import uuid
+            quote_id = str(uuid.uuid4())
+            
+            cursor.execute("""
+                INSERT INTO quotes (
+                    id, user_id, client_id, quote_number, items, 
+                    subtotal, tax_rate, tax_amount, total_amount, client_name
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                quote_id,
+                quote_data['user_id'],
+                quote_data['client_id'],
+                quote_data['quote_number'],
+                quote_data['items'],
+                quote_data['subtotal'],
+                quote_data['tax_rate'],
+                quote_data['tax_amount'],
+                quote_data['total_amount'],
+                quote_data.get('client_name', 'N/A')
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            return True, quote_id
+            
+        except Exception as e:
+            print(f"Error saving quote: {e}")
+            return False, None
+
     def update_cart_quantity(self, cart_item_id: int, new_quantity: int) -> bool:
         """Update quantity of a cart item"""
         try:
@@ -855,17 +1010,23 @@ class DatabaseManager:
         except Exception as e:
             print(f"Error adding search history: {e}")
     
-    def get_search_history(self, user_id: str, limit: int = 10) -> List[str]:
-        """Get recent search history"""
+    def get_search_history(self, user_id: str, limit: int = 10) -> List[Dict]:
+        """Get recent search history - Updated to return Dict objects for pages.py compatibility"""
         if self.is_online:
             try:
                 response = self.supabase.table('search_history').select(
-                    'search_term'
+                    'search_term, created_at'
                 ).eq('user_id', user_id).order(
                     'created_at', desc=True
                 ).limit(limit).execute()
                 if response.data:
-                    return [item['search_term'] for item in response.data]
+                    return [
+                        {
+                            'search_term': item['search_term'],
+                            'created_at': item['created_at']
+                        }
+                        for item in response.data
+                    ]
             except Exception as e:
                 print(f"Error getting search history from Supabase: {e}")
         
@@ -874,22 +1035,28 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT DISTINCT search_term 
+                SELECT DISTINCT search_term, created_at 
                 FROM search_history 
                 WHERE user_id = ? 
                 ORDER BY created_at DESC 
                 LIMIT ?
             """, (user_id, limit))
             
-            results = [row[0] for row in cursor.fetchall()]
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'search_term': row[0],
+                    'created_at': row[1]
+                })
+            
             conn.close()
             return results
         except Exception as e:
             print(f"Error getting search history from SQLite: {e}")
             return []
     
-    def clear_search_history(self, user_id: str) -> Tuple[bool, str]:
-        """Clear user's search history"""
+    def clear_search_history(self, user_id: str) -> bool:
+        """Clear user's search history - Updated return type for pages.py compatibility"""
         try:
             if self.is_online:
                 try:
@@ -910,10 +1077,10 @@ class DatabaseManager:
                 })
             
             conn.close()
-            return True, "Search history cleared"
+            return True
         except Exception as e:
             print(f"Error clearing search history: {e}")
-            return False, str(e)
+            return False
     
     def get_dashboard_stats(self, user_id: str) -> Dict:
         """Get dashboard statistics for user"""
