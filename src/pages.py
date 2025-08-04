@@ -99,7 +99,7 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
             # List all clients in a more compact way
             for _, client in clients_df.iterrows():
                 with st.container():
-                    col1, col2, col3 = st.columns([3, 2, 1])
+                    col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
                     
                     with col1:
                         st.markdown(f"**{client['company']}**")
@@ -122,6 +122,55 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
                             if not is_selected:
                                 st.session_state.selected_client = client['id']
                                 st.success(f"Selected {client['company']}")
+                                st.rerun()
+                    
+                    with col4:
+                        # Delete client button
+                        if st.button("🗑️", key=f"delete_{client['id']}", 
+                                   help="Delete client", use_container_width=True):
+                            # Show confirmation dialog
+                            st.session_state[f'confirm_delete_{client["id"]}'] = True
+                            st.rerun()
+                    
+                    # Confirmation dialog for client deletion
+                    if st.session_state.get(f'confirm_delete_{client["id"]}', False):
+                        st.warning(f"⚠️ Are you sure you want to delete **{client['company']}**?")
+                        col_confirm1, col_confirm2 = st.columns(2)
+                        
+                        with col_confirm1:
+                            if st.button("Yes, Delete", key=f"confirm_yes_{client['id']}", 
+                                       type="primary", use_container_width=True):
+                                try:
+                                    # Check if client has quotes
+                                    quotes_df = db_manager.get_client_quotes(client['id'])
+                                    if not quotes_df.empty:
+                                        st.error("Cannot delete client with existing quotes. Archive quotes first.")
+                                    else:
+                                        # Clear cart if this client is selected
+                                        if st.session_state.get('selected_client') == client['id']:
+                                            db_manager.clear_cart(user_id, client['id'])
+                                            st.session_state.selected_client = None
+                                            st.session_state.cart_count = 0
+                                        
+                                        # Delete client
+                                        success, message = db_manager.delete_client(client['id'])
+                                        if success:
+                                            st.success(f"Deleted {client['company']}")
+                                            # Clear confirmation state
+                                            if f'confirm_delete_{client["id"]}' in st.session_state:
+                                                del st.session_state[f'confirm_delete_{client["id"]}']
+                                            st.rerun()
+                                        else:
+                                            st.error(message)
+                                except Exception as e:
+                                    st.error(f"Error deleting client: {str(e)}")
+                        
+                        with col_confirm2:
+                            if st.button("Cancel", key=f"confirm_no_{client['id']}", 
+                                       use_container_width=True):
+                                # Clear confirmation state
+                                if f'confirm_delete_{client["id"]}' in st.session_state:
+                                    del st.session_state[f'confirm_delete_{client["id"]}']
                                 st.rerun()
                     
                     st.divider()
@@ -258,7 +307,7 @@ def show_search_page(user_id, db_manager):
                             st.caption(product['product_type'])
                     
                     with col_price:
-                        st.markdown(f"${product['price']:,.2f}")
+                        st.markdown(f"${product.get('price', 0):,.2f}")
                     
                     with col_action:
                         if st.button("View", key=f"view_{product['id']}", use_container_width=True):
@@ -400,7 +449,7 @@ def display_product_results(results_df, user_id, db_manager):
                     st.caption(truncate_text(product['description'], 80))
             
             with col_price:
-                st.markdown(f"**${product['price']:,.2f}**")
+                st.markdown(f"**${product.get('price', 0):,.2f}**")
             
             # Get current quantity in cart
             current_qty = 0
@@ -513,7 +562,7 @@ def display_product_results(results_df, user_id, db_manager):
                     with col_info_detail:
                         st.markdown(f"**SKU:** {product['sku']}")
                         st.markdown(f"**Model:** {product.get('product_type', 'N/A')}")
-                        st.markdown(f"**Price:** ${product['price']:,.2f}")
+                        st.markdown(f"**Price:** ${product.get('price', 0):,.2f}")
                         
                         if product.get('description'):
                             st.markdown(f"**Description:** {product['description']}")
@@ -537,7 +586,7 @@ def display_product_results(results_df, user_id, db_manager):
             st.divider()
 
 def show_cart_page(user_id, db_manager):
-    """Display cart page with proper SKU display and totals calculation"""
+    """Display cart page with proper SKU display, totals calculation and 3 export buttons"""
     
     st.markdown("### Shopping Cart")
     
@@ -561,11 +610,6 @@ def show_cart_page(user_id, db_manager):
     if cart_items_df.empty:
         empty_state("🛒", "Cart is Empty", "Add products using the Search tab to create a quote")
         return
-    
-    # Debug section - comment out after fixing
-    # st.write("Debug: Cart DataFrame columns:", list(cart_items_df.columns))
-    # st.write("Debug: First item data:", dict(cart_items_df.iloc[0]) if len(cart_items_df) > 0 else "No items")
-    # st.write("Debug: Full DataFrame:", cart_items_df.to_dict('records'))
     
     # Display cart items
     st.markdown("#### Items in Cart")
@@ -732,7 +776,7 @@ def show_cart_page(user_id, db_manager):
                     st.markdown("### Generated Quote")
                     st.success(f"Quote #{quote_number} created successfully!")
                     
-                    # Store quote data for export
+                    # Store quote data for export - FIXED: Using proper price field access
                     quote_data = {
                         'quote_number': quote_number,
                         'total_amount': total,
@@ -742,27 +786,49 @@ def show_cart_page(user_id, db_manager):
                         'created_at': datetime.now()
                     }
                     
-                    # Export options
+                    # Prepare cart items with proper price access for export
+                    export_cart_items = []
+                    for _, item in cart_items_df.iterrows():
+                        product_data = item.get('products', {})
+                        if isinstance(product_data, dict):
+                            item_price = float(product_data.get('price', 0))
+                            item_sku = product_data.get('sku', 'Unknown')
+                            item_type = product_data.get('product_type', '')
+                        else:
+                            item_price = float(item.get('price', 0))
+                            item_sku = item.get('sku', 'Unknown')
+                            item_type = item.get('product_type', '')
+                        
+                        export_cart_items.append({
+                            'sku': item_sku,
+                            'product_type': item_type,
+                            'price': item_price,
+                            'quantity': int(item.get('quantity', 1)),
+                            'total': item_price * int(item.get('quantity', 1))
+                        })
+                    
+                    export_cart_df = pd.DataFrame(export_cart_items)
+                    
+                    # Show 3 export buttons in columns
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        try:
-                            excel_buffer = generate_excel_quote(quote_data, cart_items_df, client_data)
-                            st.download_button(
-                                "📊 Download Excel",
-                                excel_buffer.getvalue(),
-                                file_name=f"Quote_{quote_number}.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
-                            )
-                        except Exception as e:
-                            st.error(f"Excel export error: {e}")
+                        if st.button("📧 Email Quote", use_container_width=True, type="primary"):
+                            try:
+                                email_service = get_email_service()
+                                if email_service and hasattr(email_service, 'configured') and email_service.configured:
+                                    show_email_quote_dialog(quote_data, export_cart_df, client_data)
+                                else:
+                                    st.warning("Email service not configured")
+                                    st.info("To enable email, configure Gmail credentials in your secrets")
+                            except Exception as e:
+                                st.warning(f"Email functionality not available: {str(e)}")
                     
                     with col2:
                         try:
-                            pdf_buffer = generate_pdf_quote(quote_data, cart_items_df, client_data)
+                            pdf_buffer = generate_pdf_quote(quote_data, export_cart_df, client_data)
                             st.download_button(
-                                "📄 Download PDF",
+                                "📄 Export PDF",
                                 pdf_buffer.getvalue(),
                                 file_name=f"Quote_{quote_number}.pdf",
                                 mime="application/pdf",
@@ -772,11 +838,22 @@ def show_cart_page(user_id, db_manager):
                             st.error(f"PDF export error: {e}")
                     
                     with col3:
-                        if st.button("📧 Email Quote", use_container_width=True):
-                            show_email_quote_dialog(quote_data, cart_items_df, client_data)
+                        try:
+                            excel_buffer = generate_excel_quote(quote_data, export_cart_df, client_data)
+                            st.download_button(
+                                "📊 Export Excel",
+                                excel_buffer.getvalue(),
+                                file_name=f"Quote_{quote_number}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"Excel export error: {e}")
                     
+                    st.markdown("---")
                     if st.button("Clear Cart and Start New Quote", use_container_width=True):
                         db_manager.clear_cart(user_id, st.session_state.selected_client)
+                        st.session_state.cart_count = 0
                         st.rerun()
                 else:
                     st.error(message)

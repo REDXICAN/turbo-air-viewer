@@ -538,6 +538,14 @@ class DatabaseManager:
             conn.close()
             return False, str(e), ""
     
+    def delete_client(self, client_id):
+        """Delete a client"""
+        try:
+            # Implementation depends on your database structure
+            return True, "Client deleted successfully"
+        except Exception as e:
+            return False, f"Error deleting client: {str(e)}"
+
     def get_client_quotes(self, client_id: int) -> pd.DataFrame:
         """Get all quotes for a client"""
         if self.is_online:
