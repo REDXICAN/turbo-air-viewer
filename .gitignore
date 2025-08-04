@@ -39,7 +39,7 @@ test_categories.py
 test_rls.py
 test_resetRLS.py
 test_database.py
-
+fix_database.py
 
 # Virtual environments
 venv/

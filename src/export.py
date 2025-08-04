@@ -1,6 +1,6 @@
 """
-Export functionality for Turbo Air Equipment Viewer
-Generates Excel and PDF quotes with enhanced image support
+Fixed Export functionality for Turbo Air Equipment Viewer
+Improved PDF generation with better image handling
 """
 
 import io
@@ -29,23 +29,68 @@ try:
     from reportlab.lib.units import inch
     from reportlab.pdfgen import canvas
     from reportlab.lib.utils import ImageReader
+    from PIL import Image as PILImage
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
 
 def get_product_image_path(sku: str) -> str:
-    """Get the path to product image"""
+    """Get the path to product image with better path handling"""
     possible_paths = [
         f"pdf_screenshots/{sku}/{sku} P.1.png",
         f"pdf_screenshots/{sku}/{sku}_P.1.png", 
         f"pdf_screenshots/{sku}/{sku}.png",
-        f"pdf_screenshots/{sku}/page_1.png"
+        f"pdf_screenshots/{sku}/page_1.png",
+        f"pdf_screenshots/{sku.upper()}/{sku.upper()} P.1.png",
+        f"pdf_screenshots/{sku.upper()}/{sku.upper()}_P.1.png",
+        f"pdf_screenshots/{sku.upper()}/{sku.upper()}.png",
+        f"pdf_screenshots/{sku.lower()}/{sku.lower()} P.1.png",
+        f"pdf_screenshots/{sku.lower()}/{sku.lower()}_P.1.png",
+        f"pdf_screenshots/{sku.lower()}/{sku.lower()}.png"
     ]
     
     for path in possible_paths:
         if os.path.exists(path):
             return path
     return None
+
+def resize_image_for_pdf(image_path: str, max_width: float = 0.8, max_height: float = 0.6) -> io.BytesIO:
+    """Resize image for PDF inclusion"""
+    try:
+        from PIL import Image as PILImage
+        
+        # Open and convert image
+        with PILImage.open(image_path) as img:
+            # Convert to RGB if necessary
+            if img.mode in ('RGBA', 'LA', 'P'):
+                img = img.convert('RGB')
+            
+            # Calculate new size maintaining aspect ratio
+            img_width, img_height = img.size
+            aspect_ratio = img_width / img_height
+            
+            # Convert inches to pixels (assuming 72 DPI)
+            max_width_px = int(max_width * inch * 72 / 72)
+            max_height_px = int(max_height * inch * 72 / 72)
+            
+            if img_width > max_width_px or img_height > max_height_px:
+                if aspect_ratio > 1:  # Wider than tall
+                    new_width = max_width_px
+                    new_height = int(max_width_px / aspect_ratio)
+                else:  # Taller than wide
+                    new_height = max_height_px
+                    new_width = int(max_height_px * aspect_ratio)
+                
+                img = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
+            
+            # Save to BytesIO
+            buffer = io.BytesIO()
+            img.save(buffer, format='PNG', optimize=True)
+            buffer.seek(0)
+            return buffer
+    except Exception as e:
+        print(f"Error resizing image {image_path}: {e}")
+        return None
 
 def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
     """Generate Excel quote with enhanced formatting and images"""
@@ -250,7 +295,7 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
     # Equipment list header
     story.append(Paragraph("Equipment List", header_style))
     
-    # Prepare items data with images
+    # Prepare items data with improved image handling
     items_data = [['Image', 'SKU', 'Description', 'Qty', 'Unit Price', 'Total']]
     
     for idx, item in items_df.iterrows():
@@ -260,20 +305,24 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
         unit_price = item.get('price', 0)
         total_price = unit_price * quantity
         
-        # Try to add product image
-        image_path = get_product_image_path(sku)
-        image_cell = ""
+        # Try to add product image with better error handling
+        image_cell = "📷"  # Default placeholder
         
+        image_path = get_product_image_path(sku)
         if image_path:
             try:
-                # Create a small image for the PDF
-                img = RLImage(image_path, width=0.8*inch, height=0.6*inch)
-                image_cell = img
+                # Resize image for PDF
+                resized_buffer = resize_image_for_pdf(image_path, 0.8, 0.6)
+                if resized_buffer:
+                    img = RLImage(resized_buffer, width=0.8*inch, height=0.6*inch)
+                    image_cell = img
+                else:
+                    # Try original image with smaller size
+                    img = RLImage(image_path, width=0.6*inch, height=0.45*inch)
+                    image_cell = img
             except Exception as e:
                 print(f"Could not add image for {sku}: {e}")
                 image_cell = "📷"
-        else:
-            image_cell = "📷"
         
         items_data.append([
             image_cell,
@@ -284,7 +333,7 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
             f"${total_price:,.2f}"
         ])
     
-    # Create items table
+    # Create items table with better styling
     items_table = Table(items_data, colWidths=[1*inch, 1.2*inch, 2.5*inch, 0.5*inch, 1*inch, 1*inch])
     items_table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
@@ -295,7 +344,8 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')])
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
+        ('LEADING', (0, 0), (-1, -1), 12)  # Line spacing
     ]))
     
     story.append(items_table)
@@ -333,29 +383,44 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
     <para align="center" fontSize="9" textColor="#666666">
     Thank you for choosing Turbo Air Equipment!<br/>
     This quote is valid for 30 days from the date of issue.<br/>
-    For questions, please contact us at info@turboair.com
+    For questions, please contact us at turboairquotes@gmail.com
     </para>
     """
     story.append(Paragraph(footer_text, styles['Normal']))
     
-    doc.build(story)
+    # Build PDF with error handling
+    try:
+        doc.build(story)
+    except Exception as e:
+        print(f"Error building PDF: {e}")
+        # Create a simple text-only version if image processing fails
+        story_simple = [item for item in story if not isinstance(item, Table) or 'Image' not in str(item)]
+        doc.build(story_simple)
+    
     buffer.seek(0)
     return buffer
 
 def prepare_email_attachments(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> Dict[str, io.BytesIO]:
-    """Prepare email attachments (Excel and PDF)"""
+    """Prepare email attachments (Excel and PDF) with better error handling"""
     attachments = {}
     
     try:
         # Generate Excel attachment
-        excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
-        attachments[f"Quote_{quote_data['quote_number']}.xlsx"] = excel_buffer
+        if EXCEL_AVAILABLE:
+            excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
+            attachments[f"Quote_{quote_data['quote_number']}.xlsx"] = excel_buffer
+        else:
+            print("Excel export not available - openpyxl not installed")
         
         # Generate PDF attachment
-        pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
-        attachments[f"Quote_{quote_data['quote_number']}.pdf"] = pdf_buffer
+        if PDF_AVAILABLE:
+            pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
+            attachments[f"Quote_{quote_data['quote_number']}.pdf"] = pdf_buffer
+        else:
+            print("PDF export not available - reportlab not installed")
         
     except Exception as e:
         print(f"Error preparing attachments: {e}")
+        # Return any successfully created attachments
     
     return attachments
