@@ -1,210 +1,149 @@
 """
 Email functionality for Turbo Air Equipment Viewer
-Handles sending quotes via email
+Handles quote email sending with improved error handling and debugging
 """
 
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
-from email import encoders
 import streamlit as st
-from typing import Dict, Tuple, Optional
+import smtplib
 import pandas as pd
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
 from datetime import datetime
+from typing import Dict, Tuple
 import io
-import ssl
 
 class EmailService:
+    """Email service class for handling SMTP operations"""
+    
     def __init__(self):
         """Initialize email service with configuration from secrets"""
-        self.configured = False
         try:
-            # Get email configuration from Streamlit secrets
-            self.smtp_server = st.secrets["email"]["smtp_server"]
-            self.smtp_port = int(st.secrets["email"]["smtp_port"])
-            self.sender_email = st.secrets["email"]["sender_email"]
-            self.sender_password = st.secrets["email"]["sender_password"]
+            # Load email configuration from Streamlit secrets
+            self.smtp_server = st.secrets.get("email", {}).get("smtp_server", "")
+            self.smtp_port = int(st.secrets.get("email", {}).get("smtp_port", 587))
+            self.sender_email = st.secrets.get("email", {}).get("sender_email", "")
+            self.sender_password = st.secrets.get("email", {}).get("sender_password", "")
             
-            # Optional: SSL mode (default to True for security)
-            self.use_ssl = st.secrets["email"].get("use_ssl", True)
+            # Check if all required settings are present
+            self.configured = bool(
+                self.smtp_server and 
+                self.smtp_port and 
+                self.sender_email and 
+                self.sender_password
+            )
             
-            self.configured = True
-            st.success(f"Email configured: {self.sender_email} via {self.smtp_server}:{self.smtp_port}")
-            
-        except KeyError as e:
-            st.error(f"Missing email configuration key: {e}")
-            st.error("Required keys: smtp_server, smtp_port, sender_email, sender_password")
-            self.configured = False
         except Exception as e:
-            st.error(f"Email configuration error: {e}")
+            st.error(f"Error loading email configuration: {str(e)}")
             self.configured = False
+            self.smtp_server = ""
+            self.smtp_port = 587
+            self.sender_email = ""
+            self.sender_password = ""
     
     def test_connection(self) -> Tuple[bool, str]:
-        """Test SMTP connection"""
+        """Test SMTP connection with detailed error reporting"""
         if not self.configured:
-            return False, "Email service not configured"
+            return False, "Email service not configured - check secrets.toml"
         
         try:
-            # Create SSL context
-            context = ssl.create_default_context()
+            # Create SMTP connection
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.set_debuglevel(0)  # Turn off debug output
             
-            if self.smtp_port == 465:  # SSL
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
-                server.login(self.sender_email, self.sender_password)
-            else:  # TLS (port 587)
-                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-                server.starttls(context=context)
-                server.login(self.sender_email, self.sender_password)
+            # Start TLS encryption
+            server.starttls()
             
+            # Login with credentials
+            server.login(self.sender_email, self.sender_password)
+            
+            # If we get here, connection is successful
             server.quit()
-            return True, "SMTP connection successful"
+            return True, "SMTP connection successful!"
             
         except smtplib.SMTPAuthenticationError as e:
-            return False, f"Authentication failed: {e}. Check your app password."
+            error_msg = str(e)
+            if "Username and Password not accepted" in error_msg:
+                return False, "Authentication failed: Check your app password (not regular Gmail password)"
+            elif "534-5.7.9" in error_msg or "534-5.7.14" in error_msg:
+                return False, "Authentication failed: Enable 2FA and use app password"
+            else:
+                return False, f"Authentication error: {error_msg}"
+                
         except smtplib.SMTPConnectError as e:
-            return False, f"Connection failed: {e}. Check server and port."
+            return False, f"Connection error: Cannot connect to {self.smtp_server}:{self.smtp_port}"
+            
         except smtplib.SMTPException as e:
-            return False, f"SMTP error: {e}"
+            return False, f"SMTP error: {str(e)}"
+            
         except Exception as e:
-            return False, f"Unexpected error: {e}"
+            return False, f"Unexpected error: {str(e)}"
     
-    def send_quote_email(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> Tuple[bool, str]:
-        """Send quote via email with PDF attachment"""
+    def send_quote_email(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, 
+                        client_data: Dict, additional_message: str = "", 
+                        attach_pdf: bool = True, attach_excel: bool = False) -> Tuple[bool, str]:
+        """Send quote email with attachments"""
+        
         if not self.configured:
             return False, "Email service not configured"
-        
-        # First test connection
-        conn_success, conn_msg = self.test_connection()
-        if not conn_success:
-            return False, f"Connection test failed: {conn_msg}"
         
         try:
             # Create message
-            msg = MIMEMultipart('alternative')  # Support both HTML and plain text
+            msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = recipient_email
             msg['Subject'] = f"Quote {quote_data.get('quote_number', 'N/A')} - Turbo Air Equipment"
             
             # Create email body
-            html_body = self._create_email_body(quote_data, items_df, client_data, additional_message)
-            plain_body = self._create_plain_text_body(quote_data, items_df, client_data, additional_message)
+            body = self._create_email_body(quote_data, items_df, client_data, additional_message)
+            msg.attach(MIMEText(body, 'html'))
             
-            # Attach both plain text and HTML versions
-            msg.attach(MIMEText(plain_body, 'plain'))
-            msg.attach(MIMEText(html_body, 'html'))
+            # Add PDF attachment if requested
+            if attach_pdf:
+                try:
+                    from .export import generate_pdf_quote
+                    pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
+                    
+                    pdf_attachment = MIMEApplication(pdf_buffer.getvalue(), _subtype='pdf')
+                    pdf_attachment.add_header('Content-Disposition', 'attachment', 
+                                            filename=f"Quote_{quote_data.get('quote_number', 'N/A')}.pdf")
+                    msg.attach(pdf_attachment)
+                    
+                except Exception as e:
+                    st.warning(f"Could not attach PDF: {str(e)}")
             
-            # Create PDF attachment (optional - remove if export module doesn't exist)
-            try:
-                from .export import export_quote_to_pdf
-                pdf_buffer = export_quote_to_pdf(quote_data, items_df, client_data)
-                
-                # Attach PDF
-                part = MIMEBase('application', 'pdf')
-                part.set_payload(pdf_buffer.read())
-                encoders.encode_base64(part)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename="Quote_{quote_data.get("quote_number", "N_A")}.pdf"'
-                )
-                msg.attach(part)
-            except ImportError:
-                st.info("PDF export module not available - sending without attachment")
-            except Exception as e:
-                st.warning(f"Could not attach PDF: {e}")
+            # Add Excel attachment if requested
+            if attach_excel:
+                try:
+                    from .export import generate_excel_quote
+                    excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
+                    
+                    excel_attachment = MIMEApplication(excel_buffer.getvalue(), 
+                                                     _subtype='vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                    excel_attachment.add_header('Content-Disposition', 'attachment', 
+                                              filename=f"Quote_{quote_data.get('quote_number', 'N/A')}.xlsx")
+                    msg.attach(excel_attachment)
+                    
+                except Exception as e:
+                    st.warning(f"Could not attach Excel: {str(e)}")
             
-            # Send email with proper SSL/TLS handling
-            context = ssl.create_default_context()
-            
-            if self.smtp_port == 465:  # Gmail SSL
-                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
-            else:  # Gmail TLS (port 587)
-                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-                server.starttls(context=context)
-            
+            # Send email
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+            server.starttls()
             server.login(self.sender_email, self.sender_password)
             
-            # Send the email
-            failed_recipients = server.sendmail(self.sender_email, [recipient_email], msg.as_string())
+            text = msg.as_string()
+            server.sendmail(self.sender_email, recipient_email, text)
             server.quit()
             
-            if failed_recipients:
-                return False, f"Failed to send to: {failed_recipients}"
+            return True, f"Quote sent successfully to {recipient_email}"
             
-            return True, f"Quote sent successfully to {recipient_email}!"
-            
-        except smtplib.SMTPAuthenticationError as e:
-            error_msg = f"Authentication failed: {str(e)}. Please check your app password."
-            st.error(error_msg)
-            return False, error_msg
-        except smtplib.SMTPRecipientsRefused as e:
-            error_msg = f"Recipient email refused: {str(e)}"
-            st.error(error_msg)
-            return False, error_msg
-        except smtplib.SMTPException as e:
-            error_msg = f"SMTP error: {str(e)}"
-            st.error(error_msg)
-            return False, error_msg
         except Exception as e:
-            error_msg = f"Failed to send email: {str(e)}"
-            st.error(error_msg)
-            return False, error_msg
+            return False, f"Failed to send email: {str(e)}"
     
-    def _create_plain_text_body(self, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> str:
-        """Create plain text email body as fallback"""
-        # Calculate totals
-        subtotal = float(quote_data.get('subtotal', 0))
-        tax_rate = float(quote_data.get('tax_rate', 0))
-        if tax_rate > 1:
-            tax_rate_display = tax_rate
-        else:
-            tax_rate_display = tax_rate * 100
-        tax_amount = float(quote_data.get('tax_amount', 0))
-        total = float(quote_data.get('total_amount', 0))
-        
-        # Create items list
-        items_text = ""
-        for idx, item in items_df.iterrows():
-            sku = str(item.get('sku', 'Unknown'))
-            description = str(item.get('product_type', ''))
-            quantity = int(item.get('quantity', 1))
-            unit_price = float(item.get('price', 0))
-            total_price = unit_price * quantity
-            
-            items_text += f"{sku} - {description} - Qty: {quantity} - ${unit_price:,.2f} each - Total: ${total_price:,.2f}\n"
-        
-        plain_body = f"""
-TURBO AIR EQUIPMENT - QUOTE
-
-{additional_message if additional_message else ''}
-
-Quote Information:
-- Quote Number: {quote_data.get('quote_number', 'N/A')}
-- Date: {datetime.now().strftime('%B %d, %Y')}
-- Client: {client_data.get('company', 'N/A')}
-- Contact: {client_data.get('contact_name', 'N/A')}
-
-Equipment Details:
-{items_text}
-
-Totals:
-Subtotal: ${subtotal:,.2f}
-Tax ({tax_rate_display:.1f}%): ${tax_amount:,.2f}
-TOTAL: ${total:,.2f}
-
-Thank you for choosing Turbo Air Equipment!
-This quote is valid for 30 days from the date of issue.
-
-Turbo Air Equipment
-Email: {self.sender_email}
-        """
-        
-        return plain_body
-    
-    def _create_email_body(self, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> str:
-        """Create HTML email body with logo"""
-        import base64
-        import os
+    def _create_email_body(self, quote_data: Dict, items_df: pd.DataFrame, 
+                          client_data: Dict, additional_message: str = "") -> str:
+        """Create HTML email body"""
         
         # Calculate totals
         subtotal = float(quote_data.get('subtotal', 0))
@@ -223,41 +162,29 @@ Email: {self.sender_email}
             description = str(item.get('product_type', ''))
             quantity = int(item.get('quantity', 1))
             unit_price = float(item.get('price', 0))
-            total_price = unit_price * quantity
+            line_total = unit_price * quantity
             
             items_html += f"""
-            <tr>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{sku}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd;">{description}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: center;">{quantity}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${unit_price:,.2f}</td>
-                <td style="padding: 8px; border-bottom: 1px solid #ddd; text-align: right;">${total_price:,.2f}</td>
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 8px; text-align: left;">{sku}</td>
+                <td style="padding: 8px; text-align: left;">{description}</td>
+                <td style="padding: 8px; text-align: center;">{quantity}</td>
+                <td style="padding: 8px; text-align: right;">${unit_price:,.2f}</td>
+                <td style="padding: 8px; text-align: right; font-weight: bold;">${line_total:,.2f}</td>
             </tr>
             """
         
-        # Add additional message section if provided
-        additional_section = ""
-        if additional_message:
-            additional_section = f"""
-            <div class="additional-message" style="background-color: #e8f4f8; padding: 15px; margin: 20px 0; border-radius: 5px; border-left: 4px solid #20429C;">
-                <h4>Additional Message:</h4>
-                <p>{additional_message.replace('\n', '<br>')}</p>
+        # Additional message section
+        additional_html = ""
+        if additional_message.strip():
+            additional_html = f"""
+            <div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border-left: 4px solid #20429C;">
+                <h3 style="margin-top: 0; color: #20429C;">Additional Message:</h3>
+                <p style="margin-bottom: 0; white-space: pre-wrap;">{additional_message}</p>
             </div>
             """
         
-        # Try to load and encode the logo
-        logo_html = ""
-        try:
-            logo_path = "Turboair_Logo_01.png"
-            if os.path.exists(logo_path):
-                with open(logo_path, "rb") as logo_file:
-                    logo_base64 = base64.b64encode(logo_file.read()).decode()
-                logo_html = f'<img src="data:image/png;base64,{logo_base64}" alt="Turbo Air Logo" style="max-width: 300px; height: auto;">'
-            else:
-                logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
-        except Exception as e:
-            logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
-        
+        # Complete HTML email body
         html_body = f"""
         <!DOCTYPE html>
         <html>
@@ -270,20 +197,18 @@ Email: {self.sender_email}
                 .quote-info {{ background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }}
                 table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
                 th {{ background-color: #20429C; color: white; padding: 12px; text-align: left; }}
-                .totals {{ margin-top: 20px; }}
+                .totals {{ background-color: #f8f9fa; padding: 15px; margin: 20px 0; }}
                 .total-row {{ font-weight: bold; font-size: 1.1em; }}
-                .footer {{ margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; }}
+                .footer {{ background-color: #f1f1f1; padding: 20px; text-align: center; color: #666; }}
             </style>
         </head>
         <body>
             <div class="header">
-                {logo_html}
-                <h2 style="margin-top: 10px; margin-bottom: 0;">EQUIPMENT QUOTE</h2>
+                <h1>TURBO AIR EQUIPMENT</h1>
+                <h2>Equipment Quote</h2>
             </div>
             
             <div class="content">
-                {additional_section}
-                
                 <div class="quote-info">
                     <h3>Quote Information</h3>
                     <p><strong>Quote Number:</strong> {quote_data.get('quote_number', 'N/A')}</p>
@@ -292,7 +217,9 @@ Email: {self.sender_email}
                     <p><strong>Contact:</strong> {client_data.get('contact_name', 'N/A')}</p>
                 </div>
                 
-                <h3>Equipment Details</h3>
+                {additional_html}
+                
+                <h3>Equipment List</h3>
                 <table>
                     <thead>
                         <tr>
@@ -309,30 +236,27 @@ Email: {self.sender_email}
                 </table>
                 
                 <div class="totals">
-                    <table style="width: 300px; margin-left: auto;">
+                    <table style="width: 100%; margin: 0;">
                         <tr>
-                            <td style="padding: 5px; text-align: right;"><strong>Subtotal:</strong></td>
-                            <td style="padding: 5px; text-align: right;">${subtotal:,.2f}</td>
+                            <td style="text-align: right; padding: 5px;"><strong>Subtotal:</strong></td>
+                            <td style="text-align: right; padding: 5px; width: 120px;"><strong>${subtotal:,.2f}</strong></td>
                         </tr>
                         <tr>
-                            <td style="padding: 5px; text-align: right;"><strong>Tax ({tax_rate_display:.1f}%):</strong></td>
-                            <td style="padding: 5px; text-align: right;">${tax_amount:,.2f}</td>
+                            <td style="text-align: right; padding: 5px;"><strong>Tax ({tax_rate_display:.1f}%):</strong></td>
+                            <td style="text-align: right; padding: 5px;"><strong>${tax_amount:,.2f}</strong></td>
                         </tr>
                         <tr class="total-row" style="border-top: 2px solid #20429C;">
-                            <td style="padding: 10px; text-align: right;"><strong>TOTAL:</strong></td>
-                            <td style="padding: 10px; text-align: right;"><strong>${total:,.2f}</strong></td>
+                            <td style="text-align: right; padding: 10px 5px 5px 5px;"><strong>TOTAL:</strong></td>
+                            <td style="text-align: right; padding: 10px 5px 5px 5px; font-size: 1.2em;"><strong>${total:,.2f}</strong></td>
                         </tr>
                     </table>
                 </div>
-                
-                <div class="footer">
-                    <p>Thank you for choosing Turbo Air Equipment!</p>
-                    <p>This quote is valid for 30 days from the date of issue.</p>
-                    <p>If you have any questions, please don't hesitate to contact us.</p>
-                    <br>
-                    <p><strong>Turbo Air Equipment</strong><br>
-                    Email: {self.sender_email}</p>
-                </div>
+            </div>
+            
+            <div class="footer">
+                <p><strong>Thank you for choosing Turbo Air Equipment!</strong></p>
+                <p>This quote is valid for 30 days from the date of issue.</p>
+                <p>For questions about this quote, please contact us at {self.sender_email}</p>
             </div>
         </body>
         </html>
@@ -340,27 +264,67 @@ Email: {self.sender_email}
         
         return html_body
 
+# Global email service instance
+_email_service = None
+
+def get_email_service() -> EmailService:
+    """Get global email service instance"""
+    global _email_service
+    if _email_service is None:
+        _email_service = EmailService()
+    return _email_service
+
+def test_email_connection() -> Tuple[bool, str]:
+    """Test email connection - wrapper function"""
+    try:
+        email_service = get_email_service()
+        return email_service.test_connection()
+    except Exception as e:
+        return False, f"Test connection error: {str(e)}"
+
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote dialog with proper state management"""
-    st.markdown("#### Send Quote via Email")
+    """Show email quote dialog with improved UI and error handling"""
     
-    # Test connection first
-    email_service = EmailService()
+    st.markdown("### Send Quote via Email")
+    
+    # Show email configuration status
+    email_service = get_email_service()
     if email_service.configured:
-        with st.expander("Test Email Connection", expanded=False):
-            if st.button("Test SMTP Connection"):
-                with st.spinner("Testing connection..."):
-                    success, message = email_service.test_connection()
-                if success:
-                    st.success(message)
-                else:
-                    st.error(message)
+        st.success(f"✅ Email configured: {email_service.sender_email}")
+        st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
+    else:
+        st.error("❌ Email not configured")
+        return
     
-    # Use form to prevent collapse issues
-    with st.form("email_quote_form", clear_on_submit=False):
-        # Email input
+    # Test connection section
+    with st.expander("🔍 Test Email Connection", expanded=False):
+        if st.button("Test SMTP Connection", key="test_smtp_connection", use_container_width=True):
+            with st.spinner("Testing connection..."):
+                try:
+                    success, message = test_email_connection()
+                    
+                    if success:
+                        st.success(f"✅ {message}")
+                    else:
+                        st.error(f"❌ {message}")
+                        
+                        # Show troubleshooting tips for common issues
+                        if "app password" in message.lower() or "authentication" in message.lower():
+                            st.markdown("**Troubleshooting:**")
+                            st.markdown("- Make sure 2FA is enabled on your Gmail account")
+                            st.markdown("- Use a 16-character app password, not your regular password")
+                            st.markdown("- Generate a new app password if needed")
+                            st.markdown("- Remove spaces from the app password")
+                            
+                except Exception as e:
+                    st.error(f"❌ Test failed with error: {str(e)}")
+                    st.exception(e)  # Show full traceback for debugging
+    
+    # Email form
+    with st.form("email_quote_form"):
+        # Recipient email
         recipient_email = st.text_input(
-            "Recipient Email:", 
+            "Recipient Email:",
             value=client_data.get('contact_email', ''),
             placeholder="Enter recipient email address"
         )
@@ -372,46 +336,45 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
             height=100
         )
         
-        # Form buttons
+        # Attachment options
+        st.markdown("**Attachments:**")
         col1, col2 = st.columns(2)
-        
         with col1:
-            send_email = st.form_submit_button("Send Email", type="primary", use_container_width=True)
-        
+            attach_pdf = st.checkbox("📄 Attach PDF", value=True)
         with col2:
-            cancel_email = st.form_submit_button("Cancel", use_container_width=True)
-    
-    # Handle form submission
-    if send_email:
-        if recipient_email and '@' in recipient_email:
-            if email_service.configured:
-                with st.spinner("Sending email..."):
-                    success, message = email_service.send_quote_email(
-                        recipient_email, quote_data, items_df, client_data, additional_message
-                    )
-                
-                if success:
-                    st.success(message)
-                    st.balloons()
-                else:
-                    st.error(message)
+            attach_excel = st.checkbox("📊 Attach Excel", value=False)
+        
+        # Send button
+        send_submitted = st.form_submit_button("📧 Send Email", use_container_width=True, type="primary")
+        
+        if send_submitted:
+            if not recipient_email:
+                st.error("Please enter a recipient email address")
+            elif not recipient_email.count('@') == 1 or not '.' in recipient_email.split('@')[1]:
+                st.error("Please enter a valid email address")
             else:
-                st.error("Email service not configured. Please check your secrets.")
-        else:
-            st.error("Please enter a valid email address")
+                with st.spinner(f"Sending quote to {recipient_email}..."):
+                    try:
+                        success, message = email_service.send_quote_email(
+                            recipient_email=recipient_email,
+                            quote_data=quote_data,
+                            items_df=items_df,
+                            client_data=client_data,
+                            additional_message=additional_message,
+                            attach_pdf=attach_pdf,
+                            attach_excel=attach_excel
+                        )
+                        
+                        if success:
+                            st.success(f"✅ {message}")
+                            st.balloons()
+                        else:
+                            st.error(f"❌ {message}")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Failed to send email: {str(e)}")
+                        st.exception(e)  # Show full traceback for debugging
     
-    if cancel_email:
-        st.info("Email cancelled.")
-
-def test_email_connection():
-    """Test email connection - for debugging"""
-    email_service = EmailService()
-    return email_service.test_connection()
-
-def get_email_service() -> Optional[EmailService]:
-    """Get email service instance"""
-    try:
-        return EmailService()
-    except Exception as e:
-        st.error(f"Error creating email service: {e}")
-        return None
+    # Cancel button outside form
+    if st.button("Cancel", key="cancel_email"):
+        st.rerun()
