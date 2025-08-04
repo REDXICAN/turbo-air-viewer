@@ -103,6 +103,7 @@ class EmailService:
             # Add PDF attachment if requested
             if attach_pdf:
                 try:
+                    st.write("📄 Generating PDF attachment...")
                     from .export import generate_pdf_quote
                     pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
                     
@@ -110,13 +111,16 @@ class EmailService:
                     pdf_attachment.add_header('Content-Disposition', 'attachment', 
                                             filename=f"Quote_{quote_data.get('quote_number', 'N/A')}.pdf")
                     msg.attach(pdf_attachment)
+                    st.write("✅ PDF attached successfully")
                     
                 except Exception as e:
-                    st.warning(f"Could not attach PDF: {str(e)}")
+                    st.error(f"❌ PDF attachment failed: {str(e)}")
+                    return False, f"PDF attachment error: {str(e)}"
             
             # Add Excel attachment if requested
             if attach_excel:
                 try:
+                    st.write("📊 Generating Excel attachment...")
                     from .export import generate_excel_quote
                     excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
                     
@@ -125,9 +129,11 @@ class EmailService:
                     excel_attachment.add_header('Content-Disposition', 'attachment', 
                                               filename=f"Quote_{quote_data.get('quote_number', 'N/A')}.xlsx")
                     msg.attach(excel_attachment)
+                    st.write("✅ Excel attached successfully")
                     
                 except Exception as e:
-                    st.warning(f"Could not attach Excel: {str(e)}")
+                    st.error(f"❌ Excel attachment failed: {str(e)}")
+                    return False, f"Excel attachment error: {str(e)}"
             
             # Send email
             server = smtplib.SMTP(self.smtp_server, self.smtp_port)
@@ -335,7 +341,7 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         # CC email - NEW FEATURE
         cc_email = st.text_input(
             "📋 CC (Optional):",
-            value="andres@turboairmexico.com",  # Default CC
+            value="",  # Empty default
             placeholder="Enter CC email address (optional)"
         )
         
@@ -373,6 +379,9 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                 if cc_valid:
                     with st.spinner(f"Sending quote to {recipient_email}..."):
                         try:
+                            # Show detailed progress for debugging
+                            st.write("🔄 Starting email send process...")
+                            
                             success, message = email_service.send_quote_email_with_cc(
                                 recipient_email=recipient_email,
                                 cc_email=cc_email.strip() if cc_email.strip() else None,
@@ -384,6 +393,8 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                                 attach_excel=attach_excel
                             )
                             
+                            st.write("🔄 Email send process completed...")
+                            
                             if success:
                                 st.success(f"✅ {message}")
                                 if cc_email.strip():
@@ -394,6 +405,7 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                                 
                         except Exception as e:
                             st.error(f"❌ Failed to send email: {str(e)}")
+                            st.exception(e)  # Show full traceback for debugging
     
     # Cancel button outside form
     if st.button("Cancel", key="cancel_email"):
