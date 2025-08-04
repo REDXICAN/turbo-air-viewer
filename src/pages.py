@@ -293,7 +293,7 @@ def show_search_page(user_id, db_manager):
             pass
 
 def display_product_results(results_df, user_id, db_manager):
-    """Display product results with collapsible details and quantity controls"""
+    """Display product results with working quantity controls"""
     st.markdown(f"**Found {len(results_df)} products**")
     
     # Get current cart items
@@ -312,10 +312,42 @@ def display_product_results(results_df, user_id, db_manager):
     # Display products
     for idx, product in results_df.iterrows():
         with st.container():
-            # Display product info
-            st.markdown(product_list_item_compact(product.to_dict(), cart_items, user_id, db_manager), unsafe_allow_html=True)
+            # Product info with image
+            col_img, col_info, col_price = st.columns([1, 4, 1])
             
-            # Get current quantity
+            with col_img:
+                # Try to show product image
+                sku = product['sku']
+                possible_paths = [
+                    f"pdf_screenshots/{sku}/{sku} P.1.png",
+                    f"pdf_screenshots/{sku}/{sku}_P.1.png",
+                    f"pdf_screenshots/{sku}/{sku}.png",
+                    f"pdf_screenshots/{sku}/page_1.png"
+                ]
+                
+                image_found = False
+                for image_path in possible_paths:
+                    image_base64 = get_image_base64(image_path)
+                    if image_base64:
+                        st.image(f"data:image/png;base64,{image_base64}", 
+                               caption=None, use_container_width=True)
+                        image_found = True
+                        break
+                
+                if not image_found:
+                    st.markdown("📷")
+            
+            with col_info:
+                st.markdown(f"**{product['sku']}**")
+                if product.get('product_type'):
+                    st.caption(f"Model: {product['product_type']}")
+                if product.get('description'):
+                    st.caption(truncate_text(product['description'], 80))
+            
+            with col_price:
+                st.markdown(f"**${product['price']:,.2f}**")
+            
+            # Get current quantity in cart
             current_qty = 0
             cart_item_id = None
             for item in cart_items:
@@ -324,46 +356,42 @@ def display_product_results(results_df, user_id, db_manager):
                     cart_item_id = item.get('id')
                     break
             
-            # Action row with collapsible details and quantity controls
-            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+            # Quantity controls and action buttons
+            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 2])
             
             with col1:
-                # Collapsible details
-                if st.button("📋 Details", key=f"toggle_details_{product['id']}", use_container_width=True):
+                # Details button
+                if st.button("📋 Details", key=f"details_{product['id']}", use_container_width=True):
                     detail_key = f"show_details_{product['id']}"
                     st.session_state[detail_key] = not st.session_state.get(detail_key, False)
                     st.rerun()
             
             with col2:
-                # Decrease quantity
-                if current_qty > 0:
-                    if st.button("−", key=f"minus_{product['id']}", use_container_width=True):
-                        if current_qty == 1:
-                            try:
-                                db_manager.remove_from_cart(cart_item_id)
-                                st.success("Removed from cart")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                        else:
-                            try:
-                                db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
-                                st.success("Updated quantity")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                else:
-                    st.markdown("**−**")
+                # Minus button
+                if st.button("−", key=f"minus_{product['id']}", use_container_width=True, 
+                           disabled=(current_qty == 0)):
+                    if current_qty > 1:
+                        try:
+                            db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+                    elif current_qty == 1:
+                        try:
+                            db_manager.remove_from_cart(cart_item_id)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
             
             with col3:
-                # Show quantity
-                st.markdown(f"**Qty: {current_qty}**")
+                # Quantity display
+                st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 18px; padding: 8px;'>{current_qty}</div>", 
+                          unsafe_allow_html=True)
             
             with col4:
-                # Increase quantity
+                # Plus button
                 if st.button("+", key=f"plus_{product['id']}", use_container_width=True):
                     if cart_client_id:
-                        # Add to existing client's cart
                         if current_qty == 0:
                             try:
                                 success, message = db_manager.add_to_cart(
@@ -379,44 +407,55 @@ def display_product_results(results_df, user_id, db_manager):
                         else:
                             try:
                                 db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
-                                st.success("Updated quantity")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {str(e)}")
                     else:
-                        st.warning("Please select a client from the Home tab first")
+                        st.warning("Please select a client first")
             
             with col5:
-                # Price
-                st.markdown(f"**${product['price']:,.2f}**")
+                # Add to Cart button (only show when quantity is 0)
+                if current_qty == 0:
+                    if st.button("🛒 Add to Cart", key=f"add_cart_{product['id']}", 
+                               use_container_width=True, type="primary"):
+                        if cart_client_id:
+                            try:
+                                success, message = db_manager.add_to_cart(
+                                    user_id, product['id'], cart_client_id
+                                )
+                                if success:
+                                    st.success("Added to cart!")
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                        else:
+                            st.warning("Select a client first")
+                else:
+                    st.markdown(f"<div style='text-align: center; color: green; font-weight: bold;'>✅ In Cart</div>", 
+                              unsafe_allow_html=True)
             
             # Show collapsible details if toggled
             if st.session_state.get(f"show_details_{product['id']}", False):
                 with st.expander("Product Details", expanded=True):
-                    col_img, col_info = st.columns([1, 2])
+                    col_img_detail, col_info_detail = st.columns([1, 2])
                     
-                    with col_img:
+                    with col_img_detail:
                         # Try to show product image
-                        sku = product['sku']
-                        possible_paths = [
-                            f"pdf_screenshots/{sku}/{sku} P.1.png",
-                            f"pdf_screenshots/{sku}/{sku}_P.1.png",
-                            f"pdf_screenshots/{sku}/{sku}.png",
-                            f"pdf_screenshots/{sku}/page_1.png"
-                        ]
-                        
                         image_found = False
                         for image_path in possible_paths:
                             image_base64 = get_image_base64(image_path)
                             if image_base64:
-                                st.image(f"data:image/png;base64,{image_base64}", caption=sku, use_container_width=True)
+                                st.image(f"data:image/png;base64,{image_base64}", 
+                                       caption=sku, use_container_width=True)
                                 image_found = True
                                 break
                         
                         if not image_found:
                             st.markdown("📷 **No image available**")
                     
-                    with col_info:
+                    with col_info_detail:
                         st.markdown(f"**SKU:** {product['sku']}")
                         st.markdown(f"**Model:** {product.get('product_type', 'N/A')}")
                         st.markdown(f"**Price:** ${product['price']:,.2f}")
@@ -443,11 +482,15 @@ def display_product_results(results_df, user_id, db_manager):
             st.divider()
 
 def show_cart_page(user_id, db_manager):
-    """Display cart page - allow quotes without client selection"""
+    """Display cart page with proper SKU display and totals calculation"""
     
     st.markdown("### Shopping Cart")
     
-    # Show cart items even without client selection
+    # Initialize tax rate in session state if not exists
+    if 'tax_rate' not in st.session_state:
+        st.session_state.tax_rate = 8.0
+    
+    # Show cart items
     cart_items_df = pd.DataFrame()
     
     if st.session_state.get('selected_client'):
@@ -457,7 +500,6 @@ def show_cart_page(user_id, db_manager):
         except Exception as e:
             st.error(f"Error loading cart: {str(e)}")
     else:
-        # Show option to select client or create quote without client
         st.warning("⚠️ **No client selected.** Please select a client from the Home tab first.")
         return
     
@@ -467,9 +509,8 @@ def show_cart_page(user_id, db_manager):
     
     # Display cart items
     st.markdown("#### Items in Cart")
-    total = 0
     
-    # Header
+    # Header row
     col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
     with col1:
         st.markdown("**Product**")
@@ -484,76 +525,101 @@ def show_cart_page(user_id, db_manager):
     
     st.divider()
     
-    # Display each cart item - fixed to handle cart structure properly
-    for _, item in cart_items_df.iterrows():
-        # Create item dict with proper structure
-        item_dict = {
-            'id': item.get('id', item.get('cart_item_id', 0)),
-            'sku': item.get('sku', 'Unknown'),
-            'product_type': item.get('product_type', ''),
-            'price': item.get('price', 0),
-            'quantity': item.get('quantity', 1)
-        }
-        
+    # Calculate totals
+    subtotal = 0
+    
+    # Display each cart item with proper data access
+    for idx, item in cart_items_df.iterrows():
         col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
         
+        # Get item data safely
+        item_id = item.get('id') or item.get('cart_item_id', 0)
+        sku = item.get('sku', 'Unknown SKU')
+        product_type = item.get('product_type', '')
+        price = float(item.get('price', 0))
+        quantity = int(item.get('quantity', 1))
+        line_total = price * quantity
+        subtotal += line_total
+        
         with col1:
-            st.markdown(f"**{item_dict['sku']}**")
-            if item_dict.get('product_type'):
-                st.caption(item_dict['product_type'])
+            st.markdown(f"**{sku}**")
+            if product_type:
+                st.caption(product_type)
         
         with col2:
-            # Quantity controls
-            col_minus, col_qty, col_plus = st.columns([1, 2, 1])
-            with col_minus:
-                if st.button("−", key=f"cart_minus_{item_dict['id']}"):
-                    if item_dict['quantity'] > 1:
+            # Quantity controls in a more compact layout
+            qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
+            with qty_col1:
+                if st.button("−", key=f"cart_minus_{item_id}"):
+                    if quantity > 1:
                         try:
-                            db_manager.update_cart_quantity(item_dict['id'], item_dict['quantity'] - 1)
+                            db_manager.update_cart_quantity(item_id, quantity - 1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {str(e)}")
-            with col_qty:
-                st.markdown(f"<div style='text-align: center; font-weight: 500;'>{item_dict['quantity']}</div>", unsafe_allow_html=True)
-            with col_plus:
-                if st.button("+", key=f"cart_plus_{item_dict['id']}"):
+                    else:
+                        try:
+                            db_manager.remove_from_cart(item_id)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+            
+            with qty_col2:
+                st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 16px; padding: 8px;'>{quantity}</div>", 
+                          unsafe_allow_html=True)
+            
+            with qty_col3:
+                if st.button("+", key=f"cart_plus_{item_id}"):
                     try:
-                        db_manager.update_cart_quantity(item_dict['id'], item_dict['quantity'] + 1)
+                        db_manager.update_cart_quantity(item_id, quantity + 1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
         
         with col3:
-            st.markdown(f"${item_dict['price']:,.2f}")
+            st.markdown(f"${price:,.2f}")
         
         with col4:
-            line_total = item_dict['price'] * item_dict['quantity']
             st.markdown(f"**${line_total:,.2f}**")
-            total += line_total
         
         with col5:
-            if st.button("🗑️", key=f"remove_{item_dict['id']}", help="Remove from cart"):
+            if st.button("🗑️", key=f"remove_{item_id}", help="Remove from cart"):
                 try:
-                    db_manager.remove_from_cart(item_dict['id'])
+                    db_manager.remove_from_cart(item_id)
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
         
         st.divider()
     
-    # Summary
+    # Quote Summary with editable tax rate
     st.markdown("### Quote Summary")
     
     col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Tax rate input
+        tax_rate = st.number_input(
+            "Tax Rate (%)", 
+            min_value=0.0, 
+            max_value=50.0, 
+            value=st.session_state.tax_rate,
+            step=0.1,
+            format="%.1f",
+            key="tax_rate_input"
+        )
+        # Update session state
+        st.session_state.tax_rate = tax_rate
+    
     with col2:
-        subtotal = total
-        tax_rate = 0.08
-        tax = subtotal * tax_rate
-        final_total = subtotal + tax
+        # Calculate totals
+        tax_decimal = tax_rate / 100
+        tax_amount = subtotal * tax_decimal
+        total = subtotal + tax_amount
         
         st.markdown(f"**Subtotal:** ${subtotal:,.2f}")
-        st.markdown(f"**Tax ({tax_rate*100:.0f}%):** ${tax:,.2f}")
-        st.markdown(f"**Total:** ${final_total:,.2f}")
+        st.markdown(f"**Tax ({tax_rate:.1f}%):** ${tax_amount:,.2f}")
+        st.markdown(f"**Total:** ${total:,.2f}")
     
     # Generate Quote section
     st.markdown("### Generate Quote")
@@ -573,7 +639,7 @@ def show_cart_page(user_id, db_manager):
                 if success:
                     st.success(message)
                     
-                    # Show quote details inline instead of navigating
+                    # Show quote details inline
                     st.markdown("---")
                     st.markdown("### Generated Quote")
                     st.success(f"Quote #{quote_number} created successfully!")
@@ -581,7 +647,10 @@ def show_cart_page(user_id, db_manager):
                     # Store quote data for export
                     quote_data = {
                         'quote_number': quote_number,
-                        'total_amount': final_total,
+                        'total_amount': total,
+                        'subtotal': subtotal,
+                        'tax_rate': tax_rate,
+                        'tax_amount': tax_amount,
                         'created_at': datetime.now()
                     }
                     
@@ -801,7 +870,7 @@ def show_product_detail(product: Dict, user_id: str, db_manager):
     
     # Add to Cart button
     st.markdown("### ")
-    if st.button("Add to Cart", use_container_width=True, type="primary"):
+    if st.button("🛒 Add to Cart", use_container_width=True, type="primary"):
         if st.session_state.get('selected_client'):
             try:
                 success, message = db_manager.add_to_cart(
