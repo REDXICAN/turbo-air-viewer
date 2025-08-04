@@ -484,48 +484,57 @@ def show_cart_page(user_id, db_manager):
     
     st.divider()
     
-    # Display each cart item
+    # Display each cart item - fixed to handle cart structure properly
     for _, item in cart_items_df.iterrows():
+        # Create item dict with proper structure
+        item_dict = {
+            'id': item.get('id', item.get('cart_item_id', 0)),
+            'sku': item.get('sku', 'Unknown'),
+            'product_type': item.get('product_type', ''),
+            'price': item.get('price', 0),
+            'quantity': item.get('quantity', 1)
+        }
+        
         col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
         
         with col1:
-            st.markdown(f"**{item['sku']}**")
-            if item.get('product_type'):
-                st.caption(item['product_type'])
+            st.markdown(f"**{item_dict['sku']}**")
+            if item_dict.get('product_type'):
+                st.caption(item_dict['product_type'])
         
         with col2:
             # Quantity controls
             col_minus, col_qty, col_plus = st.columns([1, 2, 1])
             with col_minus:
-                if st.button("−", key=f"cart_minus_{item['id']}"):
-                    if item['quantity'] > 1:
+                if st.button("−", key=f"cart_minus_{item_dict['id']}"):
+                    if item_dict['quantity'] > 1:
                         try:
-                            db_manager.update_cart_quantity(item['id'], item['quantity'] - 1)
+                            db_manager.update_cart_quantity(item_dict['id'], item_dict['quantity'] - 1)
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {str(e)}")
             with col_qty:
-                st.markdown(f"<div style='text-align: center; font-weight: 500;'>{item['quantity']}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='text-align: center; font-weight: 500;'>{item_dict['quantity']}</div>", unsafe_allow_html=True)
             with col_plus:
-                if st.button("+", key=f"cart_plus_{item['id']}"):
+                if st.button("+", key=f"cart_plus_{item_dict['id']}"):
                     try:
-                        db_manager.update_cart_quantity(item['id'], item['quantity'] + 1)
+                        db_manager.update_cart_quantity(item_dict['id'], item_dict['quantity'] + 1)
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
         
         with col3:
-            st.markdown(f"${item['price']:,.2f}")
+            st.markdown(f"${item_dict['price']:,.2f}")
         
         with col4:
-            line_total = item['price'] * item['quantity']
+            line_total = item_dict['price'] * item_dict['quantity']
             st.markdown(f"**${line_total:,.2f}**")
             total += line_total
         
         with col5:
-            if st.button("🗑️", key=f"remove_{item['id']}", help="Remove from cart"):
+            if st.button("🗑️", key=f"remove_{item_dict['id']}", help="Remove from cart"):
                 try:
-                    db_manager.remove_from_cart(item['id'])
+                    db_manager.remove_from_cart(item_dict['id'])
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
@@ -829,13 +838,13 @@ def show_quote_summary(quote: Dict):
     for _, item in quote['items'].iterrows():
         col1, col2, col3 = st.columns([3, 1, 1])
         with col1:
-            st.markdown(f"**{item['sku']}**")
+            st.markdown(f"**{item.get('sku', 'Unknown')}**")
             if item.get('product_type'):
                 st.caption(f"Model: {item['product_type']}")
         with col2:
-            st.markdown(f"Qty: {item['quantity']}")
+            st.markdown(f"Qty: {item.get('quantity', 1)}")
         with col3:
-            st.markdown(format_price(item['price'] * item['quantity']))
+            st.markdown(format_price(item.get('price', 0) * item.get('quantity', 1)))
     
     # Pricing summary
     st.divider()

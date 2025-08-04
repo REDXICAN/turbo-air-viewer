@@ -123,6 +123,7 @@ def apply_mobile_css():
         padding: 12px 16px;
         font-weight: 500;
         transition: all 0.2s ease;
+        min-height: 60px;
     }}
     
     .stButton > button:hover {{
@@ -140,6 +141,17 @@ def apply_mobile_css():
     
     .stButton > button[kind="primary"]:hover {{
         background-color: #0066E0 !important;
+    }}
+    
+    /* Category button specific styling */
+    .category-button {{
+        min-height: 120px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        white-space: pre-wrap !important;
     }}
     
     /* Category card styling */
@@ -346,7 +358,8 @@ def search_bar_component(placeholder: str = "Search for products"):
     search_term = st.text_input(
         "Search",
         placeholder=placeholder,
-        key="main_search"
+        key="main_search",
+        label_visibility="collapsed"
     )
     return search_term
 
@@ -370,10 +383,10 @@ def category_grid(categories: List[Dict[str, any]]):
             if i + j < len(categories):
                 category = categories[i + j]
                 with cols[j]:
-                    # Single button with all category info
+                    # Single button with all category info - removed height parameter
                     button_text = f"{category.get('icon', '📦')}\n\n{category['name']}\n\n({category.get('count', 0)} items)"
                     
-                    if st.button(button_text, key=f"cat_btn_{category['name']}", use_container_width=True, height=120):
+                    if st.button(button_text, key=f"cat_btn_{category['name']}", use_container_width=True):
                         st.session_state.selected_category = category['name']
                         st.rerun()
 
@@ -510,7 +523,7 @@ def cart_item_component(item: Dict, db_manager=None):
     col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
     
     with col1:
-        st.markdown(f"**{item['sku']}**")
+        st.markdown(f"**{item.get('sku', 'Unknown')}**")
         st.caption(truncate_text(item.get('product_type', 'N/A'), 30))
     
     with col2:
@@ -529,10 +542,11 @@ def cart_item_component(item: Dict, db_manager=None):
                     st.rerun()
     
     with col3:
-        st.markdown(f"${item['price']:,.2f}")
+        st.markdown(f"${item.get('price', 0):,.2f}")
     
     with col4:
-        st.markdown(f"**${item['price'] * item['quantity']:,.2f}**")
+        total_price = item.get('price', 0) * item.get('quantity', 1)
+        st.markdown(f"**${total_price:,.2f}**")
         if st.button("🗑️", key=f"remove_{item['id']}", help="Remove from cart"):
             if db_manager:
                 db_manager.remove_from_cart(item['id'])
