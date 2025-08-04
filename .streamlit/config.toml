@@ -1,12 +1,19 @@
+# .streamlit/config.toml
+# Corrected configuration without deprecated options
+
 [server]
 fileWatcherType = "none"
 runOnSave = false
 maxUploadSize = 200
 enableCORS = true
 enableXsrfProtection = true
+# Remove headless = false if you have it (deprecated)
+# Remove enableStaticServing if you have it (deprecated)
 
 [global]
-disableWatchdogWarning = true
+dataFrameSerialization = "legacy"
+# Remove disableWatchdogWarning (deprecated)
+# Remove logLevel if you have it (use logging instead)
 
 [theme]
 primaryColor = "#20429c"
@@ -17,3 +24,17 @@ font = "sans serif"
 
 [browser]
 gatherUsageStats = false
+# Remove serverAddress if you have it (use server.address instead)
+# Remove serverPort if you have it (use server.port instead)
+
+[client]
+# Add this section for better performance
+caching = true
+displayEnabled = true
+showErrorDetails = true
+
+[runner]
+# Add this section for better app performance
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true

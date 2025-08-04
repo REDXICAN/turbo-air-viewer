@@ -554,7 +554,7 @@ class DatabaseManager:
     
     def create_quote_with_tax(self, user_id: str, client_id: int, cart_items_df: pd.DataFrame, 
                              tax_rate: float, tax_amount: float, total_amount: float) -> Tuple[bool, str, str]:
-        """Create a quote from cart items with custom tax rate - improved schema handling"""
+        """Create a quote from cart items with custom tax rate - Supabase schema compatible"""
         try:
             # Generate quote number
             quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -572,118 +572,128 @@ class DatabaseManager:
                 subtotal += price * quantity
             
             if self.is_online and self.supabase:
-                # Online mode - use full schema
+                # Online mode - use full schema (Supabase has all columns)
                 quote_data = {
                     'quote_number': quote_number,
                     'user_id': user_id,
                     'client_id': client_id,
-                    'subtotal': subtotal,
-                    'tax_rate': tax_rate / 100,  # Convert percentage to decimal
-                    'tax_amount': tax_amount,
-                    'total_amount': total_amount,
-                    'status': 'draft',
-                    'created_at': datetime.now().isoformat()
+                    'subtotal': float(subtotal),
+                    'tax_rate': float(tax_rate / 100),  # Convert percentage to decimal
+                    'tax_amount': float(tax_amount),
+                    'total_amount': float(total_amount),
+                    'status': 'draft'
                 }
                 
-                response = self.supabase.table('quotes').insert(quote_data).execute()
-                if response.data:
-                    # Create quote items
-                    quote_id = response.data[0]['id']
-                    for _, item in cart_items_df.iterrows():
-                        product_data = item.get('products', {})
-                        if isinstance(product_data, dict):
-                            price = float(product_data.get('price', 0))
-                            product_id = product_data.get('id', item.get('product_id'))
-                        else:
-                            price = float(item.get('price', 0))
-                            product_id = item.get('product_id')
-                        
-                        quantity = int(item.get('quantity', 1))
-                        
-                        item_data = {
-                            'quote_id': quote_id,
-                            'product_id': product_id,
-                            'quantity': quantity,
-                            'unit_price': price,
-                            'total_price': price * quantity
-                        }
-                        self.supabase.table('quote_items').insert(item_data).execute()
+                try:
+                    response = self.supabase.table('quotes').insert(quote_data).execute()
                     
-                    return True, f"Quote {quote_number} created successfully!", quote_number
-                else:
-                    return False, "Failed to create quote", None
+                    if response.data:
+                        # Create quote items
+                        quote_id = response.data[0]['id']
+                        quote_items = []
+                        
+                        for _, item in cart_items_df.iterrows():
+                            product_data = item.get('products', {})
+                            if isinstance(product_data, dict):
+                                price = float(product_data.get('price', 0))
+                                product_id = int(product_data.get('id', item.get('product_id', 0)))
+                            else:
+                                price = float(item.get('price', 0))
+                                product_id = int(item.get('product_id', 0))
+                            
+                            quantity = int(item.get('quantity', 1))
+                            
+                            quote_items.append({
+                                'quote_id': quote_id,
+                                'product_id': product_id,
+                                'quantity': quantity,
+                                'unit_price': price,
+                                'total_price': price * quantity
+                            })
+                        
+                        # Insert all quote items in batch
+                        if quote_items:
+                            self.supabase.table('quote_items').insert(quote_items).execute()
+                        
+                        return True, f"Quote {quote_number} created successfully!", quote_number
+                    else:
+                        return False, "Failed to create quote in Supabase", None
+                        
+                except Exception as supabase_error:
+                    print(f"Supabase error: {supabase_error}")
+                    return False, f"Supabase error: {str(supabase_error)}", None
             
             else:
                 # Offline mode - check schema and adapt
                 conn = self.get_connection()
                 cursor = conn.cursor()
                 
-                # Check what columns exist in the quotes table
-                cursor.execute("PRAGMA table_info(quotes)")
-                columns = [column[1] for column in cursor.fetchall()]
-                
-                # Build insert query based on available columns
-                if all(col in columns for col in ['subtotal', 'tax_rate', 'tax_amount']):
-                    # Full schema available
-                    cursor.execute("""
-                        INSERT INTO quotes (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_amount, status, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (quote_number, user_id, client_id, subtotal, tax_rate / 100, tax_amount, total_amount, 'draft', datetime.now().isoformat()))
-                else:
-                    # Fallback to basic schema
-                    cursor.execute("""
-                        INSERT INTO quotes (quote_number, user_id, client_id, total_amount, status, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    """, (quote_number, user_id, client_id, total_amount, 'draft', datetime.now().isoformat()))
-                
-                quote_id = cursor.lastrowid
-                
-                # Create quote items
-                for _, item in cart_items_df.iterrows():
-                    product_data = item.get('products', {})
-                    if isinstance(product_data, dict):
-                        price = float(product_data.get('price', 0))
-                        product_id = product_data.get('id', item.get('product_id'))
+                try:
+                    # Check what columns exist in the quotes table
+                    cursor.execute("PRAGMA table_info(quotes)")
+                    columns = [column[1] for column in cursor.fetchall()]
+                    
+                    # Build insert query based on available columns
+                    if all(col in columns for col in ['subtotal', 'tax_rate', 'tax_amount']):
+                        # Full schema available
+                        cursor.execute("""
+                            INSERT INTO quotes (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_amount, status, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (quote_number, user_id, client_id, subtotal, tax_rate / 100, tax_amount, total_amount, 'draft', datetime.now().isoformat()))
                     else:
-                        price = float(item.get('price', 0))
-                        product_id = item.get('product_id')
+                        # Fallback to basic schema
+                        cursor.execute("""
+                            INSERT INTO quotes (quote_number, user_id, client_id, total_amount, status, created_at)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (quote_number, user_id, client_id, total_amount, 'draft', datetime.now().isoformat()))
                     
-                    quantity = int(item.get('quantity', 1))
+                    quote_id = cursor.lastrowid
                     
-                    cursor.execute("""
-                        INSERT INTO quote_items (quote_id, product_id, quantity, unit_price, total_price)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (quote_id, product_id, quantity, price, price * quantity))
+                    # Create quote items
+                    for _, item in cart_items_df.iterrows():
+                        product_data = item.get('products', {})
+                        if isinstance(product_data, dict):
+                            price = float(product_data.get('price', 0))
+                            product_id = int(product_data.get('id', item.get('product_id', 0)))
+                        else:
+                            price = float(item.get('price', 0))
+                            product_id = int(item.get('product_id', 0))
+                        
+                        quantity = int(item.get('quantity', 1))
+                        
+                        cursor.execute("""
+                            INSERT INTO quote_items (quote_id, product_id, quantity, unit_price, total_price)
+                            VALUES (?, ?, ?, ?, ?)
+                        """, (quote_id, product_id, quantity, price, price * quantity))
+                    
+                    conn.commit()
+                    
+                    # Add to sync queue - store complete data for later sync
+                    quote_data_full = {
+                        'quote_number': quote_number,
+                        'user_id': user_id,
+                        'client_id': client_id,
+                        'subtotal': subtotal,
+                        'tax_rate': tax_rate / 100,
+                        'tax_amount': tax_amount,
+                        'total_amount': total_amount,
+                        'status': 'draft',
+                        'created_at': datetime.now().isoformat()
+                    }
+                    self._add_to_sync_queue(conn, 'quotes', 'insert', quote_data_full)
+                    
+                    return True, f"Quote {quote_number} created successfully!", quote_number
                 
-                conn.commit()
-                
-                # Add to sync queue
-                quote_data = {
-                    'quote_number': quote_number,
-                    'user_id': user_id,
-                    'client_id': client_id,
-                    'subtotal': subtotal,
-                    'tax_rate': tax_rate / 100,
-                    'tax_amount': tax_amount,
-                    'total_amount': total_amount,
-                    'status': 'draft',
-                    'created_at': datetime.now().isoformat()
-                }
-                self._add_to_sync_queue(conn, 'quotes', 'insert', quote_data)
-                
-                conn.close()
-                return True, f"Quote {quote_number} created successfully!", quote_number
+                finally:
+                    conn.close()
                 
         except Exception as e:
             print(f"Error creating quote: {str(e)}")
             return False, f"Error creating quote: {str(e)}", None
     
     def create_quote(self, user_id: str, client_id: int, cart_items_df: pd.DataFrame) -> Tuple[bool, str, str]:
-        """Create a quote from cart items - improved schema handling"""
+        """Create a quote from cart items - schema compatible"""
         try:
-            # Generate quote number
-            quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            
             # Calculate totals - handle both nested and direct price access
             total_amount = 0
             for _, item in cart_items_df.iterrows():
@@ -707,30 +717,55 @@ class DatabaseManager:
             return False, f"Error creating quote: {str(e)}", None
     
     def get_user_quotes(self, user_id: str, limit: int = None) -> pd.DataFrame:
-        """Get all quotes for a user"""
-        if self.is_online:
+        """Get all quotes for a user - schema compatible"""
+        if self.is_online and self.supabase:
             try:
+                # Get all columns from Supabase (schema has all columns)
                 query = self.supabase.table('quotes').select('*').eq('user_id', user_id).order('created_at', desc=True)
                 if limit:
                     query = query.limit(limit)
                 response = query.execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
+                
+                if response.data:
+                    df = pd.DataFrame(response.data)
+                    # Ensure numeric columns are properly typed
+                    numeric_cols = ['subtotal', 'tax_rate', 'tax_amount', 'total_amount']
+                    for col in numeric_cols:
+                        if col in df.columns:
+                            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                    return df
+                else:
+                    return pd.DataFrame()
+                    
+            except Exception as e:
+                print(f"Error fetching quotes from Supabase: {e}")
+                # Fall through to SQLite
         
         # Use SQLite
         conn = self.get_connection()
-        query = """
-            SELECT * FROM quotes 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC
-        """
-        if limit:
-            query += f" LIMIT {limit}"
-        
-        df = pd.read_sql_query(query, conn, params=(user_id,))
-        conn.close()
-        return df
+        try:
+            query = """
+                SELECT * FROM quotes 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC
+            """
+            if limit:
+                query += f" LIMIT {limit}"
+            
+            df = pd.read_sql_query(query, conn, params=(user_id,))
+            
+            # Add missing columns with default values if they don't exist
+            if not df.empty:
+                if 'subtotal' not in df.columns:
+                    df['subtotal'] = df.get('total_amount', 0) / 1.08
+                if 'tax_rate' not in df.columns:
+                    df['tax_rate'] = 0.08
+                if 'tax_amount' not in df.columns:
+                    df['tax_amount'] = df.get('total_amount', 0) - df.get('subtotal', 0)
+            
+            return df
+        finally:
+            conn.close()
     
     def add_search_history(self, user_id: str, search_term: str):
         """Add search term to history"""
