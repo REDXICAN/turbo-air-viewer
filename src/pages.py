@@ -217,6 +217,61 @@ def show_search_page(user_id, db_manager):
     # Search bar
     search_term = search_bar_component("Search by SKU, category or description")
     
+    # Real-time search results as user types
+    if search_term and len(search_term) >= 1:
+        # Show search suggestions/results in real-time
+        try:
+            results_df = db_manager.search_products(search_term)
+            if not results_df.empty and len(search_term) >= 2:
+                # Show compact search results with thumbnails
+                st.markdown("### Search Suggestions")
+                
+                # Display up to 5 quick results
+                for idx, product in results_df.head(5).iterrows():
+                    col_img, col_info, col_price, col_action = st.columns([1, 3, 1, 1])
+                    
+                    with col_img:
+                        # Try to show product thumbnail
+                        sku = product['sku']
+                        possible_paths = [
+                            f"pdf_screenshots/{sku}/{sku} P.1.png",
+                            f"pdf_screenshots/{sku}/{sku}_P.1.png",
+                            f"pdf_screenshots/{sku}/{sku}.png",
+                            f"pdf_screenshots/{sku}/page_1.png"
+                        ]
+                        
+                        image_found = False
+                        for image_path in possible_paths:
+                            image_base64 = get_image_base64(image_path)
+                            if image_base64:
+                                st.image(f"data:image/png;base64,{image_base64}", 
+                                       use_container_width=True)
+                                image_found = True
+                                break
+                        
+                        if not image_found:
+                            st.markdown("<div style='width:60px;height:60px;background:#f0f0f0;border-radius:8px;display:flex;align-items:center;justify-content:center;'>📷</div>", unsafe_allow_html=True)
+                    
+                    with col_info:
+                        st.markdown(f"**{product['sku']}**")
+                        if product.get('product_type'):
+                            st.caption(product['product_type'])
+                    
+                    with col_price:
+                        st.markdown(f"${product['price']:,.2f}")
+                    
+                    with col_action:
+                        if st.button("View", key=f"view_{product['id']}", use_container_width=True):
+                            # Set search term and show full results
+                            st.session_state["main_search"] = search_term
+                            st.rerun()
+                
+                if len(results_df) > 5:
+                    st.caption(f"... and {len(results_df) - 5} more results")
+        except Exception as e:
+            # Silent error handling for search suggestions
+            pass
+    
     # Handle category selection or show all categories
     if st.session_state.get('selected_category'):
         # Show back button and selected category products
@@ -368,7 +423,7 @@ def display_product_results(results_df, user_id, db_manager):
             
             with col2:
                 # Minus button
-                if st.button("−", key=f"minus_{product['id']}", use_container_width=True, 
+                if st.button("➖", key=f"minus_{product['id']}", use_container_width=True, 
                            disabled=(current_qty == 0)):
                     if current_qty > 1:
                         try:
@@ -390,7 +445,7 @@ def display_product_results(results_df, user_id, db_manager):
             
             with col4:
                 # Plus button
-                if st.button("+", key=f"plus_{product['id']}", use_container_width=True):
+                if st.button("➕", key=f"plus_{product['id']}", use_container_width=True):
                     if cart_client_id:
                         if current_qty == 0:
                             try:
@@ -532,11 +587,18 @@ def show_cart_page(user_id, db_manager):
     for idx, item in cart_items_df.iterrows():
         col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
         
-        # Get item data safely
+        # Get item data safely - try multiple possible column names
         item_id = item.get('id') or item.get('cart_item_id', 0)
-        sku = item.get('sku', 'Unknown SKU')
-        product_type = item.get('product_type', '')
-        price = float(item.get('price', 0))
+        sku = item.get('sku') or item.get('product_sku', 'Unknown SKU')
+        product_type = item.get('product_type') or item.get('model', '')
+        
+        # Try different price column names
+        price = 0
+        for price_col in ['price', 'unit_price', 'product_price']:
+            if price_col in item and item[price_col] is not None:
+                price = float(item[price_col])
+                break
+        
         quantity = int(item.get('quantity', 1))
         line_total = price * quantity
         subtotal += line_total
@@ -550,7 +612,7 @@ def show_cart_page(user_id, db_manager):
             # Quantity controls in a more compact layout
             qty_col1, qty_col2, qty_col3 = st.columns([1, 2, 1])
             with qty_col1:
-                if st.button("−", key=f"cart_minus_{item_id}"):
+                if st.button("➖", key=f"cart_minus_{item_id}"):
                     if quantity > 1:
                         try:
                             db_manager.update_cart_quantity(item_id, quantity - 1)
@@ -560,6 +622,10 @@ def show_cart_page(user_id, db_manager):
                     else:
                         try:
                             db_manager.remove_from_cart(item_id)
+                            # Update cart count in session state
+                            if st.session_state.get('selected_client'):
+                                cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+                                st.session_state.cart_count = len(cart_items_df) if not cart_items_df.empty else 0
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error: {str(e)}")
@@ -569,7 +635,7 @@ def show_cart_page(user_id, db_manager):
                           unsafe_allow_html=True)
             
             with qty_col3:
-                if st.button("+", key=f"cart_plus_{item_id}"):
+                if st.button("➕", key=f"cart_plus_{item_id}"):
                     try:
                         db_manager.update_cart_quantity(item_id, quantity + 1)
                         st.rerun()
@@ -586,6 +652,10 @@ def show_cart_page(user_id, db_manager):
             if st.button("🗑️", key=f"remove_{item_id}", help="Remove from cart"):
                 try:
                     db_manager.remove_from_cart(item_id)
+                    # Update cart count in session state
+                    if st.session_state.get('selected_client'):
+                        cart_items_df = db_manager.get_cart_items(user_id, st.session_state.selected_client)
+                        st.session_state.cart_count = len(cart_items_df) if not cart_items_df.empty else 0
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
