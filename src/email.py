@@ -1,6 +1,6 @@
 """
 Email functionality for Turbo Air Equipment Viewer
-Handles quote email sending with improved error handling and debugging
+Handles quote email sending with CC support, improved error handling and production-ready features
 """
 
 import streamlit as st
@@ -14,7 +14,7 @@ from typing import Dict, Tuple
 import io
 
 class EmailService:
-    """Email service class for handling SMTP operations"""
+    """Email service class for handling SMTP operations with CC support"""
     
     def __init__(self):
         """Initialize email service with configuration from secrets"""
@@ -79,10 +79,10 @@ class EmailService:
         except Exception as e:
             return False, f"Unexpected error: {str(e)}"
     
-    def send_quote_email(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, 
-                        client_data: Dict, additional_message: str = "", 
+    def send_quote_email_with_cc(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, 
+                        client_data: Dict, cc_email: str = None, additional_message: str = "", 
                         attach_pdf: bool = True, attach_excel: bool = False) -> Tuple[bool, str]:
-        """Send quote email with attachments"""
+        """Send quote email with CC support and attachments"""
         
         if not self.configured:
             return False, "Email service not configured"
@@ -92,6 +92,8 @@ class EmailService:
             msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = recipient_email
+            if cc_email:
+                msg['Cc'] = cc_email
             msg['Subject'] = f"Quote {quote_data.get('quote_number', 'N/A')} - Turbo Air Equipment"
             
             # Create email body
@@ -132,14 +134,39 @@ class EmailService:
             server.starttls()
             server.login(self.sender_email, self.sender_password)
             
+            # Prepare recipient list (To + CC)
+            recipients = [recipient_email]
+            if cc_email:
+                recipients.append(cc_email)
+            
             text = msg.as_string()
-            server.sendmail(self.sender_email, recipient_email, text)
+            server.sendmail(self.sender_email, recipients, text)
             server.quit()
             
-            return True, f"Quote sent successfully to {recipient_email}"
+            # Create success message
+            success_msg = f"Quote sent successfully to {recipient_email}"
+            if cc_email:
+                success_msg += f" (CC: {cc_email})"
+                
+            return True, success_msg
             
         except Exception as e:
             return False, f"Failed to send email: {str(e)}"
+    
+    def send_quote_email(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, 
+                        client_data: Dict, additional_message: str = "", 
+                        attach_pdf: bool = True, attach_excel: bool = False) -> Tuple[bool, str]:
+        """Send quote email (backward compatibility - no CC)"""
+        return self.send_quote_email_with_cc(
+            recipient_email=recipient_email,
+            quote_data=quote_data,
+            items_df=items_df,
+            client_data=client_data,
+            cc_email=None,
+            additional_message=additional_message,
+            attach_pdf=attach_pdf,
+            attach_excel=attach_excel
+        )
     
     def _create_email_body(self, quote_data: Dict, items_df: pd.DataFrame, 
                           client_data: Dict, additional_message: str = "") -> str:
@@ -283,7 +310,7 @@ def test_email_connection() -> Tuple[bool, str]:
         return False, f"Test connection error: {str(e)}"
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote dialog with improved UI and error handling"""
+    """Show email quote dialog with CC support, improved UI and error handling"""
     
     st.markdown("### Send Quote via Email")
     
@@ -296,48 +323,31 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         st.error("❌ Email not configured")
         return
     
-    # Test connection section
-    with st.expander("🔍 Test Email Connection", expanded=False):
-        if st.button("Test SMTP Connection", key="test_smtp_connection", use_container_width=True):
-            with st.spinner("Testing connection..."):
-                try:
-                    success, message = test_email_connection()
-                    
-                    if success:
-                        st.success(f"✅ {message}")
-                    else:
-                        st.error(f"❌ {message}")
-                        
-                        # Show troubleshooting tips for common issues
-                        if "app password" in message.lower() or "authentication" in message.lower():
-                            st.markdown("**Troubleshooting:**")
-                            st.markdown("- Make sure 2FA is enabled on your Gmail account")
-                            st.markdown("- Use a 16-character app password, not your regular password")
-                            st.markdown("- Generate a new app password if needed")
-                            st.markdown("- Remove spaces from the app password")
-                            
-                except Exception as e:
-                    st.error(f"❌ Test failed with error: {str(e)}")
-                    st.exception(e)  # Show full traceback for debugging
-    
-    # Email form
+    # Email form with CC support
     with st.form("email_quote_form"):
         # Recipient email
         recipient_email = st.text_input(
-            "Recipient Email:",
+            "📧 To (Recipient Email):",
             value=client_data.get('contact_email', ''),
             placeholder="Enter recipient email address"
         )
         
+        # CC email - NEW FEATURE
+        cc_email = st.text_input(
+            "📋 CC (Optional):",
+            value="andres@turboairmexico.com",  # Default CC
+            placeholder="Enter CC email address (optional)"
+        )
+        
         # Additional message
         additional_message = st.text_area(
-            "Additional Message (optional):",
+            "💬 Additional Message (optional):",
             placeholder="Add any additional notes or message...",
             height=100
         )
         
         # Attachment options
-        st.markdown("**Attachments:**")
+        st.markdown("**📎 Attachments:**")
         col1, col2 = st.columns(2)
         with col1:
             attach_pdf = st.checkbox("📄 Attach PDF", value=True)
@@ -353,27 +363,37 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
             elif not recipient_email.count('@') == 1 or not '.' in recipient_email.split('@')[1]:
                 st.error("Please enter a valid email address")
             else:
-                with st.spinner(f"Sending quote to {recipient_email}..."):
-                    try:
-                        success, message = email_service.send_quote_email(
-                            recipient_email=recipient_email,
-                            quote_data=quote_data,
-                            items_df=items_df,
-                            client_data=client_data,
-                            additional_message=additional_message,
-                            attach_pdf=attach_pdf,
-                            attach_excel=attach_excel
-                        )
-                        
-                        if success:
-                            st.success(f"✅ {message}")
-                            st.balloons()
-                        else:
-                            st.error(f"❌ {message}")
+                # Validate CC email if provided
+                cc_valid = True
+                if cc_email.strip():
+                    if not cc_email.count('@') == 1 or not '.' in cc_email.split('@')[1]:
+                        st.error("Please enter a valid CC email address")
+                        cc_valid = False
+                
+                if cc_valid:
+                    with st.spinner(f"Sending quote to {recipient_email}..."):
+                        try:
+                            success, message = email_service.send_quote_email_with_cc(
+                                recipient_email=recipient_email,
+                                cc_email=cc_email.strip() if cc_email.strip() else None,
+                                quote_data=quote_data,
+                                items_df=items_df,
+                                client_data=client_data,
+                                additional_message=additional_message,
+                                attach_pdf=attach_pdf,
+                                attach_excel=attach_excel
+                            )
                             
-                    except Exception as e:
-                        st.error(f"❌ Failed to send email: {str(e)}")
-                        st.exception(e)  # Show full traceback for debugging
+                            if success:
+                                st.success(f"✅ {message}")
+                                if cc_email.strip():
+                                    st.info(f"📋 CC sent to: {cc_email}")
+                                st.balloons()
+                            else:
+                                st.error(f"❌ {message}")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Failed to send email: {str(e)}")
     
     # Cancel button outside form
     if st.button("Cancel", key="cancel_email"):
