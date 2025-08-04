@@ -40,6 +40,9 @@ test_rls.py
 test_resetRLS.py
 test_database.py
 fix_database.py
+test_secrets.py
+test_email.py
+send_test_email.py
 
 # Virtual environments
 venv/

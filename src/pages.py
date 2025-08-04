@@ -856,7 +856,7 @@ def show_cart_page(user_id, db_manager):
     # Export Options section
     st.markdown("### Export Options")
     
-    # IMPROVED EMAIL DIAGNOSTICS
+    # IMPROVED EMAIL DIAGNOSTICS WITH DEBUG VERSION
     with st.expander("📧 Email Diagnostics", expanded=False):
         st.markdown("**Check email configuration:**")
         
@@ -868,18 +868,84 @@ def show_cart_page(user_id, db_manager):
                     st.info(f"📧 Sender: {email_service.sender_email}")
                     st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
                     
-                    # Test connection button
-                    if st.button("🔍 Test SMTP Connection"):
-                        with st.spinner("Testing connection..."):
-                            success, message = test_email_connection()
-                            if success:
-                                st.success(f"✅ {message}")
+                    # IMPROVED TEST CONNECTION BUTTON WITH FULL DEBUG
+                    if st.button("🔍 Test SMTP Connection", key="test_smtp_debug"):
+                        st.write("🔍 Button clicked - starting test...")
+                        
+                        try:
+                            st.write("📝 Step 1: Getting email service...")
+                            email_service_test = get_email_service()
+                            st.write(f"✅ Email service created: {type(email_service_test)}")
+                            
+                            st.write("📝 Step 2: Checking configuration...")
+                            st.write(f"✅ Configured: {email_service_test.configured}")
+                            
+                            if email_service_test.configured:
+                                st.write(f"✅ Server: {email_service_test.smtp_server}:{email_service_test.smtp_port}")
+                                st.write(f"✅ Email: {email_service_test.sender_email}")
+                                
+                                st.write("📝 Step 3: Testing connection...")
+                                with st.spinner("Testing connection..."):
+                                    success, message = test_email_connection()
+                                    
+                                st.write(f"📝 Step 4: Got result - Success: {success}")
+                                
+                                if success:
+                                    st.success(f"✅ {message}")
+                                    
+                                    # BONUS: Send actual test email
+                                    st.write("📝 Step 5: Sending test email...")
+                                    try:
+                                        import smtplib
+                                        from email.mime.text import MIMEText
+                                        
+                                        server = smtplib.SMTP(email_service_test.smtp_server, email_service_test.smtp_port)
+                                        server.starttls()
+                                        server.login(email_service_test.sender_email, email_service_test.sender_password)
+                                        
+                                        msg = MIMEText("Test from Streamlit app - Cart page diagnostics!")
+                                        msg['Subject'] = "Streamlit Cart Test"
+                                        msg['From'] = email_service_test.sender_email
+                                        msg['To'] = "andres.xbgo@gmail.com"
+                                        
+                                        server.send_message(msg)
+                                        server.quit()
+                                        
+                                        st.success("✅ Test email sent to andres.xbgo@gmail.com!")
+                                        st.balloons()
+                                        
+                                    except Exception as send_error:
+                                        st.error(f"❌ Send error: {str(send_error)}")
+                                        st.exception(send_error)
+                                else:
+                                    st.error(f"❌ {message}")
+                                    
+                                    # Show troubleshooting tips for common issues
+                                    if "app password" in message.lower() or "authentication" in message.lower():
+                                        st.markdown("**Troubleshooting:**")
+                                        st.markdown("- Make sure 2FA is enabled on your Gmail account")
+                                        st.markdown("- Use a 16-character app password, not your regular password")
+                                        st.markdown("- Generate a new app password if needed")
+                                        st.markdown("- Remove spaces from the app password")
                             else:
-                                st.error(f"❌ {message}")
-                                st.markdown("**Troubleshooting:**")
-                                st.markdown("- Make sure 2FA is enabled on your Gmail account")
-                                st.markdown("- Use a 16-character app password, not your regular password")
-                                st.markdown("- Check that 'Less secure app access' is disabled (you should use app passwords)")
+                                st.error("❌ Email service not configured")
+                                
+                        except Exception as e:
+                            st.error(f"❌ Debug error: {str(e)}")
+                            st.write(f"Error type: {type(e)}")
+                            st.exception(e)  # This will show the full traceback
+                            
+                            # Additional debugging
+                            st.write("🔍 Additional debug info:")
+                            try:
+                                import streamlit as st_debug
+                                email_secrets = st_debug.secrets.get("email", {})
+                                st.write(f"Secrets available: {list(email_secrets.keys())}")
+                            except Exception as secrets_error:
+                                st.write(f"Secrets error: {secrets_error}")
+                        
+                        st.write("✅ Debug test complete")
+                        
                 else:
                     st.error("❌ Email service not configured")
                     st.markdown("**Required in secrets.toml:**")
