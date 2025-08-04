@@ -417,7 +417,7 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
         return False, f"Email sending failed: {str(e)}"
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote dialog with PDF/Excel testing and email form"""
+    """Show email quote dialog with clean form - no test buttons"""
     
     st.markdown("### Send Quote via Email")
     
@@ -501,65 +501,6 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                     except Exception as e:
                         st.error(f"❌ Email sending failed: {str(e)}")
                         st.exception(e)
-    
-    # TESTING BUTTONS BELOW THE FORM
-    st.markdown("---")
-    st.markdown("### Test File Generation")
-    st.markdown("Test individual file generation to ensure attachments work:")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📄 Test PDF Generation", use_container_width=True, key="test_pdf_btn"):
-            with st.spinner("Testing PDF generation..."):
-                success, message, file_size = test_pdf_generation(quote_data, items_df, client_data)
-                
-                if success:
-                    st.success(f"✅ {message}")
-                    st.info(f"📊 File size: {file_size:,} bytes ({file_size/1024:.1f} KB)")
-                    
-                    # Offer download
-                    try:
-                        from .export import generate_pdf_quote
-                        pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
-                        st.download_button(
-                            "📥 Download Test PDF",
-                            pdf_buffer.getvalue(),
-                            file_name=f"Test_Quote_{quote_data.get('quote_number', 'N/A')}.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                            key="download_test_pdf"
-                        )
-                    except Exception as e:
-                        st.error(f"Download failed: {str(e)}")
-                else:
-                    st.error(f"❌ {message}")
-    
-    with col2:
-        if st.button("📊 Test Excel Generation", use_container_width=True, key="test_excel_btn"):
-            with st.spinner("Testing Excel generation..."):
-                success, message, file_size = test_excel_generation(quote_data, items_df, client_data)
-                
-                if success:
-                    st.success(f"✅ {message}")
-                    st.info(f"📊 File size: {file_size:,} bytes ({file_size/1024:.1f} KB)")
-                    
-                    # Offer download
-                    try:
-                        from .export import generate_excel_quote
-                        excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
-                        st.download_button(
-                            "📥 Download Test Excel",
-                            excel_buffer.getvalue(),
-                            file_name=f"Test_Quote_{quote_data.get('quote_number', 'N/A')}.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            key="download_test_excel"
-                        )
-                    except Exception as e:
-                        st.error(f"Download failed: {str(e)}")
-                else:
-                    st.error(f"❌ {message}")
     
     # Cancel button
     if st.button("Cancel", key="cancel_email"):
