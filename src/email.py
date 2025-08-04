@@ -209,73 +209,58 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     """Show email quote dialog with proper state management"""
     st.markdown("#### Send Quote via Email")
     
-    # Initialize session state for email dialog
-    if 'email_dialog_open' not in st.session_state:
-        st.session_state.email_dialog_open = True
+    # Use form to prevent collapse issues
+    with st.form("email_quote_form", clear_on_submit=False):
+        # Email input
+        recipient_email = st.text_input(
+            "Recipient Email:", 
+            value=client_data.get('contact_email', ''),
+            placeholder="Enter recipient email address"
+        )
+        
+        # Additional message
+        additional_message = st.text_area(
+            "Additional Message (optional):",
+            placeholder="Add any additional notes or message...",
+            height=100
+        )
+        
+        # Form buttons
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            send_email = st.form_submit_button("Send Email", type="primary", use_container_width=True)
+        
+        with col2:
+            cancel_email = st.form_submit_button("Cancel", use_container_width=True)
     
-    if not st.session_state.email_dialog_open:
-        return
-    
-    # Email input with session state
-    if 'recipient_email' not in st.session_state:
-        st.session_state.recipient_email = client_data.get('contact_email', '')
-    
-    recipient_email = st.text_input(
-        "Recipient Email:", 
-        value=st.session_state.recipient_email,
-        placeholder="Enter recipient email address",
-        key="email_recipient_input"
-    )
-    
-    # Additional message with session state
-    if 'additional_message' not in st.session_state:
-        st.session_state.additional_message = ""
-    
-    additional_message = st.text_area(
-        "Additional Message (optional):",
-        value=st.session_state.additional_message,
-        placeholder="Add any additional notes or message...",
-        key="email_message_input",
-        height=100
-    )
-    
-    # Update session state
-    st.session_state.recipient_email = recipient_email
-    st.session_state.additional_message = additional_message
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("Send Email", type="primary", use_container_width=True):
-            if recipient_email and '@' in recipient_email:
-                email_service = EmailService()
-                if email_service.configured:
-                    with st.spinner("Sending email..."):
-                        success, message = email_service.send_quote_email(
-                            recipient_email, quote_data, items_df, client_data, additional_message
-                        )
-                    
-                    if success:
-                        st.success(message)
-                        # Clear the form after successful send
-                        st.session_state.recipient_email = ""
-                        st.session_state.additional_message = ""
-                        st.session_state.email_dialog_open = False
-                    else:
-                        st.error(message)
+    # Handle form submission
+    if send_email:
+        if recipient_email and '@' in recipient_email:
+            email_service = EmailService()
+            if email_service.configured:
+                with st.spinner("Sending email..."):
+                    success, message = email_service.send_quote_email(
+                        recipient_email, quote_data, items_df, client_data, additional_message
+                    )
+                
+                if success:
+                    st.success(message)
+                    st.balloons()
                 else:
-                    st.error("Email service not configured. Please check your secrets.")
+                    st.error(message)
             else:
-                st.error("Please enter a valid email address")
+                st.error("Email service not configured. Please check your secrets.")
+        else:
+            st.error("Please enter a valid email address")
     
-    with col2:
-        if st.button("Cancel", use_container_width=True):
-            st.session_state.email_dialog_open = False
-            st.session_state.recipient_email = ""
-            st.session_state.additional_message = ""
-            st.rerun()
+    if cancel_email:
+        st.info("Email cancelled.")
+        # You might want to close the dialog here if using modal pattern
+
+
 def test_email_connection():
-    """Test email connection"""
+    """Test email connection - for debugging"""
     try:
         email_service = EmailService()
         if email_service.configured:
@@ -288,6 +273,7 @@ def test_email_connection():
             return False, "Email not configured"
     except Exception as e:
         return False, f"Connection failed: {e}"
+
 def get_email_service() -> Optional[EmailService]:
     """Get email service instance"""
     try:
