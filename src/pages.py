@@ -212,7 +212,7 @@ def show_search_page(user_id, db_manager):
         except Exception as e:
             st.warning(f"Could not load client info: {str(e)}")
     else:
-        st.info("💡 **Tip:** You can browse and add products to cart, then select/add client details when generating the quote.")
+        st.info("💡 **Tip:** Select a client from the Home tab before adding products to cart.")
     
     # Search bar
     search_term = search_bar_component("Search by SKU, category or description")
@@ -384,30 +384,7 @@ def display_product_results(results_df, user_id, db_manager):
                             except Exception as e:
                                 st.error(f"Error: {str(e)}")
                     else:
-                        # Create a temporary cart session without client
-                        st.info("💡 Product noted! Go to Cart to add client details and generate quote.")
-                        # For now, we'll store in session state as a temporary cart
-                        if 'temp_cart' not in st.session_state:
-                            st.session_state.temp_cart = []
-                        
-                        # Check if product already in temp cart
-                        found_in_temp = False
-                        for i, temp_item in enumerate(st.session_state.temp_cart):
-                            if temp_item['product_id'] == product['id']:
-                                st.session_state.temp_cart[i]['quantity'] += 1
-                                found_in_temp = True
-                                break
-                        
-                        if not found_in_temp:
-                            st.session_state.temp_cart.append({
-                                'product_id': product['id'],
-                                'sku': product['sku'],
-                                'product_type': product.get('product_type', ''),
-                                'price': product['price'],
-                                'quantity': 1
-                            })
-                        
-                        st.session_state.cart_count = sum(item['quantity'] for item in st.session_state.temp_cart)
+                        st.warning("Please select a client from the Home tab first")
             
             with col5:
                 # Price
@@ -481,11 +458,8 @@ def show_cart_page(user_id, db_manager):
             st.error(f"Error loading cart: {str(e)}")
     else:
         # Show option to select client or create quote without client
-        st.info("💡 **Tip:** You can create a quote without selecting a client first, then add client details when sending the quote.")
-        
-        # Try to load any cart items (if user has been adding without client selection)
-        # This would require modifying the add_to_cart logic to work without client
-        pass
+        st.warning("⚠️ **No client selected.** Please select a client from the Home tab first.")
+        return
     
     if cart_items_df.empty:
         empty_state("🛒", "Cart is Empty", "Add products using the Search tab to create a quote")
@@ -575,83 +549,73 @@ def show_cart_page(user_id, db_manager):
     # Generate Quote section
     st.markdown("### Generate Quote")
     
-    if not st.session_state.get('selected_client'):
-        # Allow quote generation without client, collect client info
-        st.info("💼 **Client Information Required for Quote**")
-        
-        with st.expander("Enter Client Details", expanded=True):
-            with st.form("quote_client_form"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    company = st.text_input("Company Name*", key="quote_company")
-                    contact_email = st.text_input("Contact Email*", key="quote_email")
-                with col2:
-                    contact_name = st.text_input("Contact Name", key="quote_contact")
-                    contact_phone = st.text_input("Contact Phone", key="quote_phone")
+    if st.button("Generate Quote", use_container_width=True, type="primary"):
+        with st.spinner("Generating quote..."):
+            try:
+                # Get client data
+                client_data = db_manager.get_user_clients(user_id)
+                client_data = client_data[client_data['id'] == st.session_state.selected_client].iloc[0].to_dict()
                 
-                if st.form_submit_button("Generate Quote", use_container_width=True, type="primary"):
-                    if company and contact_email:
-                        # Create client and generate quote
+                # Create quote
+                success, message, quote_number = db_manager.create_quote(
+                    user_id, st.session_state.selected_client, cart_items_df
+                )
+                
+                if success:
+                    st.success(message)
+                    
+                    # Show quote details inline instead of navigating
+                    st.markdown("---")
+                    st.markdown("### Generated Quote")
+                    st.success(f"Quote #{quote_number} created successfully!")
+                    
+                    # Store quote data for export
+                    quote_data = {
+                        'quote_number': quote_number,
+                        'total_amount': final_total,
+                        'created_at': datetime.now()
+                    }
+                    
+                    # Export options
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
                         try:
-                            # Create new client
-                            success, message = db_manager.create_client(
-                                user_id, company, contact_name, contact_email, contact_phone
+                            excel_buffer = generate_excel_quote(quote_data, cart_items_df, client_data)
+                            st.download_button(
+                                "📊 Download Excel",
+                                excel_buffer.getvalue(),
+                                file_name=f"Quote_{quote_number}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True
                             )
-                            
-                            if success:
-                                # Get the new client ID and generate quote
-                                clients_df = db_manager.get_user_clients(user_id)
-                                new_client = clients_df[clients_df['company'] == company].iloc[0]
-                                
-                                success, message, quote_number = db_manager.create_quote(
-                                    user_id, new_client['id'], cart_items_df
-                                )
-                                
-                                if success:
-                                    st.success(f"Quote #{quote_number} created successfully!")
-                                    st.session_state.selected_client = new_client['id']
-                                    
-                                    # Show quote details and email options
-                                    st.markdown("---")
-                                    st.markdown("### Quote Created Successfully!")
-                                    st.success(f"**Quote Number:** {quote_number}")
-                                    st.info("Quote export and email options will be available in future updates.")
-                                    
-                                else:
-                                    st.error(message)
-                            else:
-                                st.error(message)
-                                
                         except Exception as e:
-                            st.error(f"Error creating quote: {str(e)}")
-                    else:
-                        st.error("Company name and contact email are required")
-    else:
-        # Generate quote for selected client
-        if st.button("Generate Quote", use_container_width=True, type="primary"):
-            with st.spinner("Generating quote..."):
-                try:
-                    # Get client data
-                    client_data = db_manager.get_user_clients(user_id)
-                    client_data = client_data[client_data['id'] == st.session_state.selected_client].iloc[0].to_dict()
+                            st.error(f"Excel export error: {e}")
                     
-                    # Create quote
-                    success, message, quote_number = db_manager.create_quote(
-                        user_id, st.session_state.selected_client, cart_items_df
-                    )
+                    with col2:
+                        try:
+                            pdf_buffer = generate_pdf_quote(quote_data, cart_items_df, client_data)
+                            st.download_button(
+                                "📄 Download PDF",
+                                pdf_buffer.getvalue(),
+                                file_name=f"Quote_{quote_number}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                        except Exception as e:
+                            st.error(f"PDF export error: {e}")
                     
-                    if success:
-                        st.success(message)
-                        
-                        # Show quote details inline instead of navigating
-                        st.markdown("---")
-                        st.markdown("### Generated Quote")
-                        st.success(f"Quote #{quote_number} created successfully!")
-                        st.info("Quote export and email options will be available in future updates.")
-                    else:
-                        st.error(message)
-                except Exception as e:
-                    st.error(f"Error generating quote: {str(e)}")
+                    with col3:
+                        if st.button("📧 Email Quote", use_container_width=True):
+                            show_email_quote_dialog(quote_data, cart_items_df, client_data)
+                    
+                    if st.button("Clear Cart and Start New Quote", use_container_width=True):
+                        db_manager.clear_cart(user_id, st.session_state.selected_client)
+                        st.rerun()
+                else:
+                    st.error(message)
+            except Exception as e:
+                st.error(f"Error generating quote: {str(e)}")
 
 def show_profile_page(user, auth_manager, sync_manager, db_manager):
     """Display profile page with user settings and admin functions"""

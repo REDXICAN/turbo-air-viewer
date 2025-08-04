@@ -10,17 +10,15 @@ import atexit
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# Import core services directly (avoid __init__.py circular imports)
-from src.config import Config, init_session_state
+# Import from minimal __init__.py
+from src import Config, init_session_state
+
+# Import other modules directly to avoid circular dependencies
 from src.auth import AuthManager
 from src.database_manager import DatabaseManager
 from src.sync import SyncManager
 from src.persistence import PersistenceManager
-
-# Import UI components directly
 from src.ui import apply_mobile_css
-
-# Import page functions directly
 from src.pages import (
     show_home_page,
     show_search_page,
@@ -47,10 +45,6 @@ def initialize_session_state():
     if 'session_initialized' not in st.session_state:
         st.session_state.session_initialized = True
         
-        # Try to restore session from browser storage (if available)
-        # This would normally use browser localStorage but Streamlit doesn't support it
-        # Instead, we'll use Streamlit's built-in session persistence
-        
         # Initialize cart count
         if 'cart_count' not in st.session_state:
             st.session_state.cart_count = 0
@@ -62,7 +56,13 @@ def initialize_session_state():
         # Initialize authentication state
         if 'auth_token' not in st.session_state:
             st.session_state.auth_token = None
-        
+
+def maintain_authentication_state(auth_manager):
+    """Maintain authentication state across refreshes"""
+    # This function would maintain auth state
+    # Implementation depends on your auth strategy
+    pass
+
 def check_and_migrate_database():
     """Check database and run migrations if needed - silent operation"""
     db_path = 'turbo_air_db_online.sqlite'
@@ -122,66 +122,6 @@ def check_and_migrate_database():
         except Exception as e:
             # Silent error handling
             print(f"Migration error: {e}")
-        finally:
-            conn.close()
-    """Check database and run migrations if needed"""
-    db_path = 'turbo_air_db_online.sqlite'
-    
-    if os.path.exists(db_path):
-        # Check if migration is needed
-        import sqlite3
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        
-        try:
-            # Check for password_hash column
-            cursor.execute("PRAGMA table_info(user_profiles)")
-            columns = [column[1] for column in cursor.fetchall()]
-            
-            if 'password_hash' not in columns:
-                st.warning("Database schema needs updating. Running migration...")
-                cursor.execute("""
-                    ALTER TABLE user_profiles 
-                    ADD COLUMN password_hash TEXT
-                """)
-                conn.commit()
-                st.success("Database migration completed!")
-            
-            # Ensure auth_tokens table exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS auth_tokens (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id TEXT NOT NULL,
-                    token TEXT UNIQUE NOT NULL,
-                    expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Ensure sync_queue table exists
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sync_queue (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    table_name TEXT NOT NULL,
-                    operation TEXT NOT NULL,
-                    data TEXT NOT NULL,
-                    synced BOOLEAN DEFAULT 0,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # Ensure database_backups table info is stored
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS app_settings (
-                    key TEXT PRIMARY KEY,
-                    value TEXT,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            conn.commit()
-        except Exception as e:
-            st.error(f"Migration error: {e}")
         finally:
             conn.close()
 
@@ -367,50 +307,7 @@ def main():
         col1, col2, col3 = st.columns([1, 6, 1])
         with col2:
             st.markdown("### Welcome to Turbo Air")
-            
-            # Improved auth form layout
-            tab1, tab2 = st.tabs(["Sign In", "Sign Up"])
-            
-            with tab1:
-                with st.form("signin_form"):
-                    email = st.text_input("Email", key="signin_email")
-                    password = st.text_input("Password", type="password", key="signin_password")
-                    
-                    col_signin1, col_signin2 = st.columns([1, 1])
-                    with col_signin1:
-                        if st.form_submit_button("Sign In", use_container_width=True, type="primary"):
-                            try:
-                                result = auth_manager.sign_in(email, password)
-                                if result.get('success'):
-                                    st.success("Signed in successfully!")
-                                    st.rerun()
-                                else:
-                                    st.error(result.get('message', 'Sign in failed'))
-                            except Exception as e:
-                                st.error(f"Sign in error: {str(e)}")
-                    
-                    with col_signin2:
-                        if st.form_submit_button("Forgot Password", use_container_width=True):
-                            st.info("Password reset feature coming soon!")
-            
-            with tab2:
-                with st.form("signup_form"):
-                    email = st.text_input("Email", key="signup_email")
-                    password = st.text_input("Password", type="password", key="signup_password")
-                    confirm_password = st.text_input("Confirm Password", type="password", key="signup_confirm")
-                    
-                    if st.form_submit_button("Sign Up", use_container_width=True, type="primary"):
-                        if password != confirm_password:
-                            st.error("Passwords don't match")
-                        else:
-                            try:
-                                result = auth_manager.sign_up(email, password)
-                                if result.get('success'):
-                                    st.success("Account created successfully! Please sign in.")
-                                else:
-                                    st.error(result.get('message', 'Sign up failed'))
-                            except Exception as e:
-                                st.error(f"Sign up error: {str(e)}")
+            auth_manager.show_auth_form()
     
     else:
         # Main app content
