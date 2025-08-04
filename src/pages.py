@@ -1,5 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
+Updated with collapsible product list and improved details view
 """
 
 import streamlit as st
@@ -244,9 +245,9 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
             st.caption("Add and select clients on this Home tab")
 
 def show_search_page(user_id, db_manager):
-    """Display search/products page with Streamlit-native components"""
+    """Display search/products page with collapsible product list"""
     
-    # Header with selected client info - fix the client detection
+    # Header with selected client info
     st.markdown("### Search Products")
     
     # Show selected client info if available
@@ -339,7 +340,7 @@ def show_search_page(user_id, db_manager):
             if results_df.empty:
                 st.info(f"No products found in {st.session_state.selected_category}")
             else:
-                display_product_results(results_df, user_id, db_manager)
+                display_product_results_collapsible(results_df, user_id, db_manager)
         except Exception as e:
             st.error(f"Error loading category products: {str(e)}")
     
@@ -357,7 +358,7 @@ def show_search_page(user_id, db_manager):
             if results_df.empty:
                 st.info("No products found matching your search.")
             else:
-                display_product_results(results_df, user_id, db_manager)
+                display_product_results_collapsible(results_df, user_id, db_manager)
         except Exception as e:
             st.error(f"Error searching products: {str(e)}")
     
@@ -396,8 +397,8 @@ def show_search_page(user_id, db_manager):
             # Silent error handling for search history
             pass
 
-def display_product_results(results_df, user_id, db_manager):
-    """Display product results with working quantity controls"""
+def display_product_results_collapsible(results_df, user_id, db_manager):
+    """Display product results with collapsible list and improved details view"""
     st.markdown(f"**Found {len(results_df)} products**")
     
     # Get current cart items
@@ -413,15 +414,26 @@ def display_product_results(results_df, user_id, db_manager):
             # Silent error handling
             pass
     
-    # Display products
+    # Display products in collapsible format
     for idx, product in results_df.iterrows():
+        sku = product['sku']
+        
+        # Initialize expanded state
+        expanded_key = f"expanded_{product['id']}"
+        details_key = f"details_{product['id']}"
+        
+        if expanded_key not in st.session_state:
+            st.session_state[expanded_key] = False
+        if details_key not in st.session_state:
+            st.session_state[details_key] = False
+        
+        # Create collapsible container
         with st.container():
-            # Product info with image
-            col_img, col_info, col_price = st.columns([1, 4, 1])
+            # Header row - always visible (collapsed view)
+            col1, col2, col3, col4 = st.columns([1, 3, 1, 1])
             
-            with col_img:
-                # Try to show product image
-                sku = product['sku']
+            with col1:
+                # Product thumbnail
                 possible_paths = [
                     f"pdf_screenshots/{sku}/{sku} P.1.png",
                     f"pdf_screenshots/{sku}/{sku}_P.1.png",
@@ -434,94 +446,41 @@ def display_product_results(results_df, user_id, db_manager):
                     image_base64 = get_image_base64(image_path)
                     if image_base64:
                         st.image(f"data:image/png;base64,{image_base64}", 
-                               caption=None, use_container_width=True)
+                               use_container_width=True)
                         image_found = True
                         break
                 
                 if not image_found:
                     st.markdown("📷")
             
-            with col_info:
-                st.markdown(f"**{product['sku']}**")
-                if product.get('product_type'):
-                    st.caption(f"Model: {product['product_type']}")
-                if product.get('description'):
-                    st.caption(truncate_text(product['description'], 80))
-            
-            with col_price:
-                st.markdown(f"**${product.get('price', 0):,.2f}**")
-            
-            # Get current quantity in cart
-            current_qty = 0
-            cart_item_id = None
-            for item in cart_items:
-                if item.get('product_id') == product['id']:
-                    current_qty = item.get('quantity', 0)
-                    cart_item_id = item.get('id')
-                    break
-            
-            # Quantity controls and action buttons
-            col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 2])
-            
-            with col1:
-                # Details button
-                if st.button("📋 Details", key=f"details_{product['id']}", use_container_width=True):
-                    detail_key = f"show_details_{product['id']}"
-                    st.session_state[detail_key] = not st.session_state.get(detail_key, False)
-                    st.rerun()
-            
             with col2:
-                # Minus button
-                if st.button("➖", key=f"minus_{product['id']}", use_container_width=True, 
-                           disabled=(current_qty == 0)):
-                    if current_qty > 1:
-                        try:
-                            db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
-                    elif current_qty == 1:
-                        try:
-                            db_manager.remove_from_cart(cart_item_id)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error: {str(e)}")
+                # Product info - clickable to expand
+                if st.button(f"**{sku}** - {product.get('product_type', '')}", key=f"expand_{product['id']}", 
+                           use_container_width=True, type="secondary"):
+                    st.session_state[expanded_key] = not st.session_state[expanded_key]
+                    st.rerun()
+                
+                if product.get('description'):
+                    st.caption(truncate_text(product['description'], 60))
             
             with col3:
-                # Quantity display
-                st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 18px; padding: 8px;'>{current_qty}</div>", 
-                          unsafe_allow_html=True)
+                st.markdown(f"**${product.get('price', 0):,.2f}**")
             
             with col4:
-                # Plus button
-                if st.button("➕", key=f"plus_{product['id']}", use_container_width=True):
-                    if cart_client_id:
-                        if current_qty == 0:
-                            try:
-                                success, message = db_manager.add_to_cart(
-                                    user_id, product['id'], cart_client_id
-                                )
-                                if success:
-                                    st.success("Added to cart!")
-                                    st.rerun()
-                                else:
-                                    st.error(message)
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                        else:
-                            try:
-                                db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {str(e)}")
-                    else:
-                        st.warning("Please select a client first")
-            
-            with col5:
-                # Add to Cart button (only show when quantity is 0)
-                if current_qty == 0:
-                    if st.button("🛒 Add to Cart", key=f"add_cart_{product['id']}", 
-                               use_container_width=True, type="primary"):
+                # Get current quantity in cart
+                current_qty = 0
+                cart_item_id = None
+                for item in cart_items:
+                    if item.get('product_id') == product['id']:
+                        current_qty = item.get('quantity', 0)
+                        cart_item_id = item.get('id')
+                        break
+                
+                if current_qty > 0:
+                    st.markdown(f"<div style='text-align: center; color: green; font-weight: bold;'>✅ In Cart ({current_qty})</div>", 
+                              unsafe_allow_html=True)
+                else:
+                    if st.button("🛒 Add", key=f"add_cart_{product['id']}", use_container_width=True, type="primary"):
                         if cart_client_id:
                             try:
                                 success, message = db_manager.add_to_cart(
@@ -536,17 +495,79 @@ def display_product_results(results_df, user_id, db_manager):
                                 st.error(f"Error: {str(e)}")
                         else:
                             st.warning("Select a client first")
-                else:
-                    st.markdown(f"<div style='text-align: center; color: green; font-weight: bold;'>✅ In Cart</div>", 
-                              unsafe_allow_html=True)
             
-            # Show collapsible details if toggled
-            if st.session_state.get(f"show_details_{product['id']}", False):
-                with st.expander("Product Details", expanded=True):
+            # Expanded view - shown when clicked
+            if st.session_state[expanded_key]:
+                st.markdown("---")
+                
+                # Expanded content with quantity controls and details toggle
+                col_qty1, col_qty2, col_qty3, col_qty4, col_details = st.columns([1, 1, 1, 1, 2])
+                
+                with col_qty1:
+                    # Minus button
+                    if st.button("➖", key=f"minus_{product['id']}", use_container_width=True, 
+                               disabled=(current_qty == 0)):
+                        if current_qty > 1:
+                            try:
+                                db_manager.update_cart_quantity(cart_item_id, current_qty - 1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                        elif current_qty == 1:
+                            try:
+                                db_manager.remove_from_cart(cart_item_id)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {str(e)}")
+                
+                with col_qty2:
+                    # Quantity display
+                    st.markdown(f"<div style='text-align: center; font-weight: bold; font-size: 18px; padding: 8px;'>{current_qty}</div>", 
+                              unsafe_allow_html=True)
+                
+                with col_qty3:
+                    # Plus button
+                    if st.button("➕", key=f"plus_{product['id']}", use_container_width=True):
+                        if cart_client_id:
+                            if current_qty == 0:
+                                try:
+                                    success, message = db_manager.add_to_cart(
+                                        user_id, product['id'], cart_client_id
+                                    )
+                                    if success:
+                                        st.rerun()
+                                    else:
+                                        st.error(message)
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                            else:
+                                try:
+                                    db_manager.update_cart_quantity(cart_item_id, current_qty + 1)
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error: {str(e)}")
+                        else:
+                            st.warning("Please select a client first")
+                
+                with col_qty4:
+                    # Empty column for spacing
+                    st.write("")
+                
+                with col_details:
+                    # Details toggle button
+                    details_text = "Hide Details" if st.session_state[details_key] else "📋 Show Details"
+                    if st.button(details_text, key=f"details_toggle_{product['id']}", use_container_width=True):
+                        st.session_state[details_key] = not st.session_state[details_key]
+                        st.rerun()
+                
+                # Show detailed view when details are toggled
+                if st.session_state[details_key]:
+                    st.markdown("#### Product Details")
+                    
                     col_img_detail, col_info_detail = st.columns([1, 2])
                     
                     with col_img_detail:
-                        # Try to show product image
+                        # Show product image (same as collapsed view but larger)
                         image_found = False
                         for image_path in possible_paths:
                             image_base64 = get_image_base64(image_path)

@@ -1,6 +1,6 @@
 """
 Fixed Email Service for Turbo Air Equipment Viewer
-Fixes authentication and email sending issues
+Fixes authentication and email sending issues with proper Gmail configuration
 """
 
 import streamlit as st
@@ -40,10 +40,11 @@ class EmailService:
         
         try:
             # Test connection with longer timeout
-            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=15) as server:
-                server.set_debuglevel(0)  # Disable debug output
-                server.starttls()
-                server.login(self.sender_email, self.sender_password)
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30)
+            server.set_debuglevel(0)  # Disable debug output
+            server.starttls()
+            server.login(self.sender_email, self.sender_password)
+            server.quit()
             return True, "Connection successful"
         except smtplib.SMTPAuthenticationError as e:
             return False, f"Authentication failed: {str(e)}. Check your email and app password."
@@ -150,13 +151,14 @@ class EmailService:
                     # Continue with other attachments
             
             # Send email with better error handling
-            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
-                server.set_debuglevel(0)  # Disable debug output
-                server.starttls()
-                server.login(self.sender_email, self.sender_password)
-                
-                # Send to recipient
-                server.send_message(msg, to_addrs=[recipient_email])
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30)
+            server.set_debuglevel(0)  # Disable debug output
+            server.starttls()
+            server.login(self.sender_email, self.sender_password)
+            
+            # Send to recipient
+            server.send_message(msg, to_addrs=[recipient_email])
+            server.quit()
             
             return True, f"Email sent successfully to {recipient_email}"
                 
@@ -202,11 +204,12 @@ class EmailService:
             msg.attach(MIMEText(body, 'html'))
             
             # Send email
-            with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30) as server:
-                server.set_debuglevel(0)
-                server.starttls()
-                server.login(self.sender_email, self.sender_password)
-                server.send_message(msg)
+            server = smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=30)
+            server.set_debuglevel(0)
+            server.starttls()
+            server.login(self.sender_email, self.sender_password)
+            server.send_message(msg)
+            server.quit()
             
             return True, "Test email sent successfully"
             
@@ -231,7 +234,7 @@ def get_email_service():
         return None
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show dialog to email quote with improved UI and error handling - Fixed unresponsive button"""
+    """Show dialog to email quote with improved UI and error handling"""
     email_service = get_email_service()
     
     if not email_service or not email_service.configured:
@@ -246,7 +249,7 @@ sender_password = "your-app-password"
         """)
         return False
     
-    # Test connection section - Fixed button responsiveness
+    # Test connection section
     st.markdown("### 🔧 Email Configuration Test")
     
     # Use columns to make button more responsive
@@ -264,7 +267,7 @@ sender_password = "your-app-password"
             connection_ok, connection_msg = email_service.test_connection()
             if connection_ok:
                 st.success(f"✅ {connection_msg}")
-                st.info("📧 Email service is working properly!")
+                st.info("📧 Email configuration is working properly!")
             else:
                 st.error(f"❌ {connection_msg}")
                 
@@ -339,57 +342,47 @@ Password: {'*' * len(email_service.sender_password)}
                 st.error("❌ Please enter a valid email address")
             else:
                 # Show sending progress
-                progress_container = st.container()
-                with progress_container:
-                    with st.spinner("📤 Preparing and sending email..."):
-                        try:
-                            # Import here to avoid circular imports
-                            from .export import prepare_email_attachments
-                            
-                            # Prepare attachments
-                            st.info("📎 Preparing attachments...")
-                            attachments = prepare_email_attachments(quote_data, items_df, client_data)
-                            
-                            if not attachments:
-                                st.error("❌ Could not prepare email attachments")
-                            else:
-                                st.info(f"📎 Created {len(attachments)} attachments")
-                                
-                                # Add custom message to client data if provided
-                                email_client_data = client_data.copy()
-                                if custom_message and custom_message.strip():
-                                    email_client_data['custom_message'] = custom_message.strip()
-                                
-                                # Send email
-                                st.info("📧 Sending email...")
-                                success, message = email_service.send_quote_email(
-                                    recipient_email=recipient_email.strip(),
-                                    quote_data=quote_data,
-                                    client_data=email_client_data,
-                                    attachments=attachments
-                                )
-                                
-                                if success:
-                                    st.success(f"✅ Quote emailed successfully to {recipient_email}!")
-                                    st.info(f"📋 Quote #{quote_data['quote_number']} sent with attachments:")
-                                    for filename in attachments.keys():
-                                        st.info(f"  • {filename}")
-                                    st.balloons()
-                                    return True
-                                else:
-                                    st.error(f"❌ Failed to send email: {message}")
-                                    
-                                    # Show additional troubleshooting
-                                    with st.expander("🛠️ Email Troubleshooting"):
-                                        st.write("**If the email failed to send:**")
-                                        st.write("1. Check your internet connection")
-                                        st.write("2. Verify Gmail app password is correct")
-                                        st.write("3. Try the 'Test Email Configuration' button above")
-                                        st.write("4. Check Gmail account security settings")
+                with st.spinner("📤 Preparing and sending email..."):
+                    try:
+                        # Import here to avoid circular imports
+                        from .export import prepare_email_attachments
                         
-                        except Exception as e:
-                            st.error(f"❌ Email system error: {str(e)}")
-                            st.info("💡 Try using the 'Test Email Configuration' button first")
+                        # Prepare attachments
+                        st.info("📎 Preparing attachments...")
+                        attachments = prepare_email_attachments(quote_data, items_df, client_data)
+                        
+                        if not attachments:
+                            st.error("❌ Could not prepare email attachments")
+                        else:
+                            st.info(f"📎 Created {len(attachments)} attachments")
+                            
+                            # Add custom message to client data if provided
+                            email_client_data = client_data.copy()
+                            if custom_message and custom_message.strip():
+                                email_client_data['custom_message'] = custom_message.strip()
+                            
+                            # Send email
+                            st.info("📧 Sending email...")
+                            success, message = email_service.send_quote_email(
+                                recipient_email=recipient_email.strip(),
+                                quote_data=quote_data,
+                                client_data=email_client_data,
+                                attachments=attachments
+                            )
+                            
+                            if success:
+                                st.success(f"✅ Quote emailed successfully to {recipient_email}!")
+                                st.info(f"📋 Quote #{quote_data['quote_number']} sent with attachments:")
+                                for filename in attachments.keys():
+                                    st.info(f"  • {filename}")
+                                st.balloons()
+                                return True
+                            else:
+                                st.error(f"❌ Failed to send email: {message}")
+                    
+                    except Exception as e:
+                        st.error(f"❌ Email system error: {str(e)}")
+                        st.info("💡 Try using the 'Test Email Configuration' button first")
         
         if cancel_button:
             st.info("📧 Email sending cancelled")

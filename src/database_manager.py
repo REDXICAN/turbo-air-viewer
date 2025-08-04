@@ -2,7 +2,7 @@
 Database operations module for Turbo Air Equipment Viewer
 Handles both SQLite (offline) and Supabase (online) operations
 Updated with get_user_quotes method and all required functionality
-COMPLETE VERSION WITH ALL FIXES
+COMPLETE VERSION WITH ALL FIXES - Enhanced for better reliability
 """
 
 import sqlite3
@@ -51,8 +51,18 @@ class DatabaseManager:
             }
     
     def get_connection(self):
-        """Get SQLite connection"""
-        return sqlite3.connect(self.sqlite_path)
+        """Get SQLite connection with better error handling"""
+        try:
+            conn = sqlite3.connect(self.sqlite_path, timeout=30.0)
+            # Enable WAL mode for better concurrent access
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA cache_size=10000")
+            conn.execute("PRAGMA temp_store=memory")
+            return conn
+        except Exception as e:
+            print(f"Database connection error: {e}")
+            raise
     
     def check_products_exist(self) -> bool:
         """Check if any products exist in the database"""
@@ -82,9 +92,13 @@ class DatabaseManager:
                 print(f"Error fetching from Supabase: {e}")
         
         # Fallback to SQLite
-        conn = _self.get_connection()
-        df = pd.read_sql_query("SELECT * FROM products", conn)
-        conn.close()
+        try:
+            conn = _self.get_connection()
+            df = pd.read_sql_query("SELECT * FROM products", conn)
+            conn.close()
+        except Exception as e:
+            print(f"Error reading from SQLite: {e}")
+            df = pd.DataFrame()
         
         # If no products found, return empty DataFrame with proper columns
         if df.empty:
@@ -100,7 +114,7 @@ class DatabaseManager:
         return df
     
     def search_products(self, search_term: str) -> pd.DataFrame:
-        """Search products by SKU, description, or type"""
+        """Search products by SKU, description, or type with better error handling"""
         # Return empty DataFrame if no products exist
         if not self.check_products_exist():
             return pd.DataFrame()
@@ -114,23 +128,29 @@ class DatabaseManager:
                     f"description.ilike.{search_pattern},"
                     f"product_type.ilike.{search_pattern}"
                 ).execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
+                if response.data:
+                    return pd.DataFrame(response.data)
+            except Exception as e:
+                print(f"Error searching in Supabase: {e}")
         
         # Use SQLite
-        conn = self.get_connection()
-        query = """
-            SELECT * FROM products 
-            WHERE sku LIKE ? OR description LIKE ? OR product_type LIKE ?
-        """
-        df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern, search_pattern))
-        conn.close()
-        return df
+        try:
+            conn = self.get_connection()
+            query = """
+                SELECT * FROM products 
+                WHERE sku LIKE ? OR description LIKE ? OR product_type LIKE ?
+                ORDER BY sku
+            """
+            df = pd.read_sql_query(query, conn, params=(search_pattern, search_pattern, search_pattern))
+            conn.close()
+            return df
+        except Exception as e:
+            print(f"Error searching in SQLite: {e}")
+            return pd.DataFrame()
     
     @st.cache_data(ttl=300)
     def get_products_by_category(_self, category: str, subcategory: Optional[str] = None) -> pd.DataFrame:
-        """Get products by category with caching"""
+        """Get products by category with caching and better error handling"""
         # Return empty DataFrame if no products exist
         if not _self.check_products_exist():
             return pd.DataFrame()
@@ -141,44 +161,53 @@ class DatabaseManager:
                 if subcategory:
                     query = query.eq('subcategory', subcategory)
                 response = query.execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
+                if response.data:
+                    return pd.DataFrame(response.data)
+            except Exception as e:
+                print(f"Error getting category products from Supabase: {e}")
         
         # Use SQLite
-        conn = _self.get_connection()
-        if subcategory:
-            query = "SELECT * FROM products WHERE category = ? AND subcategory = ?"
-            df = pd.read_sql_query(query, conn, params=(category, subcategory))
-        else:
-            query = "SELECT * FROM products WHERE category = ?"
-            df = pd.read_sql_query(query, conn, params=(category,))
-        conn.close()
-        return df
+        try:
+            conn = _self.get_connection()
+            if subcategory:
+                query = "SELECT * FROM products WHERE category = ? AND subcategory = ? ORDER BY sku"
+                df = pd.read_sql_query(query, conn, params=(category, subcategory))
+            else:
+                query = "SELECT * FROM products WHERE category = ? ORDER BY sku"
+                df = pd.read_sql_query(query, conn, params=(category,))
+            conn.close()
+            return df
+        except Exception as e:
+            print(f"Error getting category products from SQLite: {e}")
+            return pd.DataFrame()
     
     def get_categories_with_counts(self) -> List[Dict[str, any]]:
         """Get all categories with product counts"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        
-        # Get unique categories with counts
-        cursor.execute("""
-            SELECT category, COUNT(*) as count 
-            FROM products 
-            WHERE category IS NOT NULL 
-            GROUP BY category 
-            ORDER BY category
-        """)
-        
-        categories = []
-        for row in cursor.fetchall():
-            categories.append({
-                'name': row[0],
-                'count': row[1]
-            })
-        
-        conn.close()
-        return categories
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Get unique categories with counts
+            cursor.execute("""
+                SELECT category, COUNT(*) as count 
+                FROM products 
+                WHERE category IS NOT NULL 
+                GROUP BY category 
+                ORDER BY category
+            """)
+            
+            categories = []
+            for row in cursor.fetchall():
+                categories.append({
+                    'name': row[0],
+                    'count': row[1]
+                })
+            
+            conn.close()
+            return categories
+        except Exception as e:
+            print(f"Error getting categories: {e}")
+            return []
     
     def get_product_by_sku(self, sku: str) -> Optional[Dict]:
         """Get single product by SKU"""
@@ -186,39 +215,52 @@ class DatabaseManager:
             try:
                 response = self.supabase.table('products').select('*').eq('sku', sku).single().execute()
                 return response.data
-            except:
-                pass
+            except Exception as e:
+                print(f"Error getting product by SKU from Supabase: {e}")
         
         # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM products WHERE sku = ?", (sku,))
-        columns = [description[0] for description in cursor.description]
-        row = cursor.fetchone()
-        conn.close()
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM products WHERE sku = ?", (sku,))
+            columns = [description[0] for description in cursor.description]
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                return dict(zip(columns, row))
+        except Exception as e:
+            print(f"Error getting product by SKU from SQLite: {e}")
         
-        if row:
-            return dict(zip(columns, row))
         return None
     
     def get_user_clients(self, user_id: str) -> pd.DataFrame:
         """Get all clients for a user"""
         if self.is_online:
             try:
-                response = self.supabase.table('clients').select('*').eq('user_id', user_id).execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
+                response = self.supabase.table('clients').select('*').eq('user_id', user_id).order('company').execute()
+                if response.data:
+                    return pd.DataFrame(response.data)
+            except Exception as e:
+                print(f"Error getting clients from Supabase: {e}")
         
         # Use SQLite
-        conn = self.get_connection()
-        df = pd.read_sql_query("SELECT * FROM clients WHERE user_id = ?", conn, params=(user_id,))
-        conn.close()
-        return df
+        try:
+            conn = self.get_connection()
+            df = pd.read_sql_query(
+                "SELECT * FROM clients WHERE user_id = ? ORDER BY company", 
+                conn, 
+                params=(user_id,)
+            )
+            conn.close()
+            return df
+        except Exception as e:
+            print(f"Error getting clients from SQLite: {e}")
+            return pd.DataFrame()
     
     def create_client(self, user_id: str, company: str, contact_name: str = '', 
                      contact_email: str = '', contact_number: str = '') -> Tuple[bool, str]:
-        """Create new client"""
+        """Create new client with better error handling"""
         client_data = {
             'user_id': user_id,
             'company': company,
@@ -230,15 +272,17 @@ class DatabaseManager:
         if self.is_online:
             try:
                 response = self.supabase.table('clients').insert(client_data).execute()
-                return True, "Client created successfully"
+                if response.data:
+                    return True, "Client created successfully"
             except Exception as e:
+                print(f"Error creating client in Supabase: {e}")
                 if "duplicate" in str(e).lower():
                     return False, "Client already exists"
         
         # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
         try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO clients (user_id, company, contact_name, contact_email, contact_number)
                 VALUES (?, ?, ?, ?, ?)
@@ -250,7 +294,7 @@ class DatabaseManager:
             conn.close()
             return True, "Client created successfully"
         except Exception as e:
-            conn.close()
+            print(f"Error creating client in SQLite: {e}")
             return False, str(e)
     
     def delete_client(self, client_id: int) -> Tuple[bool, str]:
@@ -305,6 +349,7 @@ class DatabaseManager:
                     return False, "Client not found"
                     
         except Exception as e:
+            print(f"Error deleting client: {e}")
             return False, f"Error deleting client: {str(e)}"
     
     def get_client_quotes(self, client_id: int) -> pd.DataFrame:
@@ -312,7 +357,7 @@ class DatabaseManager:
         try:
             if self.is_online and self.supabase:
                 # Online mode
-                response = self.supabase.table('quotes').select('*').eq('client_id', client_id).execute()
+                response = self.supabase.table('quotes').select('*').eq('client_id', client_id).order('created_at', desc=True).execute()
                 return pd.DataFrame(response.data) if response.data else pd.DataFrame()
             
             else:
@@ -331,7 +376,7 @@ class DatabaseManager:
             return pd.DataFrame()
     
     def get_cart_items(self, user_id: str, client_id: Optional[int] = None) -> pd.DataFrame:
-        """Get cart items with product details"""
+        """Get cart items with product details - Enhanced error handling"""
         try:
             if self.is_online and self.supabase:
                 # Online mode - get cart items with product details
@@ -380,81 +425,86 @@ class DatabaseManager:
     
     def add_to_cart(self, user_id: str, product_id: int, client_id: Optional[int] = None, 
                    quantity: int = 1) -> Tuple[bool, str]:
-        """Add item to cart - UUID compatible"""
-        if self.is_online:
+        """Add item to cart - UUID compatible with better error handling"""
+        try:
+            if self.is_online:
+                try:
+                    # Check if item exists
+                    query = self.supabase.table('cart_items').select('*').eq('user_id', user_id).eq('product_id', str(product_id))
+                    if client_id:
+                        query = query.eq('client_id', client_id)
+                    existing = query.execute()
+                    
+                    if existing.data:
+                        # Update quantity
+                        new_quantity = existing.data[0]['quantity'] + quantity
+                        self.supabase.table('cart_items').update(
+                            {'quantity': new_quantity}
+                        ).eq('id', existing.data[0]['id']).execute()
+                    else:
+                        # Insert new - keep product_id as string for UUID compatibility
+                        cart_data = {
+                            'user_id': user_id,
+                            'product_id': str(product_id),  # Convert to string for UUID
+                            'client_id': client_id,
+                            'quantity': quantity
+                        }
+                        self.supabase.table('cart_items').insert(cart_data).execute()
+                    
+                    return True, "Added to cart"
+                except Exception as e:
+                    print(f"Online cart error: {e}")
+            
+            # Use SQLite (integers for local database)
+            conn = self.get_connection()
+            cursor = conn.cursor()
             try:
-                # Check if item exists
-                query = self.supabase.table('cart_items').select('*').eq('user_id', user_id).eq('product_id', str(product_id))
+                # Check if exists
                 if client_id:
-                    query = query.eq('client_id', client_id)
-                existing = query.execute()
-                
-                if existing.data:
-                    # Update quantity
-                    new_quantity = existing.data[0]['quantity'] + quantity
-                    self.supabase.table('cart_items').update(
-                        {'quantity': new_quantity}
-                    ).eq('id', existing.data[0]['id']).execute()
+                    cursor.execute("""
+                        SELECT id, quantity FROM cart_items 
+                        WHERE user_id = ? AND product_id = ? AND client_id = ?
+                    """, (user_id, int(product_id), client_id))  # Use int for SQLite
                 else:
-                    # Insert new - keep product_id as string for UUID compatibility
-                    cart_data = {
-                        'user_id': user_id,
-                        'product_id': str(product_id),  # Convert to string for UUID
-                        'client_id': client_id,
-                        'quantity': quantity
-                    }
-                    self.supabase.table('cart_items').insert(cart_data).execute()
+                    cursor.execute("""
+                        SELECT id, quantity FROM cart_items 
+                        WHERE user_id = ? AND product_id = ? AND client_id IS NULL
+                    """, (user_id, int(product_id)))  # Use int for SQLite
                 
+                existing = cursor.fetchone()
+                
+                if existing:
+                    # Update quantity
+                    new_quantity = existing[1] + quantity
+                    cursor.execute("""
+                        UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (new_quantity, existing[0]))
+                else:
+                    # Insert new
+                    cursor.execute("""
+                        INSERT INTO cart_items (user_id, product_id, client_id, quantity)
+                        VALUES (?, ?, ?, ?)
+                    """, (user_id, int(product_id), client_id, quantity))  # Use int for SQLite
+                
+                conn.commit()
+                
+                # Add to sync queue
+                self._add_to_sync_queue(conn, 'cart_items', 'upsert', {
+                    'user_id': user_id,
+                    'product_id': str(product_id),  # Store as string for sync compatibility
+                    'client_id': client_id,
+                    'quantity': quantity
+                })
+                
+                conn.close()
                 return True, "Added to cart"
             except Exception as e:
-                print(f"Online cart error: {e}")
-        
-        # Use SQLite (integers for local database)
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        try:
-            # Check if exists
-            if client_id:
-                cursor.execute("""
-                    SELECT id, quantity FROM cart_items 
-                    WHERE user_id = ? AND product_id = ? AND client_id = ?
-                """, (user_id, int(product_id), client_id))  # Use int for SQLite
-            else:
-                cursor.execute("""
-                    SELECT id, quantity FROM cart_items 
-                    WHERE user_id = ? AND product_id = ? AND client_id IS NULL
-                """, (user_id, int(product_id)))  # Use int for SQLite
-            
-            existing = cursor.fetchone()
-            
-            if existing:
-                # Update quantity
-                new_quantity = existing[1] + quantity
-                cursor.execute("""
-                    UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (new_quantity, existing[0]))
-            else:
-                # Insert new
-                cursor.execute("""
-                    INSERT INTO cart_items (user_id, product_id, client_id, quantity)
-                    VALUES (?, ?, ?, ?)
-                """, (user_id, int(product_id), client_id, quantity))  # Use int for SQLite
-            
-            conn.commit()
-            
-            # Add to sync queue
-            self._add_to_sync_queue(conn, 'cart_items', 'upsert', {
-                'user_id': user_id,
-                'product_id': str(product_id),  # Store as string for sync compatibility
-                'client_id': client_id,
-                'quantity': quantity
-            })
-            
-            conn.close()
-            return True, "Added to cart"
+                conn.close()
+                print(f"SQLite cart error: {e}")
+                return False, str(e)
         except Exception as e:
-            conn.close()
+            print(f"General cart error: {e}")
             return False, str(e)
     
     def update_cart_quantity(self, cart_item_id: int, new_quantity: int) -> bool:
@@ -554,7 +604,7 @@ class DatabaseManager:
     
     def create_quote_with_tax(self, user_id: str, client_id: int, cart_items_df: pd.DataFrame, 
                              tax_rate: float, tax_amount: float, total_amount: float) -> Tuple[bool, str, str]:
-        """Create a quote from cart items with custom tax rate - UUID compatible"""
+        """Create a quote from cart items with custom tax rate - UUID compatible with enhanced error handling"""
         try:
             # Generate quote number
             quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -721,7 +771,7 @@ class DatabaseManager:
             return False, f"Error creating quote: {str(e)}", None
     
     def get_user_quotes(self, user_id: str, limit: int = None) -> pd.DataFrame:
-        """Get all quotes for a user - schema compatible"""
+        """Get all quotes for a user - schema compatible with enhanced error handling"""
         if self.is_online and self.supabase:
             try:
                 # Get all columns from Supabase (schema has all columns)
@@ -746,8 +796,8 @@ class DatabaseManager:
                 # Fall through to SQLite
         
         # Use SQLite
-        conn = self.get_connection()
         try:
+            conn = self.get_connection()
             query = """
                 SELECT * FROM quotes 
                 WHERE user_id = ? 
@@ -767,38 +817,43 @@ class DatabaseManager:
                 if 'tax_amount' not in df.columns:
                     df['tax_amount'] = df.get('total_amount', 0) - df.get('subtotal', 0)
             
-            return df
-        finally:
             conn.close()
+            return df
+        except Exception as e:
+            print(f"Error fetching quotes from SQLite: {e}")
+            return pd.DataFrame()
     
     def add_search_history(self, user_id: str, search_term: str):
         """Add search term to history"""
-        if self.is_online:
-            try:
-                self.supabase.table('search_history').insert({
+        try:
+            if self.is_online:
+                try:
+                    self.supabase.table('search_history').insert({
+                        'user_id': user_id,
+                        'search_term': search_term
+                    }).execute()
+                except Exception as e:
+                    print(f"Error adding search history to Supabase: {e}")
+            
+            # Always add to SQLite for offline access
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO search_history (user_id, search_term)
+                VALUES (?, ?)
+            """, (user_id, search_term))
+            conn.commit()
+            
+            # Add to sync queue if offline
+            if not self.is_online:
+                self._add_to_sync_queue(conn, 'search_history', 'insert', {
                     'user_id': user_id,
                     'search_term': search_term
-                }).execute()
-            except:
-                pass
-        
-        # Always add to SQLite for offline access
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO search_history (user_id, search_term)
-            VALUES (?, ?)
-        """, (user_id, search_term))
-        conn.commit()
-        
-        # Add to sync queue if offline
-        if not self.is_online:
-            self._add_to_sync_queue(conn, 'search_history', 'insert', {
-                'user_id': user_id,
-                'search_term': search_term
-            })
-        
-        conn.close()
+                })
+            
+            conn.close()
+        except Exception as e:
+            print(f"Error adding search history: {e}")
     
     def get_search_history(self, user_id: str, limit: int = 10) -> List[str]:
         """Get recent search history"""
@@ -809,37 +864,42 @@ class DatabaseManager:
                 ).eq('user_id', user_id).order(
                     'created_at', desc=True
                 ).limit(limit).execute()
-                return [item['search_term'] for item in response.data]
-            except:
-                pass
+                if response.data:
+                    return [item['search_term'] for item in response.data]
+            except Exception as e:
+                print(f"Error getting search history from Supabase: {e}")
         
         # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT DISTINCT search_term 
-            FROM search_history 
-            WHERE user_id = ? 
-            ORDER BY created_at DESC 
-            LIMIT ?
-        """, (user_id, limit))
-        
-        results = [row[0] for row in cursor.fetchall()]
-        conn.close()
-        return results
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT search_term 
+                FROM search_history 
+                WHERE user_id = ? 
+                ORDER BY created_at DESC 
+                LIMIT ?
+            """, (user_id, limit))
+            
+            results = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return results
+        except Exception as e:
+            print(f"Error getting search history from SQLite: {e}")
+            return []
     
     def clear_search_history(self, user_id: str) -> Tuple[bool, str]:
         """Clear user's search history"""
-        if self.is_online:
-            try:
-                self.supabase.table('search_history').delete().eq('user_id', user_id).execute()
-            except:
-                pass
-        
-        # Clear from SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
         try:
+            if self.is_online:
+                try:
+                    self.supabase.table('search_history').delete().eq('user_id', user_id).execute()
+                except Exception as e:
+                    print(f"Error clearing search history from Supabase: {e}")
+            
+            # Clear from SQLite
+            conn = self.get_connection()
+            cursor = conn.cursor()
             cursor.execute("DELETE FROM search_history WHERE user_id = ?", (user_id,))
             conn.commit()
             
@@ -852,7 +912,7 @@ class DatabaseManager:
             conn.close()
             return True, "Search history cleared"
         except Exception as e:
-            conn.close()
+            print(f"Error clearing search history: {e}")
             return False, str(e)
     
     def get_dashboard_stats(self, user_id: str) -> Dict:
@@ -864,30 +924,34 @@ class DatabaseManager:
             'cart_items': 0
         }
         
-        conn = self.get_connection()
-        cursor = conn.cursor()
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            # Total clients
+            cursor.execute("SELECT COUNT(*) FROM clients WHERE user_id = ?", (user_id,))
+            stats['total_clients'] = cursor.fetchone()[0]
+            
+            # Total quotes
+            cursor.execute("SELECT COUNT(*) FROM quotes WHERE user_id = ?", (user_id,))
+            stats['total_quotes'] = cursor.fetchone()[0]
+            
+            # Recent quotes (last 30 days)
+            cursor.execute("""
+                SELECT COUNT(*) FROM quotes 
+                WHERE user_id = ? 
+                AND datetime(created_at) > datetime('now', '-30 days')
+            """, (user_id,))
+            stats['recent_quotes'] = cursor.fetchone()[0]
+            
+            # Cart items
+            cursor.execute("SELECT COUNT(*) FROM cart_items WHERE user_id = ?", (user_id,))
+            stats['cart_items'] = cursor.fetchone()[0]
+            
+            conn.close()
+        except Exception as e:
+            print(f"Error getting dashboard stats: {e}")
         
-        # Total clients
-        cursor.execute("SELECT COUNT(*) FROM clients WHERE user_id = ?", (user_id,))
-        stats['total_clients'] = cursor.fetchone()[0]
-        
-        # Total quotes
-        cursor.execute("SELECT COUNT(*) FROM quotes WHERE user_id = ?", (user_id,))
-        stats['total_quotes'] = cursor.fetchone()[0]
-        
-        # Recent quotes (last 30 days)
-        cursor.execute("""
-            SELECT COUNT(*) FROM quotes 
-            WHERE user_id = ? 
-            AND datetime(created_at) > datetime('now', '-30 days')
-        """, (user_id,))
-        stats['recent_quotes'] = cursor.fetchone()[0]
-        
-        # Cart items
-        cursor.execute("SELECT COUNT(*) FROM cart_items WHERE user_id = ?", (user_id,))
-        stats['cart_items'] = cursor.fetchone()[0]
-        
-        conn.close()
         return stats
     
     def _update_local_products(self, products_df: pd.DataFrame):
@@ -896,40 +960,50 @@ class DatabaseManager:
             conn = self.get_connection()
             products_df.to_sql('products', conn, if_exists='replace', index=False)
             conn.close()
-        except:
-            pass
+        except Exception as e:
+            print(f"Error updating local products: {e}")
     
     def _add_to_sync_queue(self, conn, table_name: str, operation: str, data: Dict):
         """Add operation to sync queue"""
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO sync_queue (table_name, operation, data)
-            VALUES (?, ?, ?)
-        """, (table_name, operation, json.dumps(data)))
-        conn.commit()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sync_queue (table_name, operation, data)
+                VALUES (?, ?, ?)
+            """, (table_name, operation, json.dumps(data)))
+            conn.commit()
+        except Exception as e:
+            print(f"Error adding to sync queue: {e}")
     
     def get_pending_sync_items(self) -> pd.DataFrame:
         """Get items pending synchronization"""
-        conn = self.get_connection()
-        df = pd.read_sql_query("""
-            SELECT * FROM sync_queue 
-            WHERE synced = 0 
-            ORDER BY created_at
-        """, conn)
-        conn.close()
-        return df
+        try:
+            conn = self.get_connection()
+            df = pd.read_sql_query("""
+                SELECT * FROM sync_queue 
+                WHERE synced = 0 
+                ORDER BY created_at
+            """, conn)
+            conn.close()
+            return df
+        except Exception as e:
+            print(f"Error getting pending sync items: {e}")
+            return pd.DataFrame()
     
     def mark_synced(self, sync_ids: List[int]):
         """Mark items as synced"""
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        cursor.execute(f"""
-            UPDATE sync_queue 
-            SET synced = 1 
-            WHERE id IN ({','.join(['?' for _ in sync_ids])})
-        """, sync_ids)
-        conn.commit()
-        conn.close()
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                UPDATE sync_queue 
+                SET synced = 1 
+                WHERE id IN ({','.join(['?' for _ in sync_ids])})
+            """, sync_ids)
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"Error marking items as synced: {e}")
     
     def sync_products_to_supabase(self) -> Tuple[bool, str]:
         """Sync all products from SQLite to Supabase"""
@@ -972,6 +1046,7 @@ class DatabaseManager:
             return True, f"Successfully synced {total_synced} products"
             
         except Exception as e:
+            print(f"Error syncing products to Supabase: {e}")
             return False, f"Sync error: {str(e)}"
     
     def load_products_from_excel(self, file_path: str = 'turbo_air_products.xlsx') -> Tuple[bool, str]:
@@ -1003,6 +1078,7 @@ class DatabaseManager:
                 return True, "Products loaded locally (will sync when online)"
                 
         except Exception as e:
+            print(f"Error loading products from Excel: {e}")
             return False, f"Error loading products: {str(e)}"
     
     def get_null_display_value(self) -> str:

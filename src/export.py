@@ -1,6 +1,6 @@
 """
 Fixed Export functionality for Turbo Air Equipment Viewer
-Improved PDF generation with better image handling
+Improved PDF generation with better image handling and corruption fixes
 """
 
 import io
@@ -85,7 +85,7 @@ def resize_image_for_pdf(image_path: str, max_width: float = 0.8, max_height: fl
             
             # Save to BytesIO
             buffer = io.BytesIO()
-            img.save(buffer, format='PNG', optimize=True)
+            img.save(buffer, format='PNG', optimize=True, quality=85)
             buffer.seek(0)
             return buffer
     except Exception as e:
@@ -181,21 +181,46 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
             unit_price = float(item.get('price', 0))
             total_price = unit_price * quantity
             
-            # Try to add product image
+            # Try to add product image with better error handling
             image_path = get_product_image_path(sku)
             if image_path:
                 try:
                     img = XLImage(image_path)
-                    # Ensure image fits in cell
-                    img.width = min(img.width, 80)
-                    img.height = min(img.height, 60)
+                    # Ensure image fits in cell with safe dimensions
+                    original_width = img.width
+                    original_height = img.height
+                    
+                    # Calculate aspect ratio
+                    aspect_ratio = original_width / original_height
+                    
+                    # Set safe maximum dimensions
+                    max_width = 80
+                    max_height = 60
+                    
+                    if aspect_ratio > 1:  # Wider than tall
+                        img.width = min(max_width, original_width)
+                        img.height = int(img.width / aspect_ratio)
+                    else:  # Taller than wide
+                        img.height = min(max_height, original_height)
+                        img.width = int(img.height * aspect_ratio)
+                    
+                    # Ensure minimum size
+                    if img.width < 40:
+                        img.width = 40
+                        img.height = int(40 / aspect_ratio)
+                    if img.height < 30:
+                        img.height = 30
+                        img.width = int(30 * aspect_ratio)
+                    
                     ws.add_image(img, f'A{current_row}')
-                    ws.row_dimensions[current_row].height = 50
+                    ws.row_dimensions[current_row].height = max(50, img.height + 10)
                 except Exception as e:
                     print(f"Could not add image for {sku}: {e}")
                     ws[f'A{current_row}'] = '📷'
+                    ws.row_dimensions[current_row].height = 50
             else:
                 ws[f'A{current_row}'] = '📷'
+                ws.row_dimensions[current_row].height = 50
             
             # Add item data
             ws[f'B{current_row}'] = sku
@@ -234,7 +259,7 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
         ws[f'E{current_row}'].font = Font(bold=True, size=14)
         ws[f'F{current_row}'].font = Font(bold=True, size=14)
         
-        # Save to buffer
+        # Save to buffer with error handling
         wb.save(buffer)
         buffer.seek(0)
         return buffer
@@ -245,11 +270,16 @@ def generate_excel_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: 
         buffer.seek(0)
         buffer.truncate(0)
         
-        wb = Workbook()
-        ws = wb.active
-        ws['A1'] = f"Error generating Excel quote: {str(e)}"
-        wb.save(buffer)
-        buffer.seek(0)
+        try:
+            wb = Workbook()
+            ws = wb.active
+            ws['A1'] = f"Error generating Excel quote: {str(e)}"
+            ws['A2'] = "Please contact support for assistance."
+            wb.save(buffer)
+            buffer.seek(0)
+        except Exception as fallback_error:
+            print(f"Fallback Excel creation failed: {fallback_error}")
+        
         return buffer
 
 def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> io.BytesIO:
@@ -260,7 +290,14 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
     buffer = io.BytesIO()
     
     try:
-        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch)
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=letter, 
+            topMargin=0.5*inch,
+            bottomMargin=0.5*inch,
+            leftMargin=0.5*inch,
+            rightMargin=0.5*inch
+        )
         
         styles = getSampleStyleSheet()
         
@@ -330,10 +367,10 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
             image_path = get_product_image_path(sku)
             if image_path:
                 try:
-                    # Resize image for PDF
-                    resized_buffer = resize_image_for_pdf(image_path, 0.8, 0.6)
+                    # Try resized image first
+                    resized_buffer = resize_image_for_pdf(image_path, 0.7, 0.5)
                     if resized_buffer:
-                        img = RLImage(resized_buffer, width=0.8*inch, height=0.6*inch)
+                        img = RLImage(resized_buffer, width=0.7*inch, height=0.5*inch)
                         image_cell = img
                     else:
                         # Try original image with smaller size
@@ -353,7 +390,7 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
             ])
         
         # Create items table with better styling
-        items_table = Table(items_data, colWidths=[1*inch, 1.2*inch, 2.5*inch, 0.5*inch, 1*inch, 1*inch])
+        items_table = Table(items_data, colWidths=[0.8*inch, 1.2*inch, 2.5*inch, 0.5*inch, 1*inch, 1*inch])
         items_table.setStyle(TableStyle([
             ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
             ('FONTSIZE', (0, 0), (-1, -1), 9),
@@ -418,11 +455,13 @@ def generate_pdf_quote(quote_data: Dict, items_df: pd.DataFrame, client_data: Di
         
         try:
             doc = SimpleDocTemplate(buffer, pagesize=letter)
-            story = [Paragraph(f"Error generating PDF quote: {str(e)}", getSampleStyleSheet()['Normal'])]
+            story = [
+                Paragraph(f"Error generating PDF quote: {str(e)}", getSampleStyleSheet()['Normal']),
+                Paragraph("Please contact support for assistance.", getSampleStyleSheet()['Normal'])
+            ]
             doc.build(story)
-        except:
-            # Last resort: return empty buffer
-            pass
+        except Exception as fallback_error:
+            print(f"Fallback PDF creation failed: {fallback_error}")
     
     buffer.seek(0)
     return buffer
@@ -435,14 +474,16 @@ def prepare_email_attachments(quote_data: Dict, items_df: pd.DataFrame, client_d
         # Generate Excel attachment
         if EXCEL_AVAILABLE:
             excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
-            attachments[f"Quote_{quote_data['quote_number']}.xlsx"] = excel_buffer
+            if excel_buffer and excel_buffer.getvalue():  # Check if buffer has content
+                attachments[f"Quote_{quote_data['quote_number']}.xlsx"] = excel_buffer
         else:
             print("Excel export not available - openpyxl not installed")
         
         # Generate PDF attachment
         if PDF_AVAILABLE:
             pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
-            attachments[f"Quote_{quote_data['quote_number']}.pdf"] = pdf_buffer
+            if pdf_buffer and pdf_buffer.getvalue():  # Check if buffer has content
+                attachments[f"Quote_{quote_data['quote_number']}.pdf"] = pdf_buffer
         else:
             print("PDF export not available - reportlab not installed")
         
