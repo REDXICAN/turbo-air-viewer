@@ -417,7 +417,7 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
         return False, f"Email sending failed: {str(e)}"
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote dialog with clean form - no test buttons"""
+    """Show email quote form directly on page - no dialog/button needed"""
     
     st.markdown("### Send Quote via Email")
     
@@ -430,43 +430,46 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     st.success(f"✅ Email configured: {email_service.sender_email}")
     st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
     
-    # EMAIL FORM WITH CC SUPPORT
-    with st.form("email_quote_form_main"):
-        st.markdown("**📧 Email Details:**")
-        
-        # Recipient email
-        recipient_email = st.text_input(
-            "📧 To (Recipient):",
-            value=client_data.get('contact_email', ''),
-            placeholder="Enter recipient email address"
-        )
-        
-        # CC email - EMPTY BY DEFAULT AS REQUESTED
-        cc_email = st.text_input(
-            "📋 CC (Optional):",
-            value="",  # EMPTY BY DEFAULT
-            placeholder="Enter CC email address (optional)"
-        )
-        
-        # Additional message
-        additional_message = st.text_area(
-            "💬 Additional Message (optional):",
-            placeholder="Add any additional notes or message...",
-            height=100
-        )
-        
-        # Attachment options
-        st.markdown("**📎 Attachments:**")
-        col1, col2 = st.columns(2)
-        with col1:
-            attach_pdf = st.checkbox("📄 Attach PDF Quote", value=True)
-        with col2:
-            attach_excel = st.checkbox("📊 Attach Excel Quote", value=False)
-        
-        # Send button
-        send_submitted = st.form_submit_button("📧 Send Professional Quote Email", use_container_width=True, type="primary")
-        
-        if send_submitted:
+    # EMAIL FORM - DISPLAYED DIRECTLY ON PAGE
+    st.markdown("**📧 Email Details:**")
+    
+    # Recipient email
+    recipient_email = st.text_input(
+        "📧 To (Recipient):",
+        value=client_data.get('contact_email', ''),
+        placeholder="Enter recipient email address",
+        key="email_recipient"
+    )
+    
+    # CC email - EMPTY BY DEFAULT AS REQUESTED
+    cc_email = st.text_input(
+        "📋 CC (Optional):",
+        value="",  # EMPTY BY DEFAULT
+        placeholder="Enter CC email address (optional)",
+        key="email_cc"
+    )
+    
+    # Additional message
+    additional_message = st.text_area(
+        "💬 Additional Message (optional):",
+        placeholder="Add any additional notes or message...",
+        height=100,
+        key="email_message"
+    )
+    
+    # Attachment options
+    st.markdown("**📎 Attachments:**")
+    col1, col2 = st.columns(2)
+    with col1:
+        attach_pdf = st.checkbox("📄 Attach PDF Quote", value=True, key="attach_pdf_check")
+    with col2:
+        attach_excel = st.checkbox("📊 Attach Excel Quote", value=False, key="attach_excel_check")
+    
+    # Action buttons
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📧 Send Professional Quote Email", use_container_width=True, type="primary", key="send_email_btn"):
             # Basic validation
             if not recipient_email or '@' not in recipient_email:
                 st.error("Please enter a valid recipient email address")
@@ -502,6 +505,6 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                         st.error(f"❌ Email sending failed: {str(e)}")
                         st.exception(e)
     
-    # Cancel button
-    if st.button("Cancel", key="cancel_email"):
-        st.rerun()
+    with col2:
+        if st.button("Cancel", key="cancel_email_btn", use_container_width=True):
+            st.rerun()
