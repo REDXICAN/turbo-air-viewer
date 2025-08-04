@@ -750,19 +750,19 @@ def show_cart_page(user_id, db_manager):
         total = subtotal + tax_amount
         
         st.markdown(f"**Subtotal:** ${subtotal:,.2f}")
-        st.markdown(f"**Tax ({tax_rate:.1f}%):** ${tax_amount:,.2f}")
+        st.markdown(f"**Tax ({tax_rate:.1f}%):** ${tax_amount:,.2f}")  
         st.markdown(f"**Total:** ${total:,.2f}")
     
     # Export Options section
     st.markdown("### Export Options")
     
-    # Prepare quote data for export
+    # Prepare quote data for export with CUSTOM TAX RATE
     quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
     quote_data = {
         'quote_number': quote_number,
         'total_amount': total,
         'subtotal': subtotal,
-        'tax_rate': tax_rate,
+        'tax_rate': tax_rate,  # Use the custom tax rate from UI
         'tax_amount': tax_amount,
         'created_at': datetime.now()
     }
@@ -805,9 +805,9 @@ def show_cart_page(user_id, db_manager):
         if st.button("📧 Email Quote", use_container_width=True, type="primary"):
             with st.spinner("Preparing email..."):
                 try:
-                    # Create quote in database first
-                    success, message, db_quote_number = db_manager.create_quote(
-                        user_id, st.session_state.selected_client, cart_items_df
+                    # Create quote in database first with CUSTOM TAX
+                    success, message, db_quote_number = db_manager.create_quote_with_tax(
+                        user_id, st.session_state.selected_client, cart_items_df, tax_rate, tax_amount, total
                     )
                     
                     if success:
@@ -829,9 +829,9 @@ def show_cart_page(user_id, db_manager):
         if st.button("📄 Export PDF", use_container_width=True, type="secondary"):
             with st.spinner("Generating PDF..."):
                 try:
-                    # Create quote in database first
-                    success, message, db_quote_number = db_manager.create_quote(
-                        user_id, st.session_state.selected_client, cart_items_df
+                    # Create quote in database first with CUSTOM TAX
+                    success, message, db_quote_number = db_manager.create_quote_with_tax(
+                        user_id, st.session_state.selected_client, cart_items_df, tax_rate, tax_amount, total
                     )
                     
                     if success:
@@ -857,9 +857,9 @@ def show_cart_page(user_id, db_manager):
         if st.button("📊 Export Excel", use_container_width=True, type="secondary"):
             with st.spinner("Generating Excel..."):
                 try:
-                    # Create quote in database first
-                    success, message, db_quote_number = db_manager.create_quote(
-                        user_id, st.session_state.selected_client, cart_items_df
+                    # Create quote in database first with CUSTOM TAX
+                    success, message, db_quote_number = db_manager.create_quote_with_tax(
+                        user_id, st.session_state.selected_client, cart_items_df, tax_rate, tax_amount, total
                     )
                     
                     if success:
