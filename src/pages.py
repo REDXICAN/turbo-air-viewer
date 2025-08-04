@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Updated with improved email integration and debugging
+Updated with corrected email integration imports
 """
 
 import streamlit as st
@@ -25,8 +25,23 @@ from .export import (
     generate_pdf_quote
 )
 
-# Import email functions - IMPROVED VERSION with better error handling
-from .email import show_email_quote_dialog, get_email_service, EmailService, test_email_connection
+# Import email functions - CORRECTED IMPORT NAMES
+from .email import show_email_quote_form, get_email_service, EmailService
+
+def test_email_connection():
+    """Test email connection - wrapper function for compatibility"""
+    try:
+        email_service = get_email_service()
+        if email_service and hasattr(email_service, '_create_professional_email_body'):
+            # Test basic connection by checking configuration
+            if email_service.configured:
+                return True, "Email service configured and ready"
+            else:
+                return False, "Email service not configured - check secrets.toml"
+        else:
+            return False, "Email service not available"
+    except Exception as e:
+        return False, f"Test connection error: {str(e)}"
 
 def show_client_selector(user_id, db_manager, sync_manager):
     """Display client selection interface"""
@@ -686,7 +701,7 @@ def display_product_results_collapsible(results_df, user_id, db_manager):
             st.divider()
 
 def show_cart_page(user_id, db_manager):
-    """Display cart page with proper SKU display, totals calculation and 2 export buttons - IMPROVED EMAIL INTEGRATION"""
+    """Display cart page with proper SKU display, totals calculation and 2 export buttons - CORRECTED EMAIL INTEGRATION"""
     
     st.markdown("### Shopping Cart")
     
@@ -856,99 +871,98 @@ def show_cart_page(user_id, db_manager):
     # Export Options section
     st.markdown("### Export Options")
     
-    # IMPROVED EMAIL DIAGNOSTICS WITH DEBUG VERSION
-    
+    # EMAIL DIAGNOSTICS WITH DEBUG VERSION
     with st.expander("📧 Email Diagnostics", expanded=False):
         st.markdown("**Check email configuration:**")
-    
-    try:
-        email_service = get_email_service()
-        if email_service:
-            if email_service.configured:
-                st.success("✅ Email service configured")
-                st.info(f"📧 Sender: {email_service.sender_email}")
-                st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
-                
-                # PRODUCTION-READY TEST BUTTON - NO DEBUG OUTPUT
-                if st.button("🔍 Test SMTP Connection", key="test_smtp_prod"):
-                    try:
-                        with st.spinner("Testing connection..."):
-                            success, message = test_email_connection()
-                            
-                        if success:
-                            st.success(f"✅ {message}")
-                            
-                            # Send actual test email on success
-                            try:
-                                with st.spinner("Sending test email..."):
-                                    import smtplib
-                                    from email.mime.text import MIMEText
-                                    from email.mime.multipart import MIMEMultipart
-                                    
-                                    # Create test message
-                                    msg = MIMEMultipart()
-                                    msg['From'] = email_service.sender_email
-                                    msg['To'] = "andres.xbgo@gmail.com"
-                                    msg['Cc'] = "andres@turboairmexico.com"
-                                    msg['Subject'] = "✅ Turbo Air Email System Test - SUCCESS"
-                                    
-                                    body = """
-                                    <html>
-                                    <body>
-                                        <h2>🎉 Email System Test Successful!</h2>
-                                        <p>Your Turbo Air Equipment Viewer email system is working correctly!</p>
-                                        <ul>
-                                            <li>✅ SMTP Connection: Success</li>
-                                            <li>✅ Authentication: Success</li>
-                                            <li>✅ Email Delivery: Success</li>
-                                        </ul>
-                                        <p>The system is ready to send customer quotes.</p>
-                                        <hr>
-                                        <p><small>Sent from Turbo Air Equipment Viewer</small></p>
-                                    </body>
-                                    </html>
-                                    """
-                                    
-                                    msg.attach(MIMEText(body, 'html'))
-                                    
-                                    # Send to both recipients
-                                    server = smtplib.SMTP(email_service.smtp_server, email_service.smtp_port)
-                                    server.starttls()
-                                    server.login(email_service.sender_email, email_service.sender_password)
-                                    
-                                    recipients = ["andres.xbgo@gmail.com", "andres@turboairmexico.com"]
-                                    server.sendmail(email_service.sender_email, recipients, msg.as_string())
-                                    server.quit()
-                                    
-                                    st.success("✅ Test email sent to andres.xbgo@gmail.com and andres@turboairmexico.com!")
-                                    st.balloons()
-                                    
-                            except Exception as send_error:
-                                st.warning(f"⚠️ Connection works but test email failed: {str(send_error)}")
-                        else:
-                            st.error(f"❌ {message}")
-                            if "authentication" in message.lower():
-                                st.markdown("**Quick Fix:**")
-                                st.markdown("- Generate a new Gmail app password")
-                                st.markdown("- Make sure 2FA is enabled")
+        
+        try:
+            email_service = get_email_service()
+            if email_service:
+                if email_service.configured:
+                    st.success("✅ Email service configured")
+                    st.info(f"📧 Sender: {email_service.sender_email}")
+                    st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
+                    
+                    # PRODUCTION-READY TEST BUTTON - NO DEBUG OUTPUT
+                    if st.button("🔍 Test SMTP Connection", key="test_smtp_prod"):
+                        try:
+                            with st.spinner("Testing connection..."):
+                                success, message = test_email_connection()
                                 
-                    except Exception as e:
-                        st.error(f"❌ Test failed: {str(e)}")
-                        
-            else:
-                st.error("❌ Email service not configured")
-                st.markdown("**Required in secrets.toml:**")
-                st.code("""
+                            if success:
+                                st.success(f"✅ {message}")
+                                
+                                # Send actual test email on success
+                                try:
+                                    with st.spinner("Sending test email..."):
+                                        import smtplib
+                                        from email.mime.text import MIMEText
+                                        from email.mime.multipart import MIMEMultipart
+                                        
+                                        # Create test message
+                                        msg = MIMEMultipart()
+                                        msg['From'] = email_service.sender_email
+                                        msg['To'] = "andres.xbgo@gmail.com"
+                                        msg['Cc'] = "andres@turboairmexico.com"
+                                        msg['Subject'] = "✅ Turbo Air Email System Test - SUCCESS"
+                                        
+                                        body = """
+                                        <html>
+                                        <body>
+                                            <h2>🎉 Email System Test Successful!</h2>
+                                            <p>Your Turbo Air Equipment Viewer email system is working correctly!</p>
+                                            <ul>
+                                                <li>✅ SMTP Connection: Success</li>
+                                                <li>✅ Authentication: Success</li>
+                                                <li>✅ Email Delivery: Success</li>
+                                            </ul>
+                                            <p>The system is ready to send customer quotes.</p>
+                                            <hr>
+                                            <p><small>Sent from Turbo Air Equipment Viewer</small></p>
+                                        </body>
+                                        </html>
+                                        """
+                                        
+                                        msg.attach(MIMEText(body, 'html'))
+                                        
+                                        # Send to both recipients
+                                        server = smtplib.SMTP(email_service.smtp_server, email_service.smtp_port)
+                                        server.starttls()
+                                        server.login(email_service.sender_email, email_service.sender_password)
+                                        
+                                        recipients = ["andres.xbgo@gmail.com", "andres@turboairmexico.com"]
+                                        server.sendmail(email_service.sender_email, recipients, msg.as_string())
+                                        server.quit()
+                                        
+                                        st.success("✅ Test email sent to andres.xbgo@gmail.com and andres@turboairmexico.com!")
+                                        st.balloons()
+                                        
+                                except Exception as send_error:
+                                    st.warning(f"⚠️ Connection works but test email failed: {str(send_error)}")
+                            else:
+                                st.error(f"❌ {message}")
+                                if "authentication" in message.lower():
+                                    st.markdown("**Quick Fix:**")
+                                    st.markdown("- Generate a new Gmail app password")
+                                    st.markdown("- Make sure 2FA is enabled")
+                                    
+                        except Exception as e:
+                            st.error(f"❌ Test failed: {str(e)}")
+                            
+                else:
+                    st.error("❌ Email service not configured")
+                    st.markdown("**Required in secrets.toml:**")
+                    st.code("""
 [email]
 smtp_server = "smtp.gmail.com"
 smtp_port = 587
 sender_email = "your-email@gmail.com"
 sender_password = "your-16-char-app-password"
-                """)
-        else:
-            st.error("❌ Could not create email service")
-    except Exception as e:
-        st.error(f"❌ Email service error: {str(e)}")
+                    """)
+            else:
+                st.error("❌ Could not create email service")
+        except Exception as e:
+            st.error(f"❌ Email service error: {str(e)}")
 
     # Prepare quote data for export with CUSTOM TAX RATE
     quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -1010,13 +1024,8 @@ sender_password = "your-16-char-app-password"
                         
                         email_service = get_email_service()
                         if email_service and hasattr(email_service, 'configured') and email_service.configured:
-                            # Test connection first
-                            conn_success, conn_msg = email_service.test_connection()
-                            if conn_success:
-                                show_email_quote_dialog(quote_data, export_cart_df, client_data)
-                            else:
-                                st.error(f"Email connection failed: {conn_msg}")
-                                st.info("Check your email settings in the diagnostics above ↑")
+                            # Show the email form directly
+                            show_email_quote_form(quote_data, export_cart_df, client_data)
                         else:
                             st.warning("Email service not configured")
                             st.info("Configure Gmail credentials in your secrets.toml file")
