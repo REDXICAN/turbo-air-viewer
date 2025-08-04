@@ -1,7 +1,7 @@
 """
 Database operations module for Turbo Air Equipment Viewer
 Handles both SQLite (offline) and Supabase (online) operations
-Updated with get_user_quotes method
+Updated with get_user_quotes method and all required functionality
 """
 
 import sqlite3
@@ -252,42 +252,130 @@ class DatabaseManager:
             conn.close()
             return False, str(e)
     
+    def delete_client(self, client_id: int) -> Tuple[bool, str]:
+        """Delete a client and all associated data"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode - delete from Supabase
+                # First check if client has quotes
+                quotes_response = self.supabase.table('quotes').select('id').eq('client_id', client_id).execute()
+                
+                if quotes_response.data:
+                    return False, "Cannot delete client with existing quotes. Please archive or delete quotes first."
+                
+                # Delete cart items first (foreign key constraint)
+                self.supabase.table('cart_items').delete().eq('client_id', client_id).execute()
+                
+                # Delete client
+                response = self.supabase.table('clients').delete().eq('id', client_id).execute()
+                
+                if response.data:
+                    return True, "Client deleted successfully"
+                else:
+                    return False, "Failed to delete client"
+            
+            else:
+                # Offline mode - delete from SQLite
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                # Check if client has quotes
+                cursor.execute("SELECT COUNT(*) FROM quotes WHERE client_id = ?", (client_id,))
+                if cursor.fetchone()[0] > 0:
+                    conn.close()
+                    return False, "Cannot delete client with existing quotes. Please archive or delete quotes first."
+                
+                # Delete cart items first (foreign key constraint)
+                cursor.execute("DELETE FROM cart_items WHERE client_id = ?", (client_id,))
+                
+                # Delete client
+                cursor.execute("DELETE FROM clients WHERE id = ?", (client_id,))
+                
+                if cursor.rowcount > 0:
+                    conn.commit()
+                    
+                    # Add to sync queue
+                    self._add_to_sync_queue(conn, 'clients', 'delete', {'id': client_id})
+                    
+                    conn.close()
+                    return True, "Client deleted successfully"
+                else:
+                    conn.close()
+                    return False, "Client not found"
+                    
+        except Exception as e:
+            return False, f"Error deleting client: {str(e)}"
+    
+    def get_client_quotes(self, client_id: int) -> pd.DataFrame:
+        """Get all quotes for a specific client"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode
+                response = self.supabase.table('quotes').select('*').eq('client_id', client_id).execute()
+                return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+            
+            else:
+                # Offline mode
+                conn = self.get_connection()
+                df = pd.read_sql_query("""
+                    SELECT * FROM quotes 
+                    WHERE client_id = ?
+                    ORDER BY created_at DESC
+                """, conn, params=(client_id,))
+                conn.close()
+                return df
+                
+        except Exception as e:
+            print(f"Error getting client quotes: {e}")
+            return pd.DataFrame()
+    
     def get_cart_items(self, user_id: str, client_id: Optional[int] = None) -> pd.DataFrame:
-        """Get cart items for user and optional client"""
-        if self.is_online:
-            try:
-                query = self.supabase.table('cart_items').select(
-                    '*, products(*)'
-                ).eq('user_id', user_id)
+        """Get cart items with product details"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode - get cart items with product details
+                query = self.supabase.table('cart_items').select("""
+                    id, quantity, user_id, client_id, product_id, created_at,
+                    products (
+                        id, sku, product_type, description, price, category
+                    )
+                """).eq('user_id', user_id)
                 
                 if client_id:
                     query = query.eq('client_id', client_id)
                 
                 response = query.execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
-        
-        # Use SQLite
-        conn = self.get_connection()
-        if client_id:
-            query = """
-                SELECT c.*, p.* 
-                FROM cart_items c
-                JOIN products p ON c.product_id = p.id
-                WHERE c.user_id = ? AND c.client_id = ?
-            """
-            df = pd.read_sql_query(query, conn, params=(user_id, client_id))
-        else:
-            query = """
-                SELECT c.*, p.* 
-                FROM cart_items c
-                JOIN products p ON c.product_id = p.id
-                WHERE c.user_id = ?
-            """
-            df = pd.read_sql_query(query, conn, params=(user_id,))
-        conn.close()
-        return df
+                return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+            
+            else:
+                # Offline mode - join with products table
+                conn = self.get_connection()
+                if client_id:
+                    df = pd.read_sql_query("""
+                        SELECT 
+                            ci.id, ci.quantity, ci.user_id, ci.client_id, ci.product_id, ci.created_at,
+                            p.sku, p.product_type, p.description, p.price, p.category
+                        FROM cart_items ci
+                        JOIN products p ON ci.product_id = p.id
+                        WHERE ci.user_id = ? AND ci.client_id = ?
+                        ORDER BY ci.created_at DESC
+                    """, conn, params=(user_id, client_id))
+                else:
+                    df = pd.read_sql_query("""
+                        SELECT 
+                            ci.id, ci.quantity, ci.user_id, ci.client_id, ci.product_id, ci.created_at,
+                            p.sku, p.product_type, p.description, p.price, p.category
+                        FROM cart_items ci
+                        JOIN products p ON ci.product_id = p.id
+                        WHERE ci.user_id = ?
+                        ORDER BY ci.created_at DESC
+                    """, conn, params=(user_id,))
+                conn.close()
+                return df
+                
+        except Exception as e:
+            print(f"Error getting cart items: {e}")
+            return pd.DataFrame()
     
     def add_to_cart(self, user_id: str, product_id: int, client_id: Optional[int] = None, 
                    quantity: int = 1) -> Tuple[bool, str]:
@@ -368,199 +456,206 @@ class DatabaseManager:
             conn.close()
             return False, str(e)
     
-    def update_cart_quantity(self, cart_item_id: int, quantity: int) -> Tuple[bool, str]:
-        """Update cart item quantity"""
-        if quantity <= 0:
-            return self.remove_from_cart(cart_item_id)
-        
-        if self.is_online:
-            try:
-                self.supabase.table('cart_items').update(
-                    {'quantity': quantity}
-                ).eq('id', cart_item_id).execute()
-                return True, "Quantity updated"
-            except:
-                pass
-        
-        # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
+    def update_cart_quantity(self, cart_item_id: int, new_quantity: int) -> bool:
+        """Update quantity of a cart item"""
         try:
-            cursor.execute("""
-                UPDATE cart_items 
-                SET quantity = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            """, (quantity, cart_item_id))
-            conn.commit()
+            if self.is_online and self.supabase:
+                # Online mode
+                response = self.supabase.table('cart_items').update({
+                    'quantity': new_quantity,
+                    'updated_at': datetime.now().isoformat()
+                }).eq('id', cart_item_id).execute()
+                
+                return response.data is not None
             
-            # Add to sync queue
-            self._add_to_sync_queue(conn, 'cart_items', 'update', {
-                'id': cart_item_id,
-                'quantity': quantity
-            })
-            
-            conn.close()
-            return True, "Quantity updated"
-        except Exception as e:
-            conn.close()
-            return False, str(e)
-    
-    def remove_from_cart(self, cart_item_id: int) -> Tuple[bool, str]:
-        """Remove item from cart"""
-        if self.is_online:
-            try:
-                self.supabase.table('cart_items').delete().eq('id', cart_item_id).execute()
-                return True, "Removed from cart"
-            except:
-                pass
-        
-        # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("DELETE FROM cart_items WHERE id = ?", (cart_item_id,))
-            conn.commit()
-            
-            # Add to sync queue
-            self._add_to_sync_queue(conn, 'cart_items', 'delete', {'id': cart_item_id})
-            
-            conn.close()
-            return True, "Removed from cart"
-        except Exception as e:
-            conn.close()
-            return False, str(e)
-    
-    def clear_cart(self, user_id: str, client_id: Optional[int] = None) -> Tuple[bool, str]:
-        """Clear all cart items for user/client"""
-        if self.is_online:
-            try:
-                query = self.supabase.table('cart_items').delete().eq('user_id', user_id)
-                if client_id:
-                    query = query.eq('client_id', client_id)
-                query.execute()
-                return True, "Cart cleared"
-            except:
-                pass
-        
-        # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        try:
-            if client_id:
-                cursor.execute("DELETE FROM cart_items WHERE user_id = ? AND client_id = ?", 
-                             (user_id, client_id))
             else:
-                cursor.execute("DELETE FROM cart_items WHERE user_id = ?", (user_id,))
-            
-            conn.commit()
-            
-            # Add to sync queue
-            self._add_to_sync_queue(conn, 'cart_items', 'clear', {
-                'user_id': user_id,
-                'client_id': client_id
-            })
-            
-            conn.close()
-            return True, "Cart cleared"
-        except Exception as e:
-            conn.close()
-            return False, str(e)
-    
-    def create_quote(self, user_id: str, client_id: int, cart_items: pd.DataFrame) -> Tuple[bool, str, str]:
-        """Create quote from cart items"""
-        # Generate quote number
-        quote_number = f"Q-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        
-        # Calculate total
-        total_amount = (cart_items['quantity'] * cart_items['price']).sum()
-        
-        if self.is_online:
-            try:
-                # Create quote
-                quote_data = {
-                    'user_id': user_id,
-                    'client_id': client_id,
-                    'quote_number': quote_number,
-                    'total_amount': float(total_amount),
-                    'status': 'draft'
-                }
-                quote_response = self.supabase.table('quotes').insert(quote_data).execute()
-                quote_id = quote_response.data[0]['id']
-                
-                # Create quote items
-                for _, item in cart_items.iterrows():
-                    item_data = {
-                        'quote_id': quote_id,
-                        'product_id': item['product_id'],
-                        'quantity': item['quantity'],
-                        'unit_price': float(item['price']),
-                        'total_price': float(item['quantity'] * item['price'])
-                    }
-                    self.supabase.table('quote_items').insert(item_data).execute()
-                
-                return True, "Quote created successfully", quote_number
-            except Exception as e:
-                print(f"Online quote error: {e}")
-        
-        # Use SQLite
-        conn = self.get_connection()
-        cursor = conn.cursor()
-        try:
-            # Create quote
-            cursor.execute("""
-                INSERT INTO quotes (user_id, client_id, quote_number, total_amount, status)
-                VALUES (?, ?, ?, ?, ?)
-            """, (user_id, client_id, quote_number, float(total_amount), 'draft'))
-            
-            quote_id = cursor.lastrowid
-            
-            # Create quote items
-            for _, item in cart_items.iterrows():
+                # Offline mode
+                conn = self.get_connection()
+                cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO quote_items (quote_id, product_id, quantity, unit_price, total_price)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (quote_id, item['product_id'], item['quantity'], 
-                      float(item['price']), float(item['quantity'] * item['price'])))
+                    UPDATE cart_items 
+                    SET quantity = ?, updated_at = CURRENT_TIMESTAMP 
+                    WHERE id = ?
+                """, (new_quantity, cart_item_id))
+                
+                success = cursor.rowcount > 0
+                conn.commit()
+                
+                # Add to sync queue
+                if success:
+                    self._add_to_sync_queue(conn, 'cart_items', 'update', {
+                        'id': cart_item_id,
+                        'quantity': new_quantity
+                    })
+                
+                conn.close()
+                return success
+                
+        except Exception as e:
+            print(f"Error updating cart quantity: {e}")
+            return False
+    
+    def remove_from_cart(self, cart_item_id: int) -> bool:
+        """Remove item from cart"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode
+                response = self.supabase.table('cart_items').delete().eq('id', cart_item_id).execute()
+                return response.data is not None
             
-            conn.commit()
+            else:
+                # Offline mode
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM cart_items WHERE id = ?", (cart_item_id,))
+                
+                success = cursor.rowcount > 0
+                conn.commit()
+                
+                # Add to sync queue
+                if success:
+                    self._add_to_sync_queue(conn, 'cart_items', 'delete', {'id': cart_item_id})
+                
+                conn.close()
+                return success
+                
+        except Exception as e:
+            print(f"Error removing from cart: {e}")
+            return False
+    
+    def clear_cart(self, user_id: str, client_id: int) -> bool:
+        """Clear all items from cart for a specific client"""
+        try:
+            if self.is_online and self.supabase:
+                # Online mode
+                self.supabase.table('cart_items').delete().eq('user_id', user_id).eq('client_id', client_id).execute()
             
-            # Add to sync queue
-            self._add_to_sync_queue(conn, 'quotes', 'insert', {
+            else:
+                # Offline mode
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM cart_items WHERE user_id = ? AND client_id = ?", (user_id, client_id))
+                conn.commit()
+                
+                # Add to sync queue
+                self._add_to_sync_queue(conn, 'cart_items', 'clear', {
+                    'user_id': user_id,
+                    'client_id': client_id
+                })
+                
+                conn.close()
+                
+            return True
+            
+        except Exception as e:
+            print(f"Error clearing cart: {e}")
+            return False
+    
+    def create_quote(self, user_id: str, client_id: int, cart_items_df: pd.DataFrame) -> Tuple[bool, str, str]:
+        """Create a quote from cart items"""
+        try:
+            # Generate quote number
+            quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            
+            # Calculate totals - handle both nested and direct price access
+            total_amount = 0
+            for _, item in cart_items_df.iterrows():
+                # Handle nested product data structure
+                product_data = item.get('products', {})
+                if isinstance(product_data, dict):
+                    price = float(product_data.get('price', 0))
+                else:
+                    price = float(item.get('price', 0))
+                quantity = int(item.get('quantity', 1))
+                total_amount += price * quantity
+            
+            # Add tax (assuming 8% default, but will be overridden by UI)
+            tax_rate = 0.08
+            subtotal = total_amount
+            tax_amount = subtotal * tax_rate
+            total_with_tax = subtotal + tax_amount
+            
+            quote_data = {
+                'quote_number': quote_number,
                 'user_id': user_id,
                 'client_id': client_id,
-                'quote_number': quote_number,
-                'total_amount': float(total_amount)
-            })
+                'subtotal': subtotal,
+                'tax_rate': tax_rate,
+                'tax_amount': tax_amount,
+                'total_amount': total_with_tax,
+                'status': 'draft',
+                'created_at': datetime.now().isoformat()
+            }
             
-            conn.close()
-            return True, "Quote created successfully", quote_number
+            if self.is_online and self.supabase:
+                # Online mode
+                response = self.supabase.table('quotes').insert(quote_data).execute()
+                if response.data:
+                    # Create quote items
+                    quote_id = response.data[0]['id']
+                    for _, item in cart_items_df.iterrows():
+                        product_data = item.get('products', {})
+                        if isinstance(product_data, dict):
+                            price = float(product_data.get('price', 0))
+                            product_id = product_data.get('id', item.get('product_id'))
+                        else:
+                            price = float(item.get('price', 0))
+                            product_id = item.get('product_id')
+                        
+                        quantity = int(item.get('quantity', 1))
+                        
+                        item_data = {
+                            'quote_id': quote_id,
+                            'product_id': product_id,
+                            'quantity': quantity,
+                            'unit_price': price,
+                            'total_price': price * quantity
+                        }
+                        self.supabase.table('quote_items').insert(item_data).execute()
+                    
+                    return True, f"Quote {quote_number} created successfully!", quote_number
+                else:
+                    return False, "Failed to create quote", None
+            
+            else:
+                # Offline mode
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    INSERT INTO quotes (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_amount, status, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (quote_number, user_id, client_id, subtotal, tax_rate, tax_amount, total_with_tax, 'draft', datetime.now().isoformat()))
+                
+                quote_id = cursor.lastrowid
+                
+                # Create quote items
+                for _, item in cart_items_df.iterrows():
+                    product_data = item.get('products', {})
+                    if isinstance(product_data, dict):
+                        price = float(product_data.get('price', 0))
+                        product_id = product_data.get('id', item.get('product_id'))
+                    else:
+                        price = float(item.get('price', 0))
+                        product_id = item.get('product_id')
+                    
+                    quantity = int(item.get('quantity', 1))
+                    
+                    cursor.execute("""
+                        INSERT INTO quote_items (quote_id, product_id, quantity, unit_price, total_price)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (quote_id, product_id, quantity, price, price * quantity))
+                
+                conn.commit()
+                
+                # Add to sync queue
+                self._add_to_sync_queue(conn, 'quotes', 'insert', quote_data)
+                
+                conn.close()
+                return True, f"Quote {quote_number} created successfully!", quote_number
+                
         except Exception as e:
-            conn.close()
-            return False, str(e), ""
-    
-    def delete_client(self, client_id):
-        """Delete a client"""
-        try:
-            # Implementation depends on your database structure
-            return True, "Client deleted successfully"
-        except Exception as e:
-            return False, f"Error deleting client: {str(e)}"
-
-    def get_client_quotes(self, client_id: int) -> pd.DataFrame:
-        """Get all quotes for a client"""
-        if self.is_online:
-            try:
-                response = self.supabase.table('quotes').select('*').eq('client_id', client_id).execute()
-                return pd.DataFrame(response.data)
-            except:
-                pass
-        
-        # Use SQLite
-        conn = self.get_connection()
-        df = pd.read_sql_query("SELECT * FROM quotes WHERE client_id = ? ORDER BY created_at DESC", 
-                              conn, params=(client_id,))
-        conn.close()
-        return df
+            return False, f"Error creating quote: {str(e)}", None
     
     def get_user_quotes(self, user_id: str, limit: int = None) -> pd.DataFrame:
         """Get all quotes for a user"""

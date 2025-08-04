@@ -13,6 +13,7 @@ import pandas as pd
 import base64
 import gzip
 import tempfile
+import warnings
 
 class PersistenceManager:
     def __init__(self, db_manager, supabase_client):
@@ -20,6 +21,32 @@ class PersistenceManager:
         self.supabase = supabase_client
         self.backup_table = 'database_backups'
         self.initialized_marker = '.db_initialized'
+    
+    def _safe_datetime_conversion(self, series):
+        """Safely convert series to datetime with proper format handling"""
+        try:
+            # Common datetime formats to try
+            formats = [
+                '%Y-%m-%d %H:%M:%S',
+                '%Y-%m-%d %H:%M:%S.%f',
+                '%Y-%m-%d',
+                '%Y-%m-%dT%H:%M:%S',
+                '%Y-%m-%dT%H:%M:%S.%f',
+                '%Y-%m-%dT%H:%M:%SZ'
+            ]
+            
+            for fmt in formats:
+                try:
+                    return pd.to_datetime(series, format=fmt, errors='coerce')
+                except:
+                    continue
+            
+            # Fallback to mixed format with warning suppression
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return pd.to_datetime(series, errors='coerce', format='mixed')
+        except:
+            return series
         
     def should_reset_database(self) -> bool:
         """Check if we should do a clean database run"""
@@ -79,12 +106,12 @@ class PersistenceManager:
             for table in tables:
                 try:
                     df = pd.read_sql_query(f"SELECT * FROM {table}", conn)
-                    # Convert datetime columns to string for JSON serialization
+                    # Convert datetime columns to string for JSON serialization - FIXED VERSION
                     for col in df.columns:
                         if df[col].dtype == 'object':
                             try:
-                                # Try to convert to datetime
-                                temp_series = pd.to_datetime(df[col], errors='coerce')
+                                # Use the safe datetime conversion method
+                                temp_series = self._safe_datetime_conversion(df[col])
                                 # If successful (contains valid datetimes), convert to string
                                 if not temp_series.isna().all():
                                     df[col] = temp_series.astype(str).where(temp_series.notna(), df[col])

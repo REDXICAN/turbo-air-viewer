@@ -18,10 +18,9 @@ import pandas as pd
 def is_email_configured() -> bool:
     """Check if email service is configured"""
     try:
-        config = st.session_state.get('config')
-        if config and config.has_email:
-            return True
-        return False
+        email_config = st.secrets.get('email', {})
+        required_fields = ['smtp_server', 'smtp_port', 'sender_email', 'sender_password']
+        return all(email_config.get(field) for field in required_fields)
     except:
         return False
 
@@ -77,6 +76,8 @@ class EmailService:
                             <li>Excel spreadsheet with detailed product information</li>
                             <li>PDF document for easy viewing and printing</li>
                         </ul>
+                        
+                        {f"<p><strong>Additional Message:</strong><br>{client_data.get('custom_message', '')}</p>" if client_data.get('custom_message') else ""}
                         
                         <p>If you have any questions or would like to proceed with this order, please don't hesitate to contact us.</p>
                         
@@ -164,17 +165,37 @@ def get_email_service():
         return None
     
     try:
-        config = st.session_state.get('config')
-        if config and config.email_config:
-            return EmailService(
-                smtp_server=config.email_config.get('smtp_server', 'smtp.gmail.com'),
-                smtp_port=config.email_config.get('smtp_port', 587),
-                sender_email=config.email_config.get('sender_email', ''),
-                sender_password=config.email_config.get('sender_password', '')
-            )
+        email_config = st.secrets.get('email', {})
+        return EmailService(
+            smtp_server=email_config.get('smtp_server', 'smtp.gmail.com'),
+            smtp_port=email_config.get('smtp_port', 587),
+            sender_email=email_config.get('sender_email', ''),
+            sender_password=email_config.get('sender_password', '')
+        )
     except Exception as e:
         print(f"Failed to initialize email service: {str(e)}")
         return None
+
+def prepare_email_attachments(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict) -> Dict[str, io.BytesIO]:
+    """Prepare email attachments (Excel and PDF)"""
+    attachments = {}
+    
+    try:
+        # Import the export functions
+        from .export import generate_excel_quote, generate_pdf_quote
+        
+        # Generate Excel attachment
+        excel_buffer = generate_excel_quote(quote_data, items_df, client_data)
+        attachments[f"Quote_{quote_data['quote_number']}.xlsx"] = excel_buffer
+        
+        # Generate PDF attachment
+        pdf_buffer = generate_pdf_quote(quote_data, items_df, client_data)
+        attachments[f"Quote_{quote_data['quote_number']}.pdf"] = pdf_buffer
+        
+    except Exception as e:
+        print(f"Error preparing attachments: {e}")
+    
+    return attachments
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
     """Show dialog to email quote"""
@@ -184,8 +205,6 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         st.warning("Email service is not configured. Quote cannot be sent via email.")
         st.info("To enable email functionality, configure Gmail credentials in your secrets.")
         return False
-    
-    from .export import prepare_email_attachments
     
     # Create email dialog in an expander
     with st.expander("📧 Email Quote", expanded=True):

@@ -1,14 +1,19 @@
+[server]
+fileWatcherType = "none"
+runOnSave = false
+maxUploadSize = 200
+enableCORS = true
+enableXsrfProtection = true
+
+[global]
+disableWatchdogWarning = true
+
 [theme]
 primaryColor = "#20429c"
 backgroundColor = "#FFFFFF"
 secondaryBackgroundColor = "#F2F2F7"
 textColor = "#000000"
 font = "sans serif"
-
-[server]
-maxUploadSize = 200
-enableCORS = true
-enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false

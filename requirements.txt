@@ -25,3 +25,6 @@ pyjwt>=2.8.0
 
 # HTTP client (required by Supabase)
 httpx>=0.24.0
+
+# Performance optimization
+pyarrow>=10.0.0
