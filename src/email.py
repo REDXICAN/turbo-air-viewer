@@ -231,7 +231,7 @@ def get_email_service():
         return None
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show dialog to email quote with improved UI and error handling"""
+    """Show dialog to email quote with improved UI and error handling - Fixed unresponsive button"""
     email_service = get_email_service()
     
     if not email_service or not email_service.configured:
@@ -246,100 +246,153 @@ sender_password = "your-app-password"
         """)
         return False
     
-    # Test connection first
-    with st.expander("🔧 Email Configuration Test", expanded=False):
-        if st.button("Test Email Configuration"):
-            with st.spinner("Testing email connection..."):
-                connection_ok, connection_msg = email_service.test_connection()
-                if connection_ok:
-                    st.success(f"✅ {connection_msg}")
-                else:
-                    st.error(f"❌ {connection_msg}")
+    # Test connection section - Fixed button responsiveness
+    st.markdown("### 🔧 Email Configuration Test")
+    
+    # Use columns to make button more responsive
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        test_clicked = st.button(
+            "🔌 Test Email Configuration", 
+            key="test_email_config_btn",
+            use_container_width=True,
+            type="secondary"
+        )
+    
+    if test_clicked:
+        with st.spinner("Testing email connection..."):
+            connection_ok, connection_msg = email_service.test_connection()
+            if connection_ok:
+                st.success(f"✅ {connection_msg}")
+                st.info("📧 Email service is working properly!")
+            else:
+                st.error(f"❌ {connection_msg}")
+                
+                # Show troubleshooting info
+                with st.expander("🔍 Troubleshooting", expanded=True):
+                    st.warning("**Common Gmail setup issues:**")
+                    st.write("1. **App Password**: Use a 16-character app password, not your regular Gmail password")
+                    st.write("2. **2-Factor Authentication**: Must be enabled on your Gmail account")
+                    st.write("3. **Account Security**: Check Google Account security settings")
+                    st.write("4. **Network**: Ensure port 587 is not blocked by firewall")
                     
-                    # Show troubleshooting info
-                    st.warning("Common Gmail setup issues:")
-                    st.write("1. Enable 2-factor authentication on your Gmail account")
-                    st.write("2. Generate an App Password (not your regular Gmail password)")
-                    st.write("3. Use the 16-character app password in your secrets")
-                    st.write("4. Make sure 'Less secure app access' is enabled if not using 2FA")
+                    st.info("**Current Configuration:**")
+                    st.code(f"""
+SMTP Server: {email_service.smtp_server}
+Port: {email_service.smtp_port}
+Email: {email_service.sender_email}
+Password: {'*' * len(email_service.sender_password)}
+                    """)
+    
+    st.divider()
     
     # Create email dialog
-    with st.expander("📧 Email Quote", expanded=True):
-        with st.form("email_quote_form"):
-            st.subheader("Send Quote via Email")
-            
-            # Pre-fill with client email if available
-            default_email = client_data.get('contact_email', '')
-            recipient_email = st.text_input(
-                "Recipient Email*", 
-                value=default_email,
-                help="Enter the email address to send the quote to"
+    st.markdown("### 📧 Send Quote via Email")
+    
+    # Use a unique key for the form to prevent conflicts
+    with st.form("email_quote_form_unique", clear_on_submit=False):
+        # Pre-fill with client email if available
+        default_email = client_data.get('contact_email', '')
+        recipient_email = st.text_input(
+            "📮 Recipient Email *", 
+            value=default_email,
+            help="Enter the email address to send the quote to",
+            placeholder="customer@company.com"
+        )
+        
+        # Additional recipients
+        cc_emails = st.text_input(
+            "📝 CC (optional)", 
+            placeholder="manager@company.com, sales@company.com",
+            help="Additional recipients (separate multiple emails with commas)"
+        )
+        
+        # Custom message
+        custom_message = st.text_area(
+            "💬 Personal Message (optional)",
+            placeholder="Thank you for your interest in Turbo Air equipment. Please review the attached quote and let us know if you have any questions.",
+            height=100,
+            help="This message will be included in the email body"
+        )
+        
+        st.markdown("---")
+        
+        # Action buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            send_button = st.form_submit_button(
+                "📧 Send Email Quote", 
+                type="primary", 
+                use_container_width=True
             )
-            
-            # Additional recipients
-            cc_emails = st.text_input(
-                "CC (optional)", 
-                placeholder="separate multiple emails with commas",
-                help="Additional recipients who will receive a copy"
+        with col2:
+            cancel_button = st.form_submit_button(
+                "❌ Cancel", 
+                use_container_width=True
             )
-            
-            # Custom message
-            custom_message = st.text_area(
-                "Personal Message (optional)",
-                placeholder="Add any additional notes or messages here...",
-                height=100,
-                help="This message will be included in the email body"
-            )
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                send_button = st.form_submit_button("📧 Send Email", type="primary", use_container_width=True)
-            with col2:
-                cancel_button = st.form_submit_button("Cancel", use_container_width=True)
-            
-            if send_button:
-                if not recipient_email:
-                    st.error("❌ Please enter a recipient email address")
-                    return False
-                
-                if not recipient_email.count('@') == 1 or '.' not in recipient_email.split('@')[1]:
-                    st.error("❌ Please enter a valid email address")
-                    return False
-                
-                with st.spinner("Sending email..."):
-                    try:
-                        # Prepare attachments
-                        from .export import prepare_email_attachments
-                        attachments = prepare_email_attachments(quote_data, items_df, client_data)
-                        
-                        if not attachments:
-                            st.error("❌ Could not prepare email attachments")
-                            return False
-                        
-                        # Add custom message to client data if provided
-                        if custom_message:
-                            client_data['custom_message'] = custom_message
-                        
-                        # Send email
-                        success, message = email_service.send_quote_email(
-                            recipient_email=recipient_email,
-                            quote_data=quote_data,
-                            client_data=client_data,
-                            attachments=attachments
-                        )
-                        
-                        if success:
-                            st.success(f"✅ Quote emailed successfully to {recipient_email}!")
-                            st.info(f"📋 Quote #{quote_data['quote_number']} sent with Excel and PDF attachments")
-                            st.balloons()
-                            return True
-                        else:
-                            st.error(f"❌ Failed to send email: {message}")
-                            return False
+        
+        # Handle form submission
+        if send_button:
+            if not recipient_email or not recipient_email.strip():
+                st.error("❌ Please enter a recipient email address")
+            elif not '@' in recipient_email or not '.' in recipient_email.split('@')[-1]:
+                st.error("❌ Please enter a valid email address")
+            else:
+                # Show sending progress
+                progress_container = st.container()
+                with progress_container:
+                    with st.spinner("📤 Preparing and sending email..."):
+                        try:
+                            # Import here to avoid circular imports
+                            from .export import prepare_email_attachments
                             
-                    except Exception as e:
-                        st.error(f"❌ Email system error: {str(e)}")
-                        return False
-            
-            if cancel_button:
-                return False
+                            # Prepare attachments
+                            st.info("📎 Preparing attachments...")
+                            attachments = prepare_email_attachments(quote_data, items_df, client_data)
+                            
+                            if not attachments:
+                                st.error("❌ Could not prepare email attachments")
+                            else:
+                                st.info(f"📎 Created {len(attachments)} attachments")
+                                
+                                # Add custom message to client data if provided
+                                email_client_data = client_data.copy()
+                                if custom_message and custom_message.strip():
+                                    email_client_data['custom_message'] = custom_message.strip()
+                                
+                                # Send email
+                                st.info("📧 Sending email...")
+                                success, message = email_service.send_quote_email(
+                                    recipient_email=recipient_email.strip(),
+                                    quote_data=quote_data,
+                                    client_data=email_client_data,
+                                    attachments=attachments
+                                )
+                                
+                                if success:
+                                    st.success(f"✅ Quote emailed successfully to {recipient_email}!")
+                                    st.info(f"📋 Quote #{quote_data['quote_number']} sent with attachments:")
+                                    for filename in attachments.keys():
+                                        st.info(f"  • {filename}")
+                                    st.balloons()
+                                    return True
+                                else:
+                                    st.error(f"❌ Failed to send email: {message}")
+                                    
+                                    # Show additional troubleshooting
+                                    with st.expander("🛠️ Email Troubleshooting"):
+                                        st.write("**If the email failed to send:**")
+                                        st.write("1. Check your internet connection")
+                                        st.write("2. Verify Gmail app password is correct")
+                                        st.write("3. Try the 'Test Email Configuration' button above")
+                                        st.write("4. Check Gmail account security settings")
+                        
+                        except Exception as e:
+                            st.error(f"❌ Email system error: {str(e)}")
+                            st.info("💡 Try using the 'Test Email Configuration' button first")
+        
+        if cancel_button:
+            st.info("📧 Email sending cancelled")
+            return False
+    
+    return False
