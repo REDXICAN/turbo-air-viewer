@@ -17,11 +17,10 @@ from .ui import (
     truncate_text, COLORS, TURBO_AIR_CATEGORIES, get_image_base64
 )
 
-# Check if these modules exist before importing
+# Check if these modules exist before importing - REMOVED CSV EXPORT
 from .export import (
     export_quote_to_excel, 
     export_quote_to_pdf, 
-    export_quote_to_csv,
     generate_excel_quote, 
     generate_pdf_quote
 )
@@ -687,7 +686,7 @@ def display_product_results_collapsible(results_df, user_id, db_manager):
             st.divider()
 
 def show_cart_page(user_id, db_manager):
-    """Display cart page with proper SKU display, totals calculation and 3 export buttons - IMPROVED EMAIL INTEGRATION"""
+    """Display cart page with proper SKU display, totals calculation and 2 export buttons - IMPROVED EMAIL INTEGRATION"""
     
     st.markdown("### Shopping Cart")
     
@@ -938,7 +937,7 @@ sender_password = "your-16-char-app-password"
     
     export_cart_df = pd.DataFrame(export_cart_items)
     
-    # Show 3 export buttons in columns
+    # Show 3 export buttons in columns - REMOVED CSV BUTTON
     col1, col2, col3 = st.columns(3)
     
     with col1:
