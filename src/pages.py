@@ -562,6 +562,11 @@ def show_cart_page(user_id, db_manager):
         empty_state("🛒", "Cart is Empty", "Add products using the Search tab to create a quote")
         return
     
+    # Debug section - uncomment these lines to see what data is available
+    # st.write("Debug: Cart DataFrame columns:", list(cart_items_df.columns))
+    # st.write("Debug: First item data:", dict(cart_items_df.iloc[0]) if len(cart_items_df) > 0 else "No items")
+    # st.write("Debug: Full DataFrame:", cart_items_df.to_dict('records'))
+    
     # Display cart items
     st.markdown("#### Items in Cart")
     
@@ -583,23 +588,61 @@ def show_cart_page(user_id, db_manager):
     # Calculate totals
     subtotal = 0
     
-    # Display each cart item with proper data access
+    # Display each cart item with better debugging and data access
     for idx, item in cart_items_df.iterrows():
+        # Debug: Let's see what columns are available
+        # st.write("Available columns:", list(item.keys()))  # Uncomment for debugging
+        # st.write("Item data:", dict(item))  # Uncomment for debugging
+        
         col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
         
-        # Get item data safely - try multiple possible column names
-        item_id = item.get('id') or item.get('cart_item_id', 0)
-        sku = item.get('sku') or item.get('product_sku', 'Unknown SKU')
-        product_type = item.get('product_type') or item.get('model', '')
+        # Get item data safely - try multiple possible column names for each field
+        item_id = None
+        for id_col in ['id', 'cart_item_id', 'cart_id']:
+            if id_col in item and item[id_col] is not None:
+                item_id = item[id_col]
+                break
+        if item_id is None:
+            item_id = idx  # Use index as fallback
+        
+        # Try multiple SKU column names
+        sku = None
+        for sku_col in ['sku', 'product_sku', 'product_id', 'name', 'product_name']:
+            if sku_col in item and item[sku_col] is not None and str(item[sku_col]).strip():
+                sku = str(item[sku_col]).strip()
+                break
+        if not sku:
+            sku = f"Product {item_id}"  # Fallback SKU
+        
+        # Try multiple product type column names
+        product_type = None
+        for type_col in ['product_type', 'model', 'type', 'description', 'product_description']:
+            if type_col in item and item[type_col] is not None and str(item[type_col]).strip():
+                product_type = str(item[type_col]).strip()
+                break
+        if not product_type:
+            product_type = ""
         
         # Try different price column names
         price = 0
-        for price_col in ['price', 'unit_price', 'product_price']:
+        for price_col in ['price', 'unit_price', 'product_price', 'cost']:
             if price_col in item and item[price_col] is not None:
-                price = float(item[price_col])
-                break
+                try:
+                    price = float(item[price_col])
+                    break
+                except (ValueError, TypeError):
+                    continue
         
-        quantity = int(item.get('quantity', 1))
+        # Get quantity
+        quantity = 1
+        for qty_col in ['quantity', 'qty', 'amount']:
+            if qty_col in item and item[qty_col] is not None:
+                try:
+                    quantity = int(item[qty_col])
+                    break
+                except (ValueError, TypeError):
+                    continue
+        
         line_total = price * quantity
         subtotal += line_total
         
