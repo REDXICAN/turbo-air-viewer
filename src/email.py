@@ -1,6 +1,6 @@
 """
 Email functionality for Turbo Air Equipment Viewer
-Complete version with Excel/PDF testing, CC support, file size reporting, and professional templates
+Complete version with PDF/Excel testing, CC support, file size reporting, and working email form
 """
 
 import streamlit as st
@@ -254,6 +254,47 @@ def test_pdf_generation(quote_data: Dict, items_df: pd.DataFrame, client_data: D
     except Exception as e:
         return False, f"PDF generation failed: {str(e)}", 0
 
+def send_simple_test_email(email_service, recipient_email: str, quote_data: Dict, client_data: Dict) -> Tuple[bool, str]:
+    """Send simple test email without attachments - like the working SMTP test"""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        # Create message (same as working SMTP test)
+        msg = MIMEMultipart()
+        msg['From'] = email_service.sender_email
+        msg['To'] = recipient_email
+        msg['Subject'] = f"TEST - Quote {quote_data.get('quote_number', 'N/A')} - Turbo Air Equipment"
+        
+        body = f"""
+        <html>
+        <body>
+            <h2>🧪 TEST EMAIL - Turbo Air Equipment</h2>
+            <p>This is a test email to verify the email system works from the form context.</p>
+            <p><strong>Quote:</strong> {quote_data.get('quote_number', 'N/A')}</p>
+            <p><strong>Client:</strong> {client_data.get('company', 'N/A')}</p>
+            <p><strong>Total:</strong> ${quote_data.get('total_amount', 0):,.2f}</p>
+            <hr>
+            <p><small>Sent from Turbo Air Equipment Viewer - Form Test</small></p>
+        </body>
+        </html>
+        """
+        
+        msg.attach(MIMEText(body, 'html'))
+        
+        # Send email (same as working SMTP test)
+        server = smtplib.SMTP(email_service.smtp_server, email_service.smtp_port)
+        server.starttls()
+        server.login(email_service.sender_email, email_service.sender_password)
+        server.send_message(msg)
+        server.quit()
+        
+        return True, f"Test email sent successfully to {recipient_email}"
+        
+    except Exception as e:
+        return False, f"Test email failed: {str(e)}"
+
 def send_email_with_attachments(email_service, recipient_email: str, quote_data: Dict, 
                                items_df: pd.DataFrame, client_data: Dict,
                                cc_email: str = None, additional_message: str = "",
@@ -376,7 +417,7 @@ def send_email_with_attachments(email_service, recipient_email: str, quote_data:
         return False, f"Email sending failed: {str(e)}"
 
 def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_data: Dict):
-    """Show email quote dialog with Excel/PDF testing, CC support, file size reporting, and professional template"""
+    """Show email quote dialog with PDF/Excel testing, CC support, file size reporting, and working email form"""
     
     st.markdown("### Send Quote via Email")
     
@@ -389,14 +430,14 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     st.success(f"✅ Email configured: {email_service.sender_email}")
     st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
     
-    # TEST ATTACHMENT GENERATION SECTION
+    # TEST ATTACHMENT GENERATION SECTION WITH BOTH PDF AND EXCEL
     with st.expander("🔍 Test Attachment Generation", expanded=False):
         st.markdown("**Test file generation before sending email:**")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("📄 Test PDF Generation", use_container_width=True):
+            if st.button("📄 Test PDF Generation", use_container_width=True, key="test_pdf_btn"):
                 with st.spinner("Testing PDF generation..."):
                     success, message, file_size = test_pdf_generation(quote_data, items_df, client_data)
                     
@@ -413,7 +454,8 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                                 pdf_buffer.getvalue(),
                                 file_name=f"Test_Quote_{quote_data.get('quote_number', 'N/A')}.pdf",
                                 mime="application/pdf",
-                                use_container_width=True
+                                use_container_width=True,
+                                key="download_test_pdf"
                             )
                         except Exception as e:
                             st.error(f"Download failed: {str(e)}")
@@ -421,7 +463,7 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                         st.error(f"❌ {message}")
         
         with col2:
-            if st.button("📊 Test Excel Generation", use_container_width=True):
+            if st.button("📊 Test Excel Generation", use_container_width=True, key="test_excel_btn"):
                 with st.spinner("Testing Excel generation..."):
                     success, message, file_size = test_excel_generation(quote_data, items_df, client_data)
                     
@@ -438,15 +480,41 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
                                 excel_buffer.getvalue(),
                                 file_name=f"Test_Quote_{quote_data.get('quote_number', 'N/A')}.xlsx",
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                use_container_width=True
+                                use_container_width=True,
+                                key="download_test_excel"
                             )
                         except Exception as e:
                             st.error(f"Download failed: {str(e)}")
                     else:
                         st.error(f"❌ {message}")
     
-    # EMAIL FORM WITH CC SUPPORT
-    with st.form("email_quote_form"):
+    # SIMPLE EMAIL TEST - BYPASS FORM ISSUES
+    st.markdown("---")
+    st.markdown("### Quick Email Test")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("📧 Send Simple Test Email", use_container_width=True, key="simple_email_test"):
+            recipient = client_data.get('contact_email', 'andres.xbgo@gmail.com')
+            
+            with st.spinner("Sending simple test email..."):
+                success, message = send_simple_test_email(email_service, recipient, quote_data, client_data)
+                
+                if success:
+                    st.success(f"✅ {message}")
+                    st.balloons()
+                else:
+                    st.error(f"❌ {message}")
+    
+    with col2:
+        st.info("This uses the same SMTP logic as the working test button")
+    
+    # EMAIL FORM WITH CC SUPPORT - FIXED VERSION
+    st.markdown("---")
+    st.markdown("### Full Quote Email Form")
+    
+    with st.form("email_quote_form_fixed"):
         st.markdown("**📧 Email Details:**")
         
         # Recipient email
@@ -482,43 +550,40 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
         send_submitted = st.form_submit_button("📧 Send Professional Quote Email", use_container_width=True, type="primary")
         
         if send_submitted:
-            # Validate email addresses
+            # Basic validation
             if not recipient_email or '@' not in recipient_email:
                 st.error("Please enter a valid recipient email address")
-                st.stop()
-            
-            if cc_email.strip() and '@' not in cc_email:
+            elif cc_email.strip() and '@' not in cc_email:
                 st.error("Please enter a valid CC email address")
-                st.stop()
-            
-            st.write("✅ Email validation passed")
-            
-            # Send email with full debugging and file size reporting
-            with st.spinner("Sending professional quote email..."):
-                try:
-                    success, message = send_email_with_attachments(
-                        email_service=email_service,
-                        recipient_email=recipient_email,
-                        cc_email=cc_email.strip() if cc_email.strip() else None,
-                        quote_data=quote_data,
-                        items_df=items_df,
-                        client_data=client_data,
-                        additional_message=additional_message,
-                        attach_pdf=attach_pdf,
-                        attach_excel=attach_excel
-                    )
-                    
-                    if success:
-                        st.success(f"✅ {message}")
-                        if cc_email.strip():
-                            st.info(f"📋 CC sent to: {cc_email.strip()}")
-                        st.balloons()
-                    else:
-                        st.error(f"❌ {message}")
+            else:
+                st.write("✅ Starting email send process...")
+                
+                # Send email with full debugging and file size reporting
+                with st.spinner("Sending professional quote email..."):
+                    try:
+                        success, message = send_email_with_attachments(
+                            email_service=email_service,
+                            recipient_email=recipient_email,
+                            cc_email=cc_email.strip() if cc_email.strip() else None,
+                            quote_data=quote_data,
+                            items_df=items_df,
+                            client_data=client_data,
+                            additional_message=additional_message,
+                            attach_pdf=attach_pdf,
+                            attach_excel=attach_excel
+                        )
                         
-                except Exception as e:
-                    st.error(f"❌ Email sending failed: {str(e)}")
-                    st.exception(e)
+                        if success:
+                            st.success(f"✅ {message}")
+                            if cc_email.strip():
+                                st.info(f"📋 CC sent to: {cc_email.strip()}")
+                            st.balloons()
+                        else:
+                            st.error(f"❌ {message}")
+                            
+                    except Exception as e:
+                        st.error(f"❌ Email sending failed: {str(e)}")
+                        st.exception(e)
     
     # Cancel button
     if st.button("Cancel", key="cancel_email"):
