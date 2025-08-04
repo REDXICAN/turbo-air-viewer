@@ -563,8 +563,8 @@ def show_cart_page(user_id, db_manager):
         return
     
     # Debug section - uncomment these lines to see what data is available
-    # st.write("Debug: Cart DataFrame columns:", list(cart_items_df.columns))
-    # st.write("Debug: First item data:", dict(cart_items_df.iloc[0]) if len(cart_items_df) > 0 else "No items")
+    st.write("Debug: Cart DataFrame columns:", list(cart_items_df.columns))
+    st.write("Debug: First item data:", dict(cart_items_df.iloc[0]) if len(cart_items_df) > 0 else "No items")
     # st.write("Debug: Full DataFrame:", cart_items_df.to_dict('records'))
     
     # Display cart items
@@ -590,10 +590,6 @@ def show_cart_page(user_id, db_manager):
     
     # Display each cart item with better debugging and data access
     for idx, item in cart_items_df.iterrows():
-        # Debug: Let's see what columns are available
-        # st.write("Available columns:", list(item.keys()))  # Uncomment for debugging
-        # st.write("Item data:", dict(item))  # Uncomment for debugging
-        
         col1, col2, col3, col4, col5 = st.columns([3, 2, 1, 1, 1])
         
         # Get item data safely - try multiple possible column names for each field
@@ -605,33 +601,51 @@ def show_cart_page(user_id, db_manager):
         if item_id is None:
             item_id = idx  # Use index as fallback
         
-        # Try multiple SKU column names
+        # If we have a product_id but no SKU, try to fetch product data
+        product_id = item.get('product_id')
         sku = None
-        for sku_col in ['sku', 'product_sku', 'product_id', 'name', 'product_name']:
+        product_type = None
+        price = 0
+        
+        # First try to get SKU from existing columns
+        for sku_col in ['sku', 'product_sku', 'name', 'product_name']:
             if sku_col in item and item[sku_col] is not None and str(item[sku_col]).strip():
                 sku = str(item[sku_col]).strip()
                 break
+        
+        # If no SKU found and we have product_id, try to fetch product data
+        if not sku and product_id:
+            try:
+                # Try to get product data from database
+                product_data = db_manager.get_product_by_id(product_id)
+                if product_data is not None and not product_data.empty:
+                    sku = product_data.iloc[0].get('sku', f"Product {product_id}")
+                    product_type = product_data.iloc[0].get('product_type', '')
+                    price = float(product_data.iloc[0].get('price', 0))
+            except Exception as e:
+                # If database lookup fails, create fallback values
+                sku = f"Product {product_id}"
+        
+        # If still no SKU, use fallback
         if not sku:
-            sku = f"Product {item_id}"  # Fallback SKU
+            sku = f"Item {item_id}"
         
-        # Try multiple product type column names
-        product_type = None
-        for type_col in ['product_type', 'model', 'type', 'description', 'product_description']:
-            if type_col in item and item[type_col] is not None and str(item[type_col]).strip():
-                product_type = str(item[type_col]).strip()
-                break
+        # Try to get product type if not already found
         if not product_type:
-            product_type = ""
-        
-        # Try different price column names
-        price = 0
-        for price_col in ['price', 'unit_price', 'product_price', 'cost']:
-            if price_col in item and item[price_col] is not None:
-                try:
-                    price = float(item[price_col])
+            for type_col in ['product_type', 'model', 'type', 'description', 'product_description']:
+                if type_col in item and item[type_col] is not None and str(item[type_col]).strip():
+                    product_type = str(item[type_col]).strip()
                     break
-                except (ValueError, TypeError):
-                    continue
+        
+        # Try to get price if not already found
+        if price == 0:
+            for price_col in ['price', 'unit_price', 'product_price', 'cost']:
+                if price_col in item and item[price_col] is not None:
+                    try:
+                        price = float(item[price_col])
+                        break
+                    except (ValueError, TypeError):
+                        continue
         
         # Get quantity
         quantity = 1
