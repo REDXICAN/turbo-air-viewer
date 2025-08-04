@@ -13,6 +13,7 @@ from typing import Dict, Tuple, Optional
 import pandas as pd
 from datetime import datetime
 import io
+import ssl
 
 class EmailService:
     def __init__(self):
@@ -24,35 +25,82 @@ class EmailService:
             self.smtp_port = int(st.secrets["email"]["smtp_port"])
             self.sender_email = st.secrets["email"]["sender_email"]
             self.sender_password = st.secrets["email"]["sender_password"]
+            
+            # Optional: SSL mode (default to True for security)
+            self.use_ssl = st.secrets["email"].get("use_ssl", True)
+            
             self.configured = True
+            st.success(f"Email configured: {self.sender_email} via {self.smtp_server}:{self.smtp_port}")
+            
+        except KeyError as e:
+            st.error(f"Missing email configuration key: {e}")
+            st.error("Required keys: smtp_server, smtp_port, sender_email, sender_password")
+            self.configured = False
         except Exception as e:
             st.error(f"Email configuration error: {e}")
             self.configured = False
+    
+    def test_connection(self) -> Tuple[bool, str]:
+        """Test SMTP connection"""
+        if not self.configured:
+            return False, "Email service not configured"
+        
+        try:
+            # Create SSL context
+            context = ssl.create_default_context()
+            
+            if self.smtp_port == 465:  # SSL
+                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+                server.login(self.sender_email, self.sender_password)
+            else:  # TLS (port 587)
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.starttls(context=context)
+                server.login(self.sender_email, self.sender_password)
+            
+            server.quit()
+            return True, "SMTP connection successful"
+            
+        except smtplib.SMTPAuthenticationError as e:
+            return False, f"Authentication failed: {e}. Check your app password."
+        except smtplib.SMTPConnectError as e:
+            return False, f"Connection failed: {e}. Check server and port."
+        except smtplib.SMTPException as e:
+            return False, f"SMTP error: {e}"
+        except Exception as e:
+            return False, f"Unexpected error: {e}"
     
     def send_quote_email(self, recipient_email: str, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> Tuple[bool, str]:
         """Send quote via email with PDF attachment"""
         if not self.configured:
             return False, "Email service not configured"
         
+        # First test connection
+        conn_success, conn_msg = self.test_connection()
+        if not conn_success:
+            return False, f"Connection test failed: {conn_msg}"
+        
         try:
             # Create message
-            msg = MIMEMultipart()
+            msg = MIMEMultipart('alternative')  # Support both HTML and plain text
             msg['From'] = self.sender_email
             msg['To'] = recipient_email
             msg['Subject'] = f"Quote {quote_data.get('quote_number', 'N/A')} - Turbo Air Equipment"
             
             # Create email body
-            body = self._create_email_body(quote_data, items_df, client_data, additional_message)
-            msg.attach(MIMEText(body, 'html'))
+            html_body = self._create_email_body(quote_data, items_df, client_data, additional_message)
+            plain_body = self._create_plain_text_body(quote_data, items_df, client_data, additional_message)
+            
+            # Attach both plain text and HTML versions
+            msg.attach(MIMEText(plain_body, 'plain'))
+            msg.attach(MIMEText(html_body, 'html'))
             
             # Create PDF attachment (optional - remove if export module doesn't exist)
             try:
-                # Only try to import if the module exists
                 from .export import export_quote_to_pdf
                 pdf_buffer = export_quote_to_pdf(quote_data, items_df, client_data)
                 
                 # Attach PDF
-                part = MIMEBase('application', 'octet-stream')
+                part = MIMEBase('application', 'pdf')
                 part.set_payload(pdf_buffer.read())
                 encoders.encode_base64(part)
                 part.add_header(
@@ -61,26 +109,97 @@ class EmailService:
                 )
                 msg.attach(part)
             except ImportError:
-                # Module doesn't exist, continue without attachment
-                pass
+                st.info("PDF export module not available - sending without attachment")
             except Exception as e:
                 st.warning(f"Could not attach PDF: {e}")
-                # Continue without attachment
             
-            # Send email
-            server = smtplib.SMTP(self.smtp_server, self.smtp_port)
-            server.starttls()
+            # Send email with proper SSL/TLS handling
+            context = ssl.create_default_context()
+            
+            if self.smtp_port == 465:  # Gmail SSL
+                server = smtplib.SMTP_SSL(self.smtp_server, self.smtp_port, context=context)
+            else:  # Gmail TLS (port 587)
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.starttls(context=context)
+            
             server.login(self.sender_email, self.sender_password)
-            text = msg.as_string()
-            server.sendmail(self.sender_email, recipient_email, text)
+            
+            # Send the email
+            failed_recipients = server.sendmail(self.sender_email, [recipient_email], msg.as_string())
             server.quit()
             
-            return True, "Quote sent successfully!"
+            if failed_recipients:
+                return False, f"Failed to send to: {failed_recipients}"
             
+            return True, f"Quote sent successfully to {recipient_email}!"
+            
+        except smtplib.SMTPAuthenticationError as e:
+            error_msg = f"Authentication failed: {str(e)}. Please check your app password."
+            st.error(error_msg)
+            return False, error_msg
+        except smtplib.SMTPRecipientsRefused as e:
+            error_msg = f"Recipient email refused: {str(e)}"
+            st.error(error_msg)
+            return False, error_msg
+        except smtplib.SMTPException as e:
+            error_msg = f"SMTP error: {str(e)}"
+            st.error(error_msg)
+            return False, error_msg
         except Exception as e:
             error_msg = f"Failed to send email: {str(e)}"
             st.error(error_msg)
             return False, error_msg
+    
+    def _create_plain_text_body(self, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> str:
+        """Create plain text email body as fallback"""
+        # Calculate totals
+        subtotal = float(quote_data.get('subtotal', 0))
+        tax_rate = float(quote_data.get('tax_rate', 0))
+        if tax_rate > 1:
+            tax_rate_display = tax_rate
+        else:
+            tax_rate_display = tax_rate * 100
+        tax_amount = float(quote_data.get('tax_amount', 0))
+        total = float(quote_data.get('total_amount', 0))
+        
+        # Create items list
+        items_text = ""
+        for idx, item in items_df.iterrows():
+            sku = str(item.get('sku', 'Unknown'))
+            description = str(item.get('product_type', ''))
+            quantity = int(item.get('quantity', 1))
+            unit_price = float(item.get('price', 0))
+            total_price = unit_price * quantity
+            
+            items_text += f"{sku} - {description} - Qty: {quantity} - ${unit_price:,.2f} each - Total: ${total_price:,.2f}\n"
+        
+        plain_body = f"""
+TURBO AIR EQUIPMENT - QUOTE
+
+{additional_message if additional_message else ''}
+
+Quote Information:
+- Quote Number: {quote_data.get('quote_number', 'N/A')}
+- Date: {datetime.now().strftime('%B %d, %Y')}
+- Client: {client_data.get('company', 'N/A')}
+- Contact: {client_data.get('contact_name', 'N/A')}
+
+Equipment Details:
+{items_text}
+
+Totals:
+Subtotal: ${subtotal:,.2f}
+Tax ({tax_rate_display:.1f}%): ${tax_amount:,.2f}
+TOTAL: ${total:,.2f}
+
+Thank you for choosing Turbo Air Equipment!
+This quote is valid for 30 days from the date of issue.
+
+Turbo Air Equipment
+Email: {self.sender_email}
+        """
+        
+        return plain_body
     
     def _create_email_body(self, quote_data: Dict, items_df: pd.DataFrame, client_data: Dict, additional_message: str = "") -> str:
         """Create HTML email body with logo"""
@@ -135,10 +254,8 @@ class EmailService:
                     logo_base64 = base64.b64encode(logo_file.read()).decode()
                 logo_html = f'<img src="data:image/png;base64,{logo_base64}" alt="Turbo Air Logo" style="max-width: 300px; height: auto;">'
             else:
-                # Fallback to text if logo not found
                 logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
         except Exception as e:
-            # Fallback to text if there's an error loading the logo
             logo_html = '<h1 style="color: white; margin: 0;">TURBO AIR EQUIPMENT</h1>'
         
         html_body = f"""
@@ -227,6 +344,18 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     """Show email quote dialog with proper state management"""
     st.markdown("#### Send Quote via Email")
     
+    # Test connection first
+    email_service = EmailService()
+    if email_service.configured:
+        with st.expander("Test Email Connection", expanded=False):
+            if st.button("Test SMTP Connection"):
+                with st.spinner("Testing connection..."):
+                    success, message = email_service.test_connection()
+                if success:
+                    st.success(message)
+                else:
+                    st.error(message)
+    
     # Use form to prevent collapse issues
     with st.form("email_quote_form", clear_on_submit=False):
         # Email input
@@ -255,7 +384,6 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     # Handle form submission
     if send_email:
         if recipient_email and '@' in recipient_email:
-            email_service = EmailService()
             if email_service.configured:
                 with st.spinner("Sending email..."):
                     success, message = email_service.send_quote_email(
@@ -274,23 +402,11 @@ def show_email_quote_dialog(quote_data: Dict, items_df: pd.DataFrame, client_dat
     
     if cancel_email:
         st.info("Email cancelled.")
-        # You might want to close the dialog here if using modal pattern
-
 
 def test_email_connection():
     """Test email connection - for debugging"""
-    try:
-        email_service = EmailService()
-        if email_service.configured:
-            server = smtplib.SMTP(email_service.smtp_server, email_service.smtp_port)
-            server.starttls()
-            server.login(email_service.sender_email, email_service.sender_password)
-            server.quit()
-            return True, "Connection successful"
-        else:
-            return False, "Email not configured"
-    except Exception as e:
-        return False, f"Connection failed: {e}"
+    email_service = EmailService()
+    return email_service.test_connection()
 
 def get_email_service() -> Optional[EmailService]:
     """Get email service instance"""

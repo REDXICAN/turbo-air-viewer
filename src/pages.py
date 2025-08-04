@@ -1,6 +1,6 @@
 """
 Page components for Turbo Air Equipment Viewer
-Updated with collapsible product list and improved details view
+Updated with improved email integration and debugging
 """
 
 import streamlit as st
@@ -26,8 +26,8 @@ from .export import (
     generate_pdf_quote
 )
 
-# Import email functions - FIXED VERSION  
-from .email import show_email_quote_dialog, get_email_service, EmailService
+# Import email functions - IMPROVED VERSION with better error handling
+from .email import show_email_quote_dialog, get_email_service, EmailService, test_email_connection
 
 def show_client_selector(user_id, db_manager, sync_manager):
     """Display client selection interface"""
@@ -232,12 +232,23 @@ def show_home_page(user, user_id, db_manager, sync_manager, auth_manager):
     st.markdown(f"### Welcome back, {user.get('email', 'User')}!")
     
     # Sync status
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     with col3:
         if auth_manager.is_online:
             st.success("🌐 Online")
         else:
             st.warning("📴 Offline")
+    
+    # Email status check
+    with col4:
+        try:
+            email_service = get_email_service()
+            if email_service and email_service.configured:
+                st.success("📧 Email Ready")
+            else:
+                st.warning("📧 Email Off")
+        except:
+            st.error("📧 Email Error")
     
     # Client selection
     st.markdown("---")
@@ -676,7 +687,7 @@ def display_product_results_collapsible(results_df, user_id, db_manager):
             st.divider()
 
 def show_cart_page(user_id, db_manager):
-    """Display cart page with proper SKU display, totals calculation and 3 export buttons"""
+    """Display cart page with proper SKU display, totals calculation and 3 export buttons - IMPROVED EMAIL INTEGRATION"""
     
     st.markdown("### Shopping Cart")
     
@@ -846,6 +857,45 @@ def show_cart_page(user_id, db_manager):
     # Export Options section
     st.markdown("### Export Options")
     
+    # IMPROVED EMAIL DIAGNOSTICS
+    with st.expander("📧 Email Diagnostics", expanded=False):
+        st.markdown("**Check email configuration:**")
+        
+        try:
+            email_service = get_email_service()
+            if email_service:
+                if email_service.configured:
+                    st.success("✅ Email service configured")
+                    st.info(f"📧 Sender: {email_service.sender_email}")
+                    st.info(f"🌐 SMTP: {email_service.smtp_server}:{email_service.smtp_port}")
+                    
+                    # Test connection button
+                    if st.button("🔍 Test SMTP Connection"):
+                        with st.spinner("Testing connection..."):
+                            success, message = test_email_connection()
+                            if success:
+                                st.success(f"✅ {message}")
+                            else:
+                                st.error(f"❌ {message}")
+                                st.markdown("**Troubleshooting:**")
+                                st.markdown("- Make sure 2FA is enabled on your Gmail account")
+                                st.markdown("- Use a 16-character app password, not your regular password")
+                                st.markdown("- Check that 'Less secure app access' is disabled (you should use app passwords)")
+                else:
+                    st.error("❌ Email service not configured")
+                    st.markdown("**Required in secrets.toml:**")
+                    st.code("""
+[email]
+smtp_server = "smtp.gmail.com"
+smtp_port = 587
+sender_email = "your-email@gmail.com"
+sender_password = "your-16-char-app-password"
+                    """)
+            else:
+                st.error("❌ Could not create email service")
+        except Exception as e:
+            st.error(f"❌ Email service error: {str(e)}")
+    
     # Prepare quote data for export with CUSTOM TAX RATE
     quote_number = f"TA{datetime.now().strftime('%Y%m%d%H%M%S')}"
     quote_data = {
@@ -906,14 +956,21 @@ def show_cart_page(user_id, db_manager):
                         
                         email_service = get_email_service()
                         if email_service and hasattr(email_service, 'configured') and email_service.configured:
-                            show_email_quote_dialog(quote_data, export_cart_df, client_data)
+                            # Test connection first
+                            conn_success, conn_msg = email_service.test_connection()
+                            if conn_success:
+                                show_email_quote_dialog(quote_data, export_cart_df, client_data)
+                            else:
+                                st.error(f"Email connection failed: {conn_msg}")
+                                st.info("Check your email settings in the diagnostics above ↑")
                         else:
                             st.warning("Email service not configured")
-                            st.info("To enable email, configure Gmail credentials in your secrets")
+                            st.info("Configure Gmail credentials in your secrets.toml file")
                     else:
                         st.error(f"Error creating quote: {message}")
                 except Exception as e:
                     st.error(f"Email functionality error: {str(e)}")
+                    st.exception(e)  # Show full traceback for debugging
     
     with col2:
         if st.button("📄 Export PDF", use_container_width=True, type="secondary"):
