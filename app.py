@@ -287,7 +287,7 @@ def main():
     # Initialize services
     auth_manager, db_manager, sync_manager, persistence_manager = initialize_services()
     
-    # NOTE: Commented out undefined function call that was causing NameError
+    # REMOVED: The undefined function call that was causing NameError
     # maintain_authentication_state(auth_manager)
     
     # Perform periodic backup
